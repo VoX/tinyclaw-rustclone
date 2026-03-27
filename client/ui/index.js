@@ -223,6 +223,38 @@ export function createUI(state, send) {
   // Dragging state for inventory
   let dragSlot = -1;
 
+  // Tooltip element
+  const tooltip = document.createElement('div');
+  tooltip.style.cssText = 'position:fixed;display:none;background:#111;border:1px solid #555;color:#ccc;padding:6px 10px;font:11px Consolas,monospace;pointer-events:none;z-index:9999;max-width:240px;white-space:pre-line;';
+  document.body.appendChild(tooltip);
+
+  function showTooltip(slotIdx, mx, my) {
+    const item = state.inventory[slotIdx];
+    if (!item?.id || item.id === 0) { tooltip.style.display = 'none'; return; }
+    const def = ITEM_DEFS[item.id];
+    if (!def) { tooltip.style.display = 'none'; return; }
+    let text = `<b style="color:#e8c030">${def.name}</b>`;
+    if (def.damage) text += `\nDamage: ${def.damage}`;
+    if (def.fireRate) text += `\nFire Rate: ${def.fireRate}/s`;
+    if (def.range) text += `\nRange: ${def.range}`;
+    if (def.gatherMult) text += `\nGather: ${def.gatherMult}x`;
+    if (def.maxStack > 1) text += `\nStack: ${item.n}/${def.maxStack}`;
+    if (def.cat) text += `\nType: ${def.cat}`;
+    // Find recipe
+    const recipe = RECIPES.find(r => r.result === item.id);
+    if (recipe) {
+      text += '\n\n<span style="color:#888">Recipe:</span>';
+      for (const [ingId, ingN] of recipe.ing) {
+        const ingDef = ITEM_DEFS[ingId];
+        text += `\n  ${ingDef?.name || '?'} x${ingN}`;
+      }
+    }
+    tooltip.innerHTML = text;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (mx + 14) + 'px';
+    tooltip.style.top = (my + 14) + 'px';
+  }
+
   // Smoothed bar values for animation
   let smoothHp = 100;
   let smoothHunger = 100;
@@ -276,6 +308,10 @@ export function createUI(state, send) {
           send({ type: MSG.INVENTORY, action: INV_ACTION.DROP, fromSlot: i });
         }
       });
+
+      slot.addEventListener('mouseenter', (e) => showTooltip(i, e.clientX, e.clientY));
+      slot.addEventListener('mousemove', (e) => showTooltip(i, e.clientX, e.clientY));
+      slot.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
 
       invGrid.appendChild(slot);
     }

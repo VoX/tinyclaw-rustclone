@@ -79,6 +79,9 @@ const state = {
   // Leaderboard
   showLeaderboard: false,
   leaderboard: [],
+  // Stamina
+  stamina: 100,
+  staminaLocked: false, // locked until 25 when depleted
 };
 
 // Initialize inventory slots
@@ -386,7 +389,22 @@ function clientLoop(timestamp) {
   if (state.myEid && state.entities.has(state.myEid) && !state.isDead) {
     const me = state.entities.get(state.myEid);
     const keys = input.getKeys();
-    const sprinting = input.isSprinting();
+    let sprinting = input.isSprinting();
+    // Stamina system
+    const isMoving = (input.getKeys() & (KEY.W | KEY.A | KEY.S | KEY.D)) !== 0;
+    if (sprinting && isMoving) {
+      if (state.staminaLocked || state.stamina <= 0) {
+        sprinting = false; // can't sprint
+      } else {
+        state.stamina = Math.max(0, state.stamina - 15 * (dt / 1000));
+        if (state.stamina <= 0) state.staminaLocked = true;
+      }
+    } else if (isMoving) {
+      state.stamina = Math.min(100, state.stamina + 10 * (dt / 1000));
+    } else {
+      state.stamina = Math.min(100, state.stamina + 20 * (dt / 1000));
+    }
+    if (state.staminaLocked && state.stamina >= 25) state.staminaLocked = false;
     let speed = 10.0 * (sprinting ? 2.0 : 1.0);
 
     // Water slowdown
@@ -428,7 +446,6 @@ function clientLoop(timestamp) {
     me.renderY = me.y;
 
     // Footstep sounds
-    const isMoving = dx !== 0 || dy !== 0;
     updateFootsteps(isMoving, sprinting);
 
     // Update fog of war

@@ -1,13 +1,20 @@
 import { query, removeEntity, hasComponent } from 'bitecs';
-import { Projectile, Position, Velocity, Collider, Health, Dead, Damageable, Player, ResourceNode, Armor } from '../../shared/components.js';
-import { getArmorReduction } from '../../shared/constants.js';
+import { Projectile, Position, Velocity, Collider, Health, Dead, Damageable, Player, ResourceNode, Armor, Sprite } from '../../shared/components.js';
+import { getArmorReduction, SERVER_TPS } from '../../shared/constants.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
 
 export function createProjectileSystem(gameState) {
+  const ARROW_GRAVITY = 3.0; // tiles/sec^2 downward (Y increases)
+
   return function ProjectileSystem(world) {
     const projectiles = query(world, [Projectile, Position]);
     for (let i = 0; i < projectiles.length; i++) {
       const eid = projectiles[i];
+
+      // Arrow gravity arc
+      if (Sprite.spriteId[eid] === 101) {
+        Velocity.vy[eid] += ARROW_GRAVITY / SERVER_TPS;
+      }
 
       // Decrease lifetime
       Projectile.lifetime[eid]--;

@@ -113,7 +113,8 @@ export function createCombatSystem(gameState) {
         addComponent(world, projEid, NetworkSync);
         addComponent(world, projEid, Sprite);
 
-        const projSpeed = 20; // tiles/sec
+        const isArrow = def.ammoType === 40; // ITEM.WOODEN_ARROW = 40
+        const projSpeed = isArrow ? 14 : 30; // arrows slower, bullets faster
         Position.x[projEid] = px + Math.cos(angle) * 0.8;
         Position.y[projEid] = py + Math.sin(angle) * 0.8;
         Velocity.vx[projEid] = Math.cos(angle) * projSpeed;
@@ -123,7 +124,7 @@ export function createCombatSystem(gameState) {
         Projectile.sourceEid[projEid] = eid;
         Projectile.lifetime[projEid] = def.range / projSpeed * SERVER_TPS;
         Collider.radius[projEid] = 0.15;
-        Sprite.spriteId[projEid] = 100; // projectile sprite
+        Sprite.spriteId[projEid] = isArrow ? 101 : 100; // 100=bullet, 101=arrow
         NetworkSync.lastTick[projEid] = now;
 
         gameState.entityTypes.set(projEid, ENTITY_TYPE.PROJECTILE);

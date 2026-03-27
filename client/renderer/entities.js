@@ -783,22 +783,63 @@ export function createEntityRenderer(state) {
   // ── Projectiles ──
   function drawProjectile(ctx, sx, sy, e) {
     const angle = e.a || 0;
+    const isArrow = e.sprite === 101;
     ctx.save();
     ctx.translate(sx, sy);
     ctx.rotate(angle);
 
-    ctx.fillStyle = 'rgba(255,255,100,0.3)';
-    ctx.beginPath();
-    ctx.moveTo(-8, -1);
-    ctx.lineTo(0, 0);
-    ctx.lineTo(-8, 1);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = '#ffee44';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 3, 1.5, 0, 0, Math.PI * 2);
-    ctx.fill();
+    if (isArrow) {
+      // Arrow: wooden shaft with pointed tip
+      ctx.strokeStyle = '#8a6a3a';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-10, 0);
+      ctx.lineTo(4, 0);
+      ctx.stroke();
+      // Arrowhead
+      ctx.fillStyle = '#999';
+      ctx.beginPath();
+      ctx.moveTo(4, 0);
+      ctx.lineTo(7, -2);
+      ctx.lineTo(8, 0);
+      ctx.lineTo(7, 2);
+      ctx.closePath();
+      ctx.fill();
+      // Fletching
+      ctx.fillStyle = 'rgba(180,50,50,0.6)';
+      ctx.beginPath();
+      ctx.moveTo(-10, 0);
+      ctx.lineTo(-7, -2);
+      ctx.lineTo(-7, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-10, 0);
+      ctx.lineTo(-7, 2);
+      ctx.lineTo(-7, 0);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      // Bullet: bright tracer line
+      ctx.strokeStyle = 'rgba(255,220,100,0.5)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-14, 0);
+      ctx.lineTo(-2, 0);
+      ctx.stroke();
+      // Bright core tracer
+      ctx.strokeStyle = 'rgba(255,255,200,0.8)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-10, 0);
+      ctx.lineTo(0, 0);
+      ctx.stroke();
+      // Bullet tip
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     ctx.restore();
   }

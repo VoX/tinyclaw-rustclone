@@ -111,6 +111,9 @@ export function createRenderer(canvas, state) {
     // ── Draw terrain ──
     terrain.drawTerrain(ctx, w, h, camX, camY, viewScale);
 
+    // ── Draw decorations ──
+    terrain.drawDecorations(ctx, w, h, camX, camY, viewScale);
+
     // ── Draw entities ──
     const sortedEntities = [...state.entities.values()].sort((a, b) => (a.y || 0) - (b.y || 0));
 
@@ -163,6 +166,9 @@ export function createRenderer(canvas, state) {
 
     // ── Temperature visual effects ──
     ui.drawTemperatureEffects(ctx, w, h, sortedEntities, camX, camY, viewScale);
+
+    // ── Stamina bar ──
+    ui.drawStaminaBar(ctx, w, h);
 
     // ── Ammo HUD for ranged weapons ──
     ui.drawAmmoHUD(ctx, w, h);

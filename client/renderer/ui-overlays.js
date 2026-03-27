@@ -894,6 +894,20 @@ export function createUIOverlays(state) {
     ctx.restore();
   }
 
+  function drawStaminaBar(ctx, w, h) {
+    if (state.stamina >= 100) return; // Don't show when full
+    const barW = 120;
+    const barH = 5;
+    const x = w / 2 - barW / 2;
+    const y = h - 100;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(x - 1, y - 1, barW + 2, barH + 2);
+    const pct = state.stamina / 100;
+    const color = state.staminaLocked ? '#c44' : (pct < 0.3 ? '#e80' : '#ee0');
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, barW * pct, barH);
+  }
+
   function drawAmmoHUD(ctx, w, h) {
     // Only show if holding a ranged weapon
     const heldItem = state.inventory?.[state.selectedSlot];
@@ -1033,6 +1047,7 @@ export function createUIOverlays(state) {
     drawTemperatureEffects,
     drawBuildPreview,
     drawCraftProgress,
+    drawStaminaBar,
     drawAmmoHUD,
     drawTutorialHint,
     drawChatBubbles,

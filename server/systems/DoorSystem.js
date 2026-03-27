@@ -1,7 +1,5 @@
-import { defineQuery, hasComponent } from 'bitecs';
+import { query, hasComponent } from 'bitecs';
 import { Door, Position, Collider, Player, Dead } from '../../shared/components.js';
-
-const doorQuery = defineQuery([Door, Position, Collider]);
 
 export function createDoorSystem(gameState) {
   return function DoorSystem(world) {
@@ -11,8 +9,8 @@ export function createDoorSystem(gameState) {
       const { targetEid } = client.interactRequest;
 
       const eid = client.playerEid;
-      if (!eid || hasComponent(world, Dead, eid)) continue;
-      if (!hasComponent(world, Door, targetEid)) continue;
+      if (!eid || hasComponent(world, eid, Dead)) continue;
+      if (!hasComponent(world, targetEid, Door)) continue;
 
       // Only consume the interact request if it's actually a door
       client.interactRequest = null;

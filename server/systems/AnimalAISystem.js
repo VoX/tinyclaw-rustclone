@@ -1,11 +1,8 @@
-import { defineQuery, hasComponent, addEntity, addComponent, removeEntity } from 'bitecs';
+import { query, hasComponent, addEntity, addComponent, removeEntity } from 'bitecs';
 import { Animal, Position, Velocity, Health, Player, Dead, Collider, Damageable,
          WorldItem, Sprite, NetworkSync } from '../../shared/components.js';
 import { AI_STATE, ANIMAL_DEFS, ANIMAL_TYPE, SERVER_TPS, ITEM_DESPAWN_TICKS } from '../../shared/constants.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
-
-const animalQuery = defineQuery([Animal, Position, Velocity, Health]);
-const playerQuery = defineQuery([Player, Position]);
 
 export function createAnimalAISystem(gameState) {
   const wanderChangeInterval = 5 * SERVER_TPS; // Change wander direction every 5s
@@ -13,8 +10,8 @@ export function createAnimalAISystem(gameState) {
 
   return function AnimalAISystem(world) {
     wanderTick++;
-    const animals = animalQuery(world);
-    const players = playerQuery(world);
+    const animals = query(world, [Animal, Position, Velocity, Health]);
+    const players = query(world, [Player, Position]);
 
     for (let i = 0; i < animals.length; i++) {
       const eid = animals[i];
@@ -25,11 +22,11 @@ export function createAnimalAISystem(gameState) {
         if (def) {
           for (const [itemId, count] of def.drops) {
             const dropEid = addEntity(world);
-            addComponent(world, Position, dropEid);
-            addComponent(world, WorldItem, dropEid);
-            addComponent(world, Collider, dropEid);
-            addComponent(world, Sprite, dropEid);
-            addComponent(world, NetworkSync, dropEid);
+            addComponent(world, dropEid, Position);
+            addComponent(world, dropEid, WorldItem);
+            addComponent(world, dropEid, Collider);
+            addComponent(world, dropEid, Sprite);
+            addComponent(world, dropEid, NetworkSync);
 
             Position.x[dropEid] = Position.x[eid] + (Math.random() - 0.5) * 2;
             Position.y[dropEid] = Position.y[eid] + (Math.random() - 0.5) * 2;
@@ -61,7 +58,7 @@ export function createAnimalAISystem(gameState) {
       let nearestDist = Infinity;
       for (let j = 0; j < players.length; j++) {
         const peid = players[j];
-        if (hasComponent(world, Dead, peid)) continue;
+        if (hasComponent(world, peid, Dead)) continue;
         const dx = Position.x[peid] - ax;
         const dy = Position.y[peid] - ay;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -93,7 +90,7 @@ export function createAnimalAISystem(gameState) {
           Animal.aiState[eid] = AI_STATE.WANDER;
         }
       } else if (def.behavior === 'flee_fight') {
-        if (nearestDist < 3 && hasComponent(world, Damageable, eid) && Damageable.lastHitTime[eid] > gameState.tick - SERVER_TPS * 3) {
+        if (nearestDist < 3 && hasComponent(world, eid, Damageable) && Damageable.lastHitTime[eid] > gameState.tick - SERVER_TPS * 3) {
           Animal.aiState[eid] = AI_STATE.CHASE;
           Animal.targetEid[eid] = nearestPlayer;
         } else if (nearestDist < 8) {
@@ -135,7 +132,7 @@ export function createAnimalAISystem(gameState) {
         }
       } else if (newState === AI_STATE.CHASE && Animal.targetEid[eid] >= 0) {
         const target = Animal.targetEid[eid];
-        if (hasComponent(world, Position, target)) {
+        if (hasComponent(world, target, Position)) {
           const dx = Position.x[target] - ax;
           const dy = Position.y[target] - ay;
           const dist = Math.sqrt(dx * dx + dy * dy);
@@ -147,9 +144,9 @@ export function createAnimalAISystem(gameState) {
             Velocity.vx[eid] = 0;
             Velocity.vy[eid] = 0;
             if (gameState.tick % Math.ceil(SERVER_TPS) === 0) {
-              if (hasComponent(world, Health, target) && !hasComponent(world, Dead, target)) {
+              if (hasComponent(world, target, Health) && !hasComponent(world, target, Dead)) {
                 Health.current[target] -= def.damage;
-                if (hasComponent(world, Damageable, target)) {
+                if (hasComponent(world, target, Damageable)) {
                   Damageable.lastHitTime[target] = gameState.tick;
                   Damageable.lastHitBy[target] = eid;
                 }

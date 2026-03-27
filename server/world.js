@@ -133,13 +133,13 @@ export function generateWorld(world, gameState, seed = 42) {
 
 function spawnResourceNode(world, gameState, tileX, tileY, resourceType, rng) {
   const eid = addEntity(world);
-  addComponent(world, Position, eid);
-  addComponent(world, ResourceNode, eid);
-  addComponent(world, Collider, eid);
-  addComponent(world, Sprite, eid);
-  addComponent(world, NetworkSync, eid);
-  addComponent(world, Health, eid);
-  addComponent(world, Damageable, eid);
+  addComponent(world, eid, Position);
+  addComponent(world, eid, ResourceNode);
+  addComponent(world, eid, Collider);
+  addComponent(world, eid, Sprite);
+  addComponent(world, eid, NetworkSync);
+  addComponent(world, eid, Health);
+  addComponent(world, eid, Damageable);
 
   const def = RESOURCE_NODE_DEFS[resourceType];
   const offsetX = (rng() - 0.5) * 6;
@@ -164,15 +164,15 @@ function spawnResourceNode(world, gameState, tileX, tileY, resourceType, rng) {
 
 function spawnAnimal(world, gameState, tileX, tileY, animalType, rng) {
   const eid = addEntity(world);
-  addComponent(world, Position, eid);
-  addComponent(world, Velocity, eid);
-  addComponent(world, Rotation, eid);
-  addComponent(world, Animal, eid);
-  addComponent(world, Health, eid);
-  addComponent(world, Collider, eid);
-  addComponent(world, Sprite, eid);
-  addComponent(world, NetworkSync, eid);
-  addComponent(world, Damageable, eid);
+  addComponent(world, eid, Position);
+  addComponent(world, eid, Velocity);
+  addComponent(world, eid, Rotation);
+  addComponent(world, eid, Animal);
+  addComponent(world, eid, Health);
+  addComponent(world, eid, Collider);
+  addComponent(world, eid, Sprite);
+  addComponent(world, eid, NetworkSync);
+  addComponent(world, eid, Damageable);
 
   const def = ANIMAL_DEFS[animalType];
   Position.x[eid] = (tileX + rng() * 10) * TILE_SIZE;

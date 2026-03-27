@@ -1,22 +1,19 @@
-import { defineQuery, hasComponent } from 'bitecs';
+import { query, hasComponent } from 'bitecs';
 import { Player, Position, Rotation, Inventory, Hotbar, ResourceNode, Health, Dead } from '../../shared/components.js';
 import { MOUSE_ACTION } from '../../shared/protocol.js';
 import { ITEM_DEFS, RESOURCE_NODE_DEFS, GATHER_AMOUNTS, RESOURCE_TYPE,
          getGatherTier, canGather, INVENTORY_SLOTS, SERVER_TPS } from '../../shared/constants.js';
 
-const playerQuery = defineQuery([Player, Position]);
-const nodeQuery = defineQuery([ResourceNode, Position]);
-
 export function createGatherSystem(gameState) {
   const gatherCooldowns = new Map(); // eid -> tick
 
   return function GatherSystem(world) {
-    const players = playerQuery(world);
-    const nodes = nodeQuery(world);
+    const players = query(world, [Player, Position]);
+    const nodes = query(world, [ResourceNode, Position]);
 
     for (let i = 0; i < players.length; i++) {
       const eid = players[i];
-      if (hasComponent(world, Dead, eid)) continue;
+      if (hasComponent(world, eid, Dead)) continue;
 
       const connId = Player.connectionId[eid];
       const client = gameState.clients.get(connId);

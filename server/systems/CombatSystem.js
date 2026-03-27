@@ -1,22 +1,20 @@
-import { defineQuery, hasComponent, addEntity, addComponent } from 'bitecs';
+import { query, hasComponent, addEntity, addComponent } from 'bitecs';
 import { Player, Position, Rotation, Health, ActiveTool, Inventory, Hotbar, Dead,
          Projectile, Velocity, Collider, NetworkSync, Sprite, Damageable, ResourceNode } from '../../shared/components.js';
 import { MOUSE_ACTION } from '../../shared/protocol.js';
 import { ITEM_DEFS, SERVER_TPS } from '../../shared/constants.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
 
-const playerQuery = defineQuery([Player, Position, Health]);
-
 export function createCombatSystem(gameState) {
   const attackCooldowns = new Map(); // eid -> ticks remaining
 
   return function CombatSystem(world) {
-    const players = playerQuery(world);
+    const players = query(world, [Player, Position, Health]);
     const now = gameState.tick;
 
     for (let i = 0; i < players.length; i++) {
       const eid = players[i];
-      if (hasComponent(world, Dead, eid)) continue;
+      if (hasComponent(world, eid, Dead)) continue;
 
       const connId = Player.connectionId[eid];
       const client = gameState.clients.get(connId);
@@ -55,12 +53,12 @@ export function createCombatSystem(gameState) {
 
         // Spawn projectile
         const projEid = addEntity(world);
-        addComponent(world, Position, projEid);
-        addComponent(world, Velocity, projEid);
-        addComponent(world, Projectile, projEid);
-        addComponent(world, Collider, projEid);
-        addComponent(world, NetworkSync, projEid);
-        addComponent(world, Sprite, projEid);
+        addComponent(world, projEid, Position);
+        addComponent(world, projEid, Velocity);
+        addComponent(world, projEid, Projectile);
+        addComponent(world, projEid, Collider);
+        addComponent(world, projEid, NetworkSync);
+        addComponent(world, projEid, Sprite);
 
         const projSpeed = 20; // tiles/sec
         Position.x[projEid] = px + Math.cos(angle) * 0.8;
@@ -91,11 +89,11 @@ export function createCombatSystem(gameState) {
         const allTargets = [...gameState.entityTypes.entries()];
         for (const [targetEid, type] of allTargets) {
           if (targetEid === eid) continue;
-          if (!hasComponent(world, Position, targetEid)) continue;
-          if (!hasComponent(world, Health, targetEid)) continue;
-          if (hasComponent(world, Dead, targetEid)) continue;
+          if (!hasComponent(world, targetEid, Position)) continue;
+          if (!hasComponent(world, targetEid, Health)) continue;
+          if (hasComponent(world, targetEid, Dead)) continue;
           // Don't melee resource nodes — gathering is handled by GatherSystem
-          if (hasComponent(world, ResourceNode, targetEid)) continue;
+          if (hasComponent(world, targetEid, ResourceNode)) continue;
 
           const dx = Position.x[targetEid] - px;
           const dy = Position.y[targetEid] - py;
@@ -111,7 +109,7 @@ export function createCombatSystem(gameState) {
 
           // Apply damage
           Health.current[targetEid] -= def.damage;
-          if (hasComponent(world, Damageable, targetEid)) {
+          if (hasComponent(world, targetEid, Damageable)) {
             Damageable.lastHitTime[targetEid] = now;
             Damageable.lastHitBy[targetEid] = eid;
           }

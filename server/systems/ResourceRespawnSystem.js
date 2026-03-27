@@ -1,12 +1,10 @@
-import { defineQuery } from 'bitecs';
+import { query } from 'bitecs';
 import { ResourceNode, Position, Collider, Sprite } from '../../shared/components.js';
 import { RESOURCE_NODE_DEFS } from '../../shared/constants.js';
 
-const nodeQuery = defineQuery([ResourceNode, Position]);
-
 export function createResourceRespawnSystem(gameState) {
   return function ResourceRespawnSystem(world) {
-    const nodes = nodeQuery(world);
+    const nodes = query(world, [ResourceNode, Position]);
     for (let i = 0; i < nodes.length; i++) {
       const eid = nodes[i];
       if (ResourceNode.remaining[eid] > 0) continue;

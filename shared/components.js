@@ -1,54 +1,53 @@
-import { defineComponent, Types } from 'bitecs';
-
-const { f32, ui32, ui16, ui8, i32, i8, eid } = Types;
-
 // ── Core ──
-export const Position = defineComponent({ x: f32, y: f32 });
-export const Velocity = defineComponent({ vx: f32, vy: f32 });
-export const Rotation = defineComponent({ angle: f32 });
-export const Sprite = defineComponent({ spriteId: ui16, width: ui8, height: ui8, layer: ui8 });
-export const Collider = defineComponent({ radius: f32, isStatic: ui8 });
-export const NetworkSync = defineComponent({ lastTick: ui32, ownerPlayerId: ui32 });
+export const Position = { x: [], y: [] };
+export const Velocity = { vx: [], vy: [] };
+export const Rotation = { angle: [] };
+export const Sprite = { spriteId: [], width: [], height: [], layer: [] };
+export const Collider = { radius: [], isStatic: [] };
+export const NetworkSync = { lastTick: [], ownerPlayerId: [] };
 
 // ── Player / Living ──
-export const Player = defineComponent({ connectionId: ui32, respawnTimer: f32 });
-export const Health = defineComponent({ current: f32, max: f32 });
-export const Hunger = defineComponent({ current: f32, max: f32, decayRate: f32 });
-export const Thirst = defineComponent({ current: f32, max: f32, decayRate: f32 });
-export const Temperature = defineComponent({ current: f32, comfort: f32 });
-export const Armor = defineComponent({ headSlot: ui16, chestSlot: ui16, legsSlot: ui16 });
-export const Dead = defineComponent({ timer: f32 });
+export const Player = { connectionId: [] };
+export const Health = { current: [], max: [] };
+export const Hunger = { current: [], max: [], decayRate: [] };
+export const Thirst = { current: [], max: [], decayRate: [] };
+export const Temperature = { current: [], comfort: [] };
+export const Armor = { headSlot: [], chestSlot: [], legsSlot: [] };
+export const Dead = { timer: [] };
 
 // ── Inventory / Items ──
-// Inventory: 24 slots, each slot has itemId and count (stored as flat arrays)
-export const Inventory = defineComponent({
-  items: [ui16, 24],   // item IDs for each slot
-  counts: [ui16, 24],  // stack counts for each slot
-});
-export const Hotbar = defineComponent({ selectedSlot: ui8 });
-export const WorldItem = defineComponent({ itemId: ui16, quantity: ui16, despawnTimer: f32 });
-export const ActiveTool = defineComponent({ itemId: ui16, swingTimer: f32, lastUseTime: f32 });
+// Inventory: 24 slots, each slot has itemId and count (stored as arrays of typed arrays per entity)
+export const Inventory = { items: [], counts: [] };
+export const Hotbar = { selectedSlot: [] };
+export const WorldItem = { itemId: [], quantity: [], despawnTimer: [] };
+export const ActiveTool = { itemId: [], swingTimer: [], lastUseTime: [] };
 
 // ── Combat ──
-export const Projectile = defineComponent({ damage: f32, speed: f32, sourceEid: eid, lifetime: f32 });
-export const MeleeHitbox = defineComponent({ damage: f32, range: f32, arc: f32, sourceEid: eid });
-export const Damageable = defineComponent({ lastHitTime: f32, lastHitBy: eid });
+export const Projectile = { damage: [], speed: [], sourceEid: [], lifetime: [] };
+export const MeleeHitbox = { damage: [], range: [], arc: [], sourceEid: [] };
+export const Damageable = { lastHitTime: [], lastHitBy: [] };
 
 // ── Building ──
-export const Structure = defineComponent({ structureType: ui8, tier: ui8, hp: f32, maxHp: f32, placedBy: ui32 });
-export const Door = defineComponent({ isOpen: ui8, lockCode: ui16, lockType: ui8 });
-export const ToolCupboard = defineComponent({ radius: f32 });
-export const SleepingBag = defineComponent({ ownerPlayerId: ui32, cooldown: f32 });
+export const Structure = { structureType: [], tier: [], hp: [], maxHp: [], placedBy: [] };
+export const Door = { isOpen: [], lockCode: [], lockType: [] };
+export const ToolCupboard = { radius: [] };
+export const SleepingBag = { ownerPlayerId: [], cooldown: [] };
 
 // ── World / Resources ──
-export const ResourceNode = defineComponent({ resourceType: ui8, remaining: f32, maxAmount: f32, respawnTimer: f32 });
-export const Animal = defineComponent({ animalType: ui8, aiState: ui8, aggroRange: f32, wanderTargetX: f32, wanderTargetY: f32, targetEid: eid });
-export const Campfire = defineComponent({ fuelRemaining: f32, cookSlot0: ui16, cookSlot1: ui16, cookProgress0: f32, cookProgress1: f32 });
-export const Workbench = defineComponent({ tier: ui8 });
-export const Furnace = defineComponent({ fuelRemaining: f32, inputItem: ui16, inputCount: ui16, outputItem: ui16, outputCount: ui16, smeltProgress: f32 });
+export const ResourceNode = { resourceType: [], remaining: [], maxAmount: [], respawnTimer: [] };
+export const Animal = { animalType: [], aiState: [], aggroRange: [], wanderTargetX: [], wanderTargetY: [], targetEid: [] };
+export const Campfire = { fuelRemaining: [], cookSlot0: [], cookSlot1: [], cookProgress0: [], cookProgress1: [] };
+export const Workbench = { tier: [] };
+export const Furnace = { fuelRemaining: [], inputItem: [], inputCount: [], outputItem: [], outputCount: [], smeltProgress: [] };
 
 // For TC auth and door auth, we store per-entity data in Maps on the server (not in ECS)
 // This is because bitECS doesn't support dynamic-length arrays well
+
+// Helper to initialize Inventory sub-arrays for an entity
+export function initInventory(eid) {
+  Inventory.items[eid] = new Uint16Array(24);
+  Inventory.counts[eid] = new Uint16Array(24);
+}
 
 // All components list for easy registration
 export const allComponents = [

@@ -1,9 +1,6 @@
-import { defineQuery, hasComponent } from 'bitecs';
+import { query, hasComponent } from 'bitecs';
 import { Player, Inventory, Position, Workbench, Dead } from '../../shared/components.js';
 import { RECIPES, ITEM_DEFS, INVENTORY_SLOTS, CRAFT_TIER } from '../../shared/constants.js';
-
-const playerQuery = defineQuery([Player, Inventory]);
-const workbenchQuery = defineQuery([Workbench, Position]);
 
 export function createCraftingSystem(gameState) {
   return function CraftingSystem(world) {
@@ -14,7 +11,7 @@ export function createCraftingSystem(gameState) {
       client.craftRequest = null;
 
       const eid = client.playerEid;
-      if (!eid || hasComponent(world, Dead, eid)) continue;
+      if (!eid || hasComponent(world, eid, Dead)) continue;
 
       const recipe = RECIPES.find(r => r.id === recipeId);
       if (!recipe) continue;
@@ -24,7 +21,7 @@ export function createCraftingSystem(gameState) {
         const requiredTier = recipe.tier;
         const px = Position.x[eid];
         const py = Position.y[eid];
-        const benches = workbenchQuery(world);
+        const benches = query(world, [Workbench, Position]);
         let hasWorkbench = false;
         for (let i = 0; i < benches.length; i++) {
           const bench = benches[i];

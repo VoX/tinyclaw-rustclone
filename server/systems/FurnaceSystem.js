@@ -1,8 +1,6 @@
-import { defineQuery } from 'bitecs';
+import { query } from 'bitecs';
 import { Furnace, Position } from '../../shared/components.js';
 import { ITEM, SERVER_TPS } from '../../shared/constants.js';
-
-const furnaceQuery = defineQuery([Furnace]);
 
 // Smelting recipes: input -> output
 const SMELT_MAP = {
@@ -14,7 +12,7 @@ const SMELT_TIME = 3 * SERVER_TPS; // 3 seconds per item
 
 export function createFurnaceSystem(gameState) {
   return function FurnaceSystem(world) {
-    const furnaces = furnaceQuery(world);
+    const furnaces = query(world, [Furnace]);
     for (let i = 0; i < furnaces.length; i++) {
       const eid = furnaces[i];
       if (Furnace.fuelRemaining[eid] <= 0) continue;

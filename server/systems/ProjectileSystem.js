@@ -1,12 +1,9 @@
-import { defineQuery, removeEntity, hasComponent } from 'bitecs';
+import { query, removeEntity, hasComponent } from 'bitecs';
 import { Projectile, Position, Collider, Health, Dead, Damageable, Player, ResourceNode } from '../../shared/components.js';
-
-const projectileQuery = defineQuery([Projectile, Position]);
-const collidableQuery = defineQuery([Position, Health, Collider]);
 
 export function createProjectileSystem(gameState) {
   return function ProjectileSystem(world) {
-    const projectiles = projectileQuery(world);
+    const projectiles = query(world, [Projectile, Position]);
     for (let i = 0; i < projectiles.length; i++) {
       const eid = projectiles[i];
 
@@ -25,14 +22,14 @@ export function createProjectileSystem(gameState) {
       const sourceEid = Projectile.sourceEid[eid];
       const projRadius = Collider.radius[eid] || 0.15;
 
-      const targets = collidableQuery(world);
+      const targets = query(world, [Position, Health, Collider]);
       for (let j = 0; j < targets.length; j++) {
         const target = targets[j];
         if (target === sourceEid) continue;
         if (target === eid) continue;
-        if (hasComponent(world, Dead, target)) continue;
+        if (hasComponent(world, target, Dead)) continue;
         // Don't hit resource nodes — they aren't combat targets
-        if (hasComponent(world, ResourceNode, target)) continue;
+        if (hasComponent(world, target, ResourceNode)) continue;
 
         const dx = px - Position.x[target];
         const dy = py - Position.y[target];
@@ -42,7 +39,7 @@ export function createProjectileSystem(gameState) {
         if (dist < hitDist) {
           // Hit!
           Health.current[target] -= Projectile.damage[eid];
-          if (hasComponent(world, Damageable, target)) {
+          if (hasComponent(world, target, Damageable)) {
             Damageable.lastHitTime[target] = gameState.tick;
             Damageable.lastHitBy[target] = sourceEid;
           }

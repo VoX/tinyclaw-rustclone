@@ -1,8 +1,6 @@
-import { defineQuery, hasComponent } from 'bitecs';
+import { query, hasComponent } from 'bitecs';
 import { Player, Health, Hunger, Thirst, Temperature, Dead, Position } from '../../shared/components.js';
 import { SERVER_TPS, BIOME_TEMP_MOD } from '../../shared/constants.js';
-
-const playerQuery = defineQuery([Player, Health, Hunger, Thirst, Temperature]);
 
 export function createSurvivalSystem(gameState) {
   // Rates per tick
@@ -17,10 +15,10 @@ export function createSurvivalSystem(gameState) {
   const coldDamageRate = 1.0 / SERVER_TPS;
 
   return function SurvivalSystem(world) {
-    const players = playerQuery(world);
+    const players = query(world, [Player, Health, Hunger, Thirst, Temperature]);
     for (let i = 0; i < players.length; i++) {
       const eid = players[i];
-      if (hasComponent(world, Dead, eid)) continue;
+      if (hasComponent(world, eid, Dead)) continue;
 
       const connId = Player.connectionId[eid];
       const client = gameState.clients.get(connId);

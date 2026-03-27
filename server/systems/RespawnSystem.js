@@ -1,15 +1,12 @@
-import { defineQuery, hasComponent, removeComponent, addComponent } from 'bitecs';
+import { query, hasComponent, removeComponent, addComponent } from 'bitecs';
 import { Player, Dead, Position, Health, Hunger, Thirst, Temperature, Inventory,
-         Hotbar, Velocity, SleepingBag, ActiveTool } from '../../shared/components.js';
+         Hotbar, Velocity, SleepingBag, ActiveTool, initInventory } from '../../shared/components.js';
 import { PLAYER_MAX_HP, PLAYER_MAX_HUNGER, PLAYER_MAX_THIRST, ITEM, WORLD_SIZE, TILE_SIZE } from '../../shared/constants.js';
-
-const deadPlayerQuery = defineQuery([Player, Dead]);
-const bagQuery = defineQuery([SleepingBag, Position]);
 
 export function createRespawnSystem(gameState) {
   return function RespawnSystem(world) {
     // Tick down dead timers
-    const deadPlayers = deadPlayerQuery(world);
+    const deadPlayers = query(world, [Player, Dead]);
     for (let i = 0; i < deadPlayers.length; i++) {
       const eid = deadPlayers[i];
       Dead.timer[eid]--;
@@ -22,7 +19,7 @@ export function createRespawnSystem(gameState) {
       client.respawnRequest = null;
 
       const eid = client.playerEid;
-      if (!eid || !hasComponent(world, Dead, eid)) continue;
+      if (!eid || !hasComponent(world, eid, Dead)) continue;
       if (Dead.timer[eid] > 0) continue; // Still waiting
 
       let spawnX, spawnY;
@@ -30,7 +27,7 @@ export function createRespawnSystem(gameState) {
       if (req.bagEid) {
         // Try to spawn at sleeping bag
         const bagEid = req.bagEid;
-        if (hasComponent(world, SleepingBag, bagEid) && SleepingBag.ownerPlayerId[bagEid] === eid) {
+        if (hasComponent(world, bagEid, SleepingBag) && SleepingBag.ownerPlayerId[bagEid] === eid) {
           spawnX = Position.x[bagEid];
           spawnY = Position.y[bagEid];
           // Sleeping bag is one-time use (destroy it)
@@ -47,7 +44,7 @@ export function createRespawnSystem(gameState) {
       }
 
       // Respawn the player
-      removeComponent(world, Dead, eid);
+      removeComponent(world, eid, Dead);
       Position.x[eid] = spawnX;
       Position.y[eid] = spawnY;
       Velocity.vx[eid] = 0;
@@ -61,15 +58,12 @@ export function createRespawnSystem(gameState) {
       Temperature.current[eid] = 20;
       Temperature.comfort[eid] = 1;
 
-      // Give starting items
+      // Give starting items - reinitialize inventory arrays
+      initInventory(eid);
       Inventory.items[eid][0] = ITEM.ROCK;
       Inventory.counts[eid][0] = 1;
       Inventory.items[eid][1] = ITEM.TORCH;
       Inventory.counts[eid][1] = 1;
-      for (let s = 2; s < 24; s++) {
-        Inventory.items[eid][s] = 0;
-        Inventory.counts[eid][s] = 0;
-      }
       Hotbar.selectedSlot[eid] = 0;
       gameState.dirtyInventories.add(eid);
     }

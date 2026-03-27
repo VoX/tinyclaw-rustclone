@@ -1,15 +1,12 @@
-import { defineQuery, hasComponent } from 'bitecs';
+import { query, hasComponent } from 'bitecs';
 import { Position, Velocity, Collider, Structure } from '../../shared/components.js';
 import { WORLD_SIZE, TILE_SIZE, SERVER_TPS } from '../../shared/constants.js';
-
-const movableQuery = defineQuery([Position, Velocity]);
-const staticColliderQuery = defineQuery([Position, Collider]);
 
 export function createMovementSystem(gameState) {
   const dt = 1 / SERVER_TPS;
 
   return function MovementSystem(world) {
-    const movers = movableQuery(world);
+    const movers = query(world, [Position, Velocity]);
     for (let i = 0; i < movers.length; i++) {
       const eid = movers[i];
       const vx = Velocity.vx[eid];
@@ -25,10 +22,9 @@ export function createMovementSystem(gameState) {
       newY = Math.max(0, Math.min(maxCoord, newY));
 
       // Check collision with static colliders (structures)
-      if (hasComponent(world, Collider, eid)) {
+      if (hasComponent(world, eid, Collider)) {
         const myRadius = Collider.radius[eid];
-        const statics = staticColliderQuery(world);
-        let blocked = false;
+        const statics = query(world, [Position, Collider]);
         for (let j = 0; j < statics.length; j++) {
           const other = statics[j];
           if (other === eid) continue;

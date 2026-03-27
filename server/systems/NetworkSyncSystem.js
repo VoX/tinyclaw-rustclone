@@ -1,4 +1,4 @@
-import { defineQuery, hasComponent } from 'bitecs';
+import { query, hasComponent } from 'bitecs';
 import { Position, Velocity, Rotation, Health, Player, Sprite, ResourceNode,
          WorldItem, Projectile, Structure, Animal, Campfire, Furnace, Workbench,
          ToolCupboard, SleepingBag, Door, Dead, Inventory, Hotbar,
@@ -6,22 +6,20 @@ import { Position, Velocity, Rotation, Health, Player, Sprite, ResourceNode,
 import { MSG, ENTITY_TYPE } from '../../shared/protocol.js';
 import { INTEREST_RADIUS, TILE_SIZE, ITEM } from '../../shared/constants.js';
 
-const syncQuery = defineQuery([Position, NetworkSync]);
-
 export function createNetworkSyncSystem(gameState) {
   // Previous state for delta detection
   const prevState = new Map(); // eid -> { x, y, vx, vy, angle, hp, ... }
 
   return function NetworkSyncSystem(world) {
     const tick = gameState.tick;
-    const entities = syncQuery(world);
+    const entities = query(world, [Position, NetworkSync]);
 
     // Build per-client delta updates
     for (const [connId, client] of gameState.clients) {
       if (!client.ws || !client.playerEid) continue;
 
       const playerEid = client.playerEid;
-      if (!hasComponent(world, Position, playerEid)) continue;
+      if (!hasComponent(world, playerEid, Position)) continue;
 
       const px = Position.x[playerEid];
       const py = Position.y[playerEid];
@@ -50,7 +48,7 @@ export function createNetworkSyncSystem(gameState) {
         };
 
         // Add velocity for moving entities
-        if (hasComponent(world, Velocity, eid)) {
+        if (hasComponent(world, eid, Velocity)) {
           const vx = Velocity.vx[eid];
           const vy = Velocity.vy[eid];
           if (vx !== 0 || vy !== 0) {
@@ -59,16 +57,16 @@ export function createNetworkSyncSystem(gameState) {
           }
         }
 
-        if (hasComponent(world, Rotation, eid)) {
+        if (hasComponent(world, eid, Rotation)) {
           state.a = Math.round(Rotation.angle[eid] * 100) / 100;
         }
 
-        if (hasComponent(world, Health, eid)) {
+        if (hasComponent(world, eid, Health)) {
           state.hp = Math.round(Health.current[eid]);
           state.mhp = Math.round(Health.max[eid]);
         }
 
-        if (hasComponent(world, Dead, eid)) {
+        if (hasComponent(world, eid, Dead)) {
           state.dead = 1;
         }
 
@@ -86,7 +84,7 @@ export function createNetworkSyncSystem(gameState) {
           state.at = Animal.animalType[eid];
         } else if (entityType === ENTITY_TYPE.PLAYER) {
           state.sprite = Sprite.spriteId[eid];
-          if (hasComponent(world, Hotbar, eid)) {
+          if (hasComponent(world, eid, Hotbar)) {
             const slot = Hotbar.selectedSlot[eid];
             state.held = Inventory.items[eid]?.[slot] || 0;
           }

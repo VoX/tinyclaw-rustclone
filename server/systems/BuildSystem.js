@@ -1,12 +1,10 @@
-import { defineQuery, addEntity, addComponent, hasComponent } from 'bitecs';
+import { query, addEntity, addComponent, hasComponent } from 'bitecs';
 import { Player, Position, Inventory, Structure, Collider, Sprite, NetworkSync,
          ToolCupboard, Door, SleepingBag, Campfire, Furnace, Workbench,
          Health, Hotbar, Dead } from '../../shared/components.js';
 import { ITEM, STRUCT_TYPE, STRUCT_TIER, STRUCT_HP, TILE_SIZE, INVENTORY_SLOTS,
          ITEM_DEFS, SERVER_TPS } from '../../shared/constants.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
-
-const tcQuery = defineQuery([ToolCupboard, Position]);
 
 export function createBuildSystem(gameState) {
   return function BuildSystem(world) {
@@ -16,7 +14,7 @@ export function createBuildSystem(gameState) {
       client.buildRequest = null;
 
       const eid = client.playerEid;
-      if (!eid || hasComponent(world, Dead, eid)) continue;
+      if (!eid || hasComponent(world, eid, Dead)) continue;
 
       // Check player is holding building plan
       const slot = Hotbar.selectedSlot[eid];
@@ -34,7 +32,7 @@ export function createBuildSystem(gameState) {
       if (dx * dx + dy * dy > 10 * 10) continue;
 
       // Check tool cupboard authorization
-      const tcs = tcQuery(world);
+      const tcs = query(world, [ToolCupboard, Position]);
       let authorized = true;
       for (let i = 0; i < tcs.length; i++) {
         const tc = tcs[i];
@@ -109,18 +107,18 @@ export function createBuildSystem(gameState) {
 
       // Create the entity
       const newEid = addEntity(world);
-      addComponent(world, Position, newEid);
-      addComponent(world, Collider, newEid);
-      addComponent(world, Sprite, newEid);
-      addComponent(world, NetworkSync, newEid);
+      addComponent(world, newEid, Position);
+      addComponent(world, newEid, Collider);
+      addComponent(world, newEid, Sprite);
+      addComponent(world, newEid, NetworkSync);
 
       Position.x[newEid] = snapX;
       Position.y[newEid] = snapY;
       NetworkSync.lastTick[newEid] = gameState.tick;
 
       if (entityType === ENTITY_TYPE.STRUCTURE) {
-        addComponent(world, Structure, newEid);
-        addComponent(world, Health, newEid);
+        addComponent(world, newEid, Structure);
+        addComponent(world, newEid, Health);
         Structure.structureType[newEid] = pieceType;
         Structure.tier[newEid] = STRUCT_TIER.TWIG;
         const hp = STRUCT_HP[pieceType]?.[STRUCT_TIER.TWIG] || 10;
@@ -138,24 +136,24 @@ export function createBuildSystem(gameState) {
           Collider.isStatic[newEid] = 0; // doorways are passable
         }
       } else if (entityType === ENTITY_TYPE.SLEEPING_BAG) {
-        addComponent(world, SleepingBag, newEid);
+        addComponent(world, newEid, SleepingBag);
         SleepingBag.ownerPlayerId[newEid] = eid;
         SleepingBag.cooldown[newEid] = 0;
         Collider.radius[newEid] = 0.4;
         Sprite.spriteId[newEid] = 210;
       } else if (entityType === ENTITY_TYPE.CAMPFIRE) {
-        addComponent(world, Campfire, newEid);
+        addComponent(world, newEid, Campfire);
         Campfire.fuelRemaining[newEid] = 0;
         Collider.radius[newEid] = 0.5;
         Sprite.spriteId[newEid] = 211;
       } else if (entityType === ENTITY_TYPE.FURNACE) {
-        addComponent(world, Furnace, newEid);
+        addComponent(world, newEid, Furnace);
         Furnace.fuelRemaining[newEid] = 0;
         Collider.radius[newEid] = 0.5;
         Sprite.spriteId[newEid] = 212;
       } else if (entityType === ENTITY_TYPE.TOOL_CUPBOARD) {
-        addComponent(world, ToolCupboard, newEid);
-        addComponent(world, Health, newEid);
+        addComponent(world, newEid, ToolCupboard);
+        addComponent(world, newEid, Health);
         ToolCupboard.radius[newEid] = 32;
         Health.current[newEid] = 250;
         Health.max[newEid] = 250;
@@ -164,7 +162,7 @@ export function createBuildSystem(gameState) {
         // Auto-authorize placer
         gameState.tcAuth.set(newEid, new Set([eid]));
       } else if (entityType === ENTITY_TYPE.WORKBENCH) {
-        addComponent(world, Workbench, newEid);
+        addComponent(world, newEid, Workbench);
         const tier = heldItem === ITEM.WORKBENCH_T3_ITEM ? 3 : heldItem === ITEM.WORKBENCH_T2_ITEM ? 2 : 1;
         Workbench.tier[newEid] = tier;
         Collider.radius[newEid] = 0.6;

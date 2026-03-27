@@ -1,11 +1,9 @@
-import { defineQuery, removeEntity } from 'bitecs';
+import { query, removeEntity } from 'bitecs';
 import { WorldItem } from '../../shared/components.js';
-
-const itemQuery = defineQuery([WorldItem]);
 
 export function createItemDespawnSystem(gameState) {
   return function ItemDespawnSystem(world) {
-    const items = itemQuery(world);
+    const items = query(world, [WorldItem]);
     for (let i = 0; i < items.length; i++) {
       const eid = items[i];
       WorldItem.despawnTimer[eid]--;

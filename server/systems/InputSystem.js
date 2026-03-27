@@ -1,16 +1,14 @@
-import { defineQuery, hasComponent } from 'bitecs';
+import { query, hasComponent } from 'bitecs';
 import { Player, Velocity, Rotation, ActiveTool, Health, Dead } from '../../shared/components.js';
 import { KEY, MOUSE_ACTION } from '../../shared/protocol.js';
 import { PLAYER_SPEED, PLAYER_SPRINT_MULT } from '../../shared/constants.js';
 
-const playerQuery = defineQuery([Player, Velocity, Rotation]);
-
 export function createInputSystem(gameState) {
   return function InputSystem(world) {
-    const players = playerQuery(world);
+    const players = query(world, [Player, Velocity, Rotation]);
     for (let i = 0; i < players.length; i++) {
       const eid = players[i];
-      if (hasComponent(world, Dead, eid)) continue;
+      if (hasComponent(world, eid, Dead)) continue;
 
       const connId = Player.connectionId[eid];
       const client = gameState.clients.get(connId);

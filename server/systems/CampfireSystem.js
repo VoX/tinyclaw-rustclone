@@ -1,8 +1,6 @@
-import { defineQuery } from 'bitecs';
+import { query } from 'bitecs';
 import { Campfire, Position } from '../../shared/components.js';
 import { ITEM, SERVER_TPS } from '../../shared/constants.js';
-
-const campfireQuery = defineQuery([Campfire, Position]);
 
 const COOK_TIME = 5 * SERVER_TPS; // 5 seconds
 
@@ -11,7 +9,7 @@ export function createCampfireSystem(gameState) {
     // Update campfire positions for warmth calculations
     gameState.campfirePositions = new Map();
 
-    const campfires = campfireQuery(world);
+    const campfires = query(world, [Campfire, Position]);
     for (let i = 0; i < campfires.length; i++) {
       const eid = campfires[i];
       if (Campfire.fuelRemaining[eid] <= 0) continue;

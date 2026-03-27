@@ -6,7 +6,8 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 import { Position, Velocity, Rotation, Player, Health, Hunger, Thirst, Temperature,
-         Inventory, Hotbar, Collider, Sprite, NetworkSync, ActiveTool, Damageable } from '../shared/components.js';
+         Inventory, Hotbar, Collider, Sprite, NetworkSync, ActiveTool, Damageable,
+         initInventory } from '../shared/components.js';
 import { SERVER_TPS, SERVER_TICK_MS, PLAYER_MAX_HP, PLAYER_MAX_HUNGER,
          PLAYER_MAX_THIRST, PLAYER_COLLIDER_RADIUS, ITEM, WORLD_SIZE, TILE_SIZE } from '../shared/constants.js';
 import { MSG, KEY, MOUSE_ACTION, INV_ACTION, ENTITY_TYPE } from '../shared/protocol.js';
@@ -118,21 +119,22 @@ wss.on('connection', (ws) => {
 
   // Create player entity
   const eid = addEntity(world);
-  addComponent(world, Position, eid);
-  addComponent(world, Velocity, eid);
-  addComponent(world, Rotation, eid);
-  addComponent(world, Player, eid);
-  addComponent(world, Health, eid);
-  addComponent(world, Hunger, eid);
-  addComponent(world, Thirst, eid);
-  addComponent(world, Temperature, eid);
-  addComponent(world, Inventory, eid);
-  addComponent(world, Hotbar, eid);
-  addComponent(world, Collider, eid);
-  addComponent(world, Sprite, eid);
-  addComponent(world, NetworkSync, eid);
-  addComponent(world, ActiveTool, eid);
-  addComponent(world, Damageable, eid);
+  addComponent(world, eid, Position);
+  addComponent(world, eid, Velocity);
+  addComponent(world, eid, Rotation);
+  addComponent(world, eid, Player);
+  addComponent(world, eid, Health);
+  addComponent(world, eid, Hunger);
+  addComponent(world, eid, Thirst);
+  addComponent(world, eid, Temperature);
+  addComponent(world, eid, Inventory);
+  initInventory(eid);
+  addComponent(world, eid, Hotbar);
+  addComponent(world, eid, Collider);
+  addComponent(world, eid, Sprite);
+  addComponent(world, eid, NetworkSync);
+  addComponent(world, eid, ActiveTool);
+  addComponent(world, eid, Damageable);
 
   // Random beach spawn
   const maxCoord = WORLD_SIZE * TILE_SIZE;

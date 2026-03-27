@@ -11,7 +11,7 @@ export function createInventorySystem(gameState) {
       client.invRequest = null;
 
       const eid = client.playerEid;
-      if (!eid || hasComponent(world, Dead, eid)) continue;
+      if (!eid || hasComponent(world, eid, Dead)) continue;
 
       const inv = { items: Inventory.items[eid], counts: Inventory.counts[eid] };
 
@@ -49,11 +49,11 @@ export function createInventorySystem(gameState) {
 
         // Create world item
         const dropEid = addEntity(world);
-        addComponent(world, Position, dropEid);
-        addComponent(world, WorldItem, dropEid);
-        addComponent(world, Collider, dropEid);
-        addComponent(world, Sprite, dropEid);
-        addComponent(world, NetworkSync, dropEid);
+        addComponent(world, dropEid, Position);
+        addComponent(world, dropEid, WorldItem);
+        addComponent(world, dropEid, Collider);
+        addComponent(world, dropEid, Sprite);
+        addComponent(world, dropEid, NetworkSync);
 
         const angle = Math.random() * Math.PI * 2;
         Position.x[dropEid] = Position.x[eid] + Math.cos(angle) * 1.5;
@@ -102,12 +102,12 @@ export function createInventorySystem(gameState) {
     // Pickup nearby world items (and consume any remaining interact requests)
     for (const [connId, client] of gameState.clients) {
       const eid = client.playerEid;
-      if (!eid || hasComponent(world, Dead, eid)) continue;
+      if (!eid || hasComponent(world, eid, Dead)) continue;
       if (!client.interactRequest) continue;
       const targetEid = client.interactRequest.targetEid;
       client.interactRequest = null; // Always consume to prevent stale requests
 
-      if (!hasComponent(world, WorldItem, targetEid)) continue;
+      if (!hasComponent(world, targetEid, WorldItem)) continue;
 
       const dx = Position.x[targetEid] - Position.x[eid];
       const dy = Position.y[targetEid] - Position.y[eid];

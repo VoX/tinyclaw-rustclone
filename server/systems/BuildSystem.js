@@ -3,7 +3,7 @@ import { Player, Position, Inventory, Structure, Collider, Sprite, NetworkSync,
          ToolCupboard, Door, SleepingBag, Campfire, Furnace, Workbench, StorageBox,
          Health, Hotbar, Dead } from '../../shared/components.js';
 import { ITEM, STRUCT_TYPE, STRUCT_TIER, STRUCT_HP, TILE_SIZE, INVENTORY_SLOTS,
-         ITEM_DEFS, SERVER_TPS } from '../../shared/constants.js';
+         ITEM_DEFS, SERVER_TPS, UPGRADE_COSTS } from '../../shared/constants.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
 
 export function createBuildSystem(gameState) {
@@ -192,6 +192,90 @@ export function createBuildSystem(gameState) {
       gameState.entityTypes.set(newEid, entityType);
       gameState.newEntities.add(newEid);
     }
+
+    // ── Hammer Upgrade ──
+    for (const [connId, client] of gameState.clients) {
+      if (!client.hammerUpgradeRequest) continue;
+      const req = client.hammerUpgradeRequest;
+      client.hammerUpgradeRequest = null;
+
+      const eid = client.playerEid;
+      if (!eid || hasComponent(world, eid, Dead)) continue;
+
+      // Must be holding a hammer
+      const slot = Hotbar.selectedSlot[eid];
+      const heldItem = Inventory.items[eid]?.[slot] || 0;
+      if (heldItem !== ITEM.HAMMER) continue;
+
+      const targetEid = req.targetEid;
+      if (!hasComponent(world, targetEid, Structure)) continue;
+
+      // Distance check
+      const dx = Position.x[targetEid] - Position.x[eid];
+      const dy = Position.y[targetEid] - Position.y[eid];
+      if (dx * dx + dy * dy > 6 * 6) continue;
+
+      // Check TC authorization
+      const tcs = query(world, [ToolCupboard, Position]);
+      let authorized = true;
+      for (let i = 0; i < tcs.length; i++) {
+        const tc = tcs[i];
+        const tdx = Position.x[targetEid] - Position.x[tc];
+        const tdy = Position.y[targetEid] - Position.y[tc];
+        if (tdx * tdx + tdy * tdy < 32 * 32) {
+          const authList = gameState.tcAuth.get(tc);
+          if (authList && !authList.has(eid)) {
+            authorized = false;
+            break;
+          }
+        }
+      }
+      if (!authorized) continue;
+
+      const currentTier = Structure.tier[targetEid];
+      const nextTier = currentTier + 1;
+      if (nextTier > STRUCT_TIER.METAL) continue; // Already max tier
+
+      const costDef = UPGRADE_COSTS[nextTier];
+      if (!costDef) continue;
+      const [costItem, costAmount] = costDef;
+
+      // Check player has materials
+      let total = 0;
+      for (let s = 0; s < INVENTORY_SLOTS; s++) {
+        if (Inventory.items[eid][s] === costItem) total += Inventory.counts[eid][s];
+      }
+      if (total < costAmount) continue;
+
+      // Consume materials
+      let remaining = costAmount;
+      for (let s = 0; s < INVENTORY_SLOTS && remaining > 0; s++) {
+        if (Inventory.items[eid][s] === costItem) {
+          const take = Math.min(Inventory.counts[eid][s], remaining);
+          Inventory.counts[eid][s] -= take;
+          remaining -= take;
+          if (Inventory.counts[eid][s] === 0) Inventory.items[eid][s] = 0;
+        }
+      }
+
+      // Upgrade the structure
+      const structType = Structure.structureType[targetEid];
+      Structure.tier[targetEid] = nextTier;
+      const newHp = STRUCT_HP[structType]?.[nextTier] || 250;
+      Structure.hp[targetEid] = newHp;
+      Structure.maxHp[targetEid] = newHp;
+      Health.current[targetEid] = newHp;
+      Health.max[targetEid] = newHp;
+
+      gameState.dirtyInventories.add(eid);
+
+      gameState.events.push({
+        type: 'upgrade',
+        x: Position.x[targetEid],
+        y: Position.y[targetEid],
+      });
+    }
+
     return world;
   };
 }

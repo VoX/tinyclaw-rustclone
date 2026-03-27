@@ -1,5 +1,6 @@
 import { query, removeEntity, hasComponent } from 'bitecs';
-import { Projectile, Position, Collider, Health, Dead, Damageable, Player, ResourceNode } from '../../shared/components.js';
+import { Projectile, Position, Collider, Health, Dead, Damageable, Player, ResourceNode, Armor } from '../../shared/components.js';
+import { getArmorReduction } from '../../shared/constants.js';
 
 export function createProjectileSystem(gameState) {
   return function ProjectileSystem(world) {
@@ -37,8 +38,13 @@ export function createProjectileSystem(gameState) {
         const hitDist = projRadius + (Collider.radius[target] || 0.4);
 
         if (dist < hitDist) {
-          // Hit!
-          Health.current[target] -= Projectile.damage[eid];
+          // Hit! Apply armor reduction
+          let dmg = Projectile.damage[eid];
+          if (hasComponent(world, target, Armor)) {
+            const reduction = getArmorReduction(Armor.headSlot[target], Armor.chestSlot[target], Armor.legsSlot[target]);
+            dmg = Math.round(dmg * (1 - reduction));
+          }
+          Health.current[target] -= dmg;
           if (hasComponent(world, target, Damageable)) {
             Damageable.lastHitTime[target] = gameState.tick;
             Damageable.lastHitBy[target] = sourceEid;

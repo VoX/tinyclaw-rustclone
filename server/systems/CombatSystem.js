@@ -1,8 +1,8 @@
 import { query, hasComponent, addEntity, addComponent } from 'bitecs';
 import { Player, Position, Rotation, Health, ActiveTool, Inventory, Hotbar, Dead,
-         Projectile, Velocity, Collider, NetworkSync, Sprite, Damageable, ResourceNode } from '../../shared/components.js';
+         Projectile, Velocity, Collider, NetworkSync, Sprite, Damageable, ResourceNode, Armor } from '../../shared/components.js';
 import { MOUSE_ACTION } from '../../shared/protocol.js';
-import { ITEM_DEFS, SERVER_TPS } from '../../shared/constants.js';
+import { ITEM_DEFS, SERVER_TPS, getArmorReduction } from '../../shared/constants.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
 
 export function createCombatSystem(gameState) {
@@ -106,8 +106,13 @@ export function createCombatSystem(gameState) {
           while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
           if (Math.abs(angleDiff) > arc / 2) continue;
 
-          // Apply damage
-          Health.current[targetEid] -= def.damage;
+          // Apply damage (reduced by target armor)
+          let dmg = def.damage;
+          if (hasComponent(world, targetEid, Armor)) {
+            const reduction = getArmorReduction(Armor.headSlot[targetEid], Armor.chestSlot[targetEid], Armor.legsSlot[targetEid]);
+            dmg = Math.round(dmg * (1 - reduction));
+          }
+          Health.current[targetEid] -= dmg;
           if (hasComponent(world, targetEid, Damageable)) {
             Damageable.lastHitTime[targetEid] = now;
             Damageable.lastHitBy[targetEid] = eid;

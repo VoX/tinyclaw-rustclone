@@ -1,6 +1,6 @@
 import { MSG, KEY, MOUSE_ACTION, INV_ACTION, ENTITY_TYPE } from '../shared/protocol.js';
 import { ITEM, ITEM_DEFS, RECIPES, CRAFT_TIER, BIOME, TILE_SIZE, WORLD_SIZE,
-         INVENTORY_SLOTS, HOTBAR_SLOTS, STRUCT_TYPE } from '../shared/constants.js';
+         INVENTORY_SLOTS, HOTBAR_SLOTS, STRUCT_TYPE, WATER_SPEED_MULT } from '../shared/constants.js';
 import { createRenderer } from './renderer.js';
 import { createInput } from './input.js';
 import { createUI } from './ui/index.js';
@@ -39,6 +39,11 @@ const state = {
   containerOpen: null,     // { type, eid, data }
   tcAuthOpen: null,        // { tcEid, authorized, authList }
   workbenchTier: 0,        // highest tier workbench nearby (from interact)
+  // Armor
+  armor: { head: 0, chest: 0, legs: 0 },
+  // Map
+  showMap: false,
+  exploredTiles: null,     // Uint8Array for fog of war
   // Chat
   chatMessages: [],        // { senderName, senderEid, text, time }
   chatInput: '',
@@ -115,6 +120,11 @@ function handleServerMessage(msg) {
       }
       state.loadingWorld = false;
       state.worldReady = true;
+      // Initialize fog of war explored tiles
+      if (!state.exploredTiles) {
+        const fogSize = Math.ceil(msg.worldSize / 8); // 1 tile per 8 world tiles
+        state.exploredTiles = new Uint8Array(fogSize * fogSize);
+      }
       if (state.firstConnect) {
         state.showControls = true;
       }
@@ -190,6 +200,7 @@ function handleServerMessage(msg) {
       state.hunger = msg.hunger;
       state.thirst = msg.thirst;
       state.temp = msg.temp;
+      if (msg.armor) state.armor = msg.armor;
       break;
 
     case MSG.DEATH:
@@ -334,7 +345,18 @@ function clientLoop(timestamp) {
     const me = state.entities.get(state.myEid);
     const keys = input.getKeys();
     const sprinting = input.isSprinting();
-    const speed = 10.0 * (sprinting ? 2.0 : 1.0);
+    let speed = 10.0 * (sprinting ? 2.0 : 1.0);
+
+    // Slow down in water (client prediction)
+    if (state.biomeMap) {
+      const tx = Math.floor(me.x / state.tileSize);
+      const ty = Math.floor(me.y / state.tileSize);
+      if (tx >= 0 && tx < state.worldSize && ty >= 0 && ty < state.worldSize) {
+        if (state.biomeMap[ty * state.worldSize + tx] === BIOME.WATER) {
+          speed *= WATER_SPEED_MULT;
+        }
+      }
+    }
 
     let dx = 0, dy = 0;
     if (keys & KEY.W) dy -= 1;
@@ -354,6 +376,21 @@ function clientLoop(timestamp) {
     // Footstep sounds
     const isMoving = dx !== 0 || dy !== 0;
     updateFootsteps(isMoving, sprinting);
+
+    // Update fog of war
+    if (state.exploredTiles) {
+      const fogSize = Math.ceil(state.worldSize / 8);
+      const fogX = Math.floor(me.x / (state.tileSize * 8));
+      const fogY = Math.floor(me.y / (state.tileSize * 8));
+      const fogRadius = 4;
+      for (let fy = fogY - fogRadius; fy <= fogY + fogRadius; fy++) {
+        for (let fx = fogX - fogRadius; fx <= fogX + fogRadius; fx++) {
+          if (fx >= 0 && fx < fogSize && fy >= 0 && fy < fogSize) {
+            state.exploredTiles[fy * fogSize + fx] = 1;
+          }
+        }
+      }
+    }
 
     // When idle, gently drift toward server position to correct accumulated error
     if (dx === 0 && dy === 0 && me._serverX !== undefined) {

@@ -1,6 +1,6 @@
 import { query, hasComponent } from 'bitecs';
 import { Player, Health, Hunger, Thirst, Temperature, Dead, Position } from '../../shared/components.js';
-import { SERVER_TPS, BIOME_TEMP_MOD } from '../../shared/constants.js';
+import { SERVER_TPS, BIOME_TEMP_MOD, BIOME } from '../../shared/constants.js';
 
 export function createSurvivalSystem(gameState) {
   // Rates per tick
@@ -87,6 +87,25 @@ export function createSurvivalSystem(gameState) {
         gameState.dirtyInventories.add(eid);
       }
     }
+
+    // Handle drink water requests
+    for (const [connId, client] of gameState.clients) {
+      if (!client.drinkWaterRequest) continue;
+      client.drinkWaterRequest = null;
+
+      const eid = client.playerEid;
+      if (!eid || hasComponent(world, eid, Dead)) continue;
+
+      // Check player is on or near a water tile
+      if (!gameState.getBiomeAt) continue;
+      const biome = gameState.getBiomeAt(Position.x[eid], Position.y[eid]);
+      if (biome !== BIOME.WATER) continue;
+
+      // Restore thirst by 30
+      Thirst.current[eid] = Math.min(100, Thirst.current[eid] + 30);
+      gameState.dirtyInventories.add(eid);
+    }
+
     return world;
   };
 }

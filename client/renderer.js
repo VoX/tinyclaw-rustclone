@@ -9,6 +9,7 @@ const BIOME_COLORS = {
   [BIOME.DESERT]:    '#c4a35a',
   [BIOME.SNOW]:      '#dde8f0',
   [BIOME.MOUNTAIN]:  '#7a7a7a',
+  [BIOME.WATER]:     '#2850a0',
 };
 
 const RESOURCE_COLORS = {
@@ -247,6 +248,22 @@ export function createRenderer(canvas, state) {
             cctx.lineTo(px + r3 * DETAIL, py + DETAIL);
             cctx.stroke();
           }
+        } else if (biome === BIOME.WATER) {
+          // Water ripples / wave patterns
+          if (r1 > 0.5) {
+            cctx.strokeStyle = `rgba(60,120,200,${0.2 + r2 * 0.2})`;
+            cctx.lineWidth = 0.4;
+            cctx.beginPath();
+            cctx.moveTo(px, py + r3 * DETAIL);
+            cctx.quadraticCurveTo(px + DETAIL * 0.5, py + r3 * DETAIL - 0.8, px + DETAIL, py + r3 * DETAIL);
+            cctx.stroke();
+          }
+          if (r2 > 0.7) {
+            cctx.fillStyle = `rgba(100,160,220,${0.15 + r1 * 0.1})`;
+            cctx.beginPath();
+            cctx.arc(px + r1 * DETAIL, py + r3 * DETAIL, 0.4, 0, Math.PI * 2);
+            cctx.fill();
+          }
         } else if (biome === BIOME.BEACH) {
           // Sand ripple
           if (r1 > 0.6) {
@@ -407,6 +424,8 @@ export function createRenderer(canvas, state) {
         drawSleepingBag(ctx, sx, sy, e);
       } else if (type === ENTITY_TYPE.STORAGE_BOX) {
         drawStorageBox(ctx, sx, sy, e);
+      } else if (type === ENTITY_TYPE.LOOT_BAG) {
+        drawLootBag(ctx, sx, sy, e);
       }
 
       // Health bar for damaged entities (not local player)
@@ -419,6 +438,44 @@ export function createRenderer(canvas, state) {
         const barColor = pct > 0.5 ? '#2d8c2d' : pct > 0.25 ? '#c8a820' : '#c83030';
         ctx.fillStyle = barColor;
         ctx.fillRect(sx - barW / 2, sy - 22, barW * pct, barH);
+      }
+    }
+
+    // ── Hammer upgrade preview ──
+    if (me && !state.isDead) {
+      const heldItem = state.inventory[state.selectedSlot]?.id;
+      if (heldItem === ITEM.HAMMER) {
+        const tierNames = ['Twig', 'Wood', 'Stone', 'Metal'];
+        const nextTierColors = {
+          0: 'rgba(139,105,20,0.3)',  // -> wood
+          1: 'rgba(128,128,128,0.3)', // -> stone
+          2: 'rgba(106,106,112,0.3)', // -> metal
+        };
+        for (const ent of sortedEntities) {
+          if (ent.t !== ENTITY_TYPE.STRUCTURE) continue;
+          const tier = ent.tier || 0;
+          if (tier >= STRUCT_TIER.METAL) continue;
+          const ex = ent.renderX || ent.x;
+          const ey = ent.renderY || ent.y;
+          const dx = ex - me.x;
+          const dy = ey - me.y;
+          if (dx * dx + dy * dy > 6 * 6) continue;
+          const esx = (ex - camX) * viewScale / TILE_SIZE + w / 2;
+          const esy = (ey - camY) * viewScale / TILE_SIZE + h / 2;
+          const size = viewScale * 0.9;
+          // Pulsing upgrade ghost
+          const alpha = 0.3 + Math.sin(animTime * 0.005) * 0.15;
+          ctx.fillStyle = nextTierColors[tier] || 'rgba(100,100,100,0.3)';
+          ctx.globalAlpha = alpha;
+          ctx.fillRect(esx - size / 2 - 2, esy - size / 2 - 2, size + 4, size + 4);
+          ctx.globalAlpha = 1;
+          // Label
+          ctx.font = '9px Consolas, monospace';
+          ctx.fillStyle = '#fff';
+          ctx.textAlign = 'center';
+          ctx.fillText(`→ ${tierNames[tier + 1]}`, esx, esy - size / 2 - 5);
+          ctx.textAlign = 'left';
+        }
       }
     }
 
@@ -584,7 +641,14 @@ export function createRenderer(canvas, state) {
     }
 
     // ── Minimap ──
-    drawMinimap(ctx, w, h, camX, camY, sortedEntities);
+    if (!state.showMap) {
+      drawMinimap(ctx, w, h, camX, camY, sortedEntities);
+    }
+
+    // ── Full Map Screen ──
+    if (state.showMap) {
+      drawFullMap(ctx, w, h, sortedEntities);
+    }
 
     // ── Kill feed / notifications ──
     drawNotifications(ctx, w, h);
@@ -776,6 +840,157 @@ export function createRenderer(canvas, state) {
     ctx.textAlign = 'left';
   }
 
+  // ── Full Map Screen ──
+  let fullMapCanvas = null;
+  let fullMapLastRender = 0;
+
+  function drawFullMap(ctx, w, h, entities) {
+    const me = state.myEid ? state.entities.get(state.myEid) : null;
+    if (!state.biomeMap) return;
+
+    // Dark overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, 0, w, h);
+
+    // Map dimensions
+    const margin = 40;
+    const mapW = Math.min(w - margin * 2, h - margin * 2);
+    const mapH = mapW;
+    const mapX = (w - mapW) / 2;
+    const mapY = (h - mapH) / 2;
+
+    // Render full map to offscreen canvas (cached)
+    const now = Date.now();
+    if (!fullMapCanvas || now - fullMapLastRender > 1000) {
+      fullMapLastRender = now;
+      const mSize = 512;
+      if (!fullMapCanvas) {
+        fullMapCanvas = document.createElement('canvas');
+        fullMapCanvas.width = mSize;
+        fullMapCanvas.height = mSize;
+      }
+      const mctx = fullMapCanvas.getContext('2d');
+      const imgData = mctx.createImageData(mSize, mSize);
+      const data = imgData.data;
+      const ws = state.worldSize;
+
+      const BIOME_RGB = {
+        0: [232, 214, 142], // beach
+        1: [90, 143, 60],   // grassland
+        2: [45, 90, 30],    // forest
+        3: [196, 163, 90],  // desert
+        4: [221, 232, 240], // snow
+        5: [122, 122, 122], // mountain
+        6: [40, 80, 160],   // water
+      };
+
+      const fogSize = state.exploredTiles ? Math.ceil(ws / 8) : 0;
+
+      for (let my = 0; my < mSize; my++) {
+        for (let mx = 0; mx < mSize; mx++) {
+          const tx = Math.floor(mx * ws / mSize);
+          const ty = Math.floor(my * ws / mSize);
+          const idx = (my * mSize + mx) * 4;
+
+          // Check fog of war
+          if (state.exploredTiles) {
+            const fogX = Math.floor(tx / 8);
+            const fogY = Math.floor(ty / 8);
+            if (fogX >= 0 && fogX < fogSize && fogY >= 0 && fogY < fogSize) {
+              if (!state.exploredTiles[fogY * fogSize + fogX]) {
+                data[idx] = 15; data[idx + 1] = 15; data[idx + 2] = 20; data[idx + 3] = 255;
+                continue;
+              }
+            }
+          }
+
+          const biome = state.biomeMap[ty * ws + tx];
+          const rgb = BIOME_RGB[biome] || [50, 50, 50];
+          data[idx] = rgb[0]; data[idx + 1] = rgb[1]; data[idx + 2] = rgb[2]; data[idx + 3] = 255;
+        }
+      }
+      mctx.putImageData(imgData, 0, 0);
+    }
+
+    // Draw border
+    ctx.fillStyle = 'rgba(30,30,30,0.9)';
+    ctx.fillRect(mapX - 4, mapY - 4, mapW + 8, mapH + 8);
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(mapX - 4, mapY - 4, mapW + 8, mapH + 8);
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(fullMapCanvas, mapX, mapY, mapW, mapH);
+    ctx.imageSmoothingEnabled = true;
+
+    const ws = state.worldSize;
+    const scale = mapW / ws;
+    const ts = TILE_SIZE;
+
+    // Draw markers for sleeping bags
+    for (const [eid, ent] of state.entities) {
+      if (ent.t === ENTITY_TYPE.SLEEPING_BAG) {
+        const mx = mapX + (ent.x / ts) * scale;
+        const my = mapY + (ent.y / ts) * scale;
+        ctx.fillStyle = '#ff6';
+        ctx.beginPath();
+        ctx.arc(mx, my, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#aa4';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      if (ent.t === ENTITY_TYPE.TOOL_CUPBOARD) {
+        const mx = mapX + (ent.x / ts) * scale;
+        const my = mapY + (ent.y / ts) * scale;
+        ctx.fillStyle = '#4af';
+        ctx.fillRect(mx - 3, my - 3, 6, 6);
+        ctx.strokeStyle = '#28a';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(mx - 3, my - 3, 6, 6);
+      }
+    }
+
+    // Draw player position
+    if (me) {
+      const px = mapX + (me.x / ts) * scale;
+      const py = mapY + (me.y / ts) * scale;
+      // Pulsing indicator
+      const pulse = 1 + Math.sin(animTime * 0.005) * 0.3;
+      ctx.fillStyle = '#0f0';
+      ctx.beginPath();
+      ctx.arc(px, py, 5 * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // Title
+    ctx.font = 'bold 18px Consolas, monospace';
+    ctx.fillStyle = '#ccc';
+    ctx.textAlign = 'center';
+    ctx.fillText('MAP (M to close)', w / 2, mapY - 12);
+    ctx.textAlign = 'left';
+
+    // Legend
+    ctx.font = '11px Consolas, monospace';
+    const legendX = mapX + mapW + 12;
+    const legendY = mapY + 20;
+    const legendItems = [
+      ['#0f0', 'You'],
+      ['#ff6', 'Sleeping Bag'],
+      ['#4af', 'Tool Cupboard'],
+      ['rgba(15,15,20,1)', 'Unexplored'],
+    ];
+    for (let i = 0; i < legendItems.length; i++) {
+      ctx.fillStyle = legendItems[i][0];
+      ctx.fillRect(legendX, legendY + i * 18 - 8, 10, 10);
+      ctx.fillStyle = '#aaa';
+      ctx.fillText(legendItems[i][1], legendX + 16, legendY + i * 18);
+    }
+  }
+
   // ── Notifications / Kill Feed ──
   function drawNotifications(ctx, w, h) {
     const now = Date.now();
@@ -889,9 +1104,13 @@ export function createRenderer(canvas, state) {
       ctx.scale(1, 1 - deathProgress * 0.3);
     }
 
+    const hasLegsArmor = !dead && e.armorLegs;
+    const hasChestArmor = !dead && e.armorChest;
+    const hasHeadArmor = !dead && e.armorHead;
+
     const skinColor = dead ? '#777' : '#d4a574';
-    const shirtColor = dead ? '#555' : (isLocal ? '#3a8fd6' : '#d6553a');
-    const pantsColor = dead ? '#444' : (isLocal ? '#2a5f8f' : '#8f3a2a');
+    const shirtColor = dead ? '#555' : hasChestArmor ? '#7a5a2a' : (isLocal ? '#3a8fd6' : '#d6553a');
+    const pantsColor = dead ? '#444' : hasLegsArmor ? '#6a4a1a' : (isLocal ? '#2a5f8f' : '#8f3a2a');
     const outlineColor = dead ? '#333' : '#222';
 
     // Legs
@@ -902,6 +1121,11 @@ export function createRenderer(canvas, state) {
     ctx.lineWidth = 0.5;
     ctx.strokeRect(-3, 0, 3, 6);
     ctx.strokeRect(1, 0, 3, 6);
+    if (hasLegsArmor) {
+      ctx.fillStyle = 'rgba(100,70,30,0.4)';
+      ctx.fillRect(-3, 0, 3, 6);
+      ctx.fillRect(1, 0, 3, 6);
+    }
 
     // Torso
     ctx.fillStyle = shirtColor;
@@ -909,6 +1133,17 @@ export function createRenderer(canvas, state) {
     ctx.strokeStyle = outlineColor;
     ctx.lineWidth = 1;
     ctx.strokeRect(-6, -5, 12, 8);
+    if (hasChestArmor) {
+      // Leather strap detail
+      ctx.strokeStyle = '#5a3a10';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(-2, -5);
+      ctx.lineTo(-2, 3);
+      ctx.moveTo(2, -5);
+      ctx.lineTo(2, 3);
+      ctx.stroke();
+    }
 
     // Arms
     ctx.fillStyle = skinColor;
@@ -929,6 +1164,16 @@ export function createRenderer(canvas, state) {
     ctx.strokeStyle = outlineColor;
     ctx.lineWidth = 1;
     ctx.stroke();
+    // Leather helmet
+    if (hasHeadArmor) {
+      ctx.fillStyle = '#7a5a2a';
+      ctx.beginPath();
+      ctx.arc(0, -10, 5.5, Math.PI, 2 * Math.PI);
+      ctx.fill();
+      ctx.strokeStyle = '#5a3a10';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
 
     // Eyes
     if (!dead) {
@@ -1969,6 +2214,38 @@ export function createRenderer(canvas, state) {
     // Metal latch
     ctx.fillStyle = '#888';
     ctx.fillRect(sx - 2, sy - 4, 4, 3);
+  }
+
+  function drawLootBag(ctx, sx, sy, e) {
+    // Burlap sack shape
+    ctx.fillStyle = '#8a7a5a';
+    ctx.beginPath();
+    ctx.moveTo(sx - 7, sy + 5);
+    ctx.quadraticCurveTo(sx - 9, sy - 2, sx - 4, sy - 7);
+    ctx.quadraticCurveTo(sx, sy - 9, sx + 4, sy - 7);
+    ctx.quadraticCurveTo(sx + 9, sy - 2, sx + 7, sy + 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#5a4a3a';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Tie at top
+    ctx.strokeStyle = '#6a5a3a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(sx - 3, sy - 6);
+    ctx.lineTo(sx, sy - 8);
+    ctx.lineTo(sx + 3, sy - 6);
+    ctx.stroke();
+    // Texture lines
+    ctx.strokeStyle = 'rgba(60,50,30,0.3)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(sx - 4, sy - 2);
+    ctx.lineTo(sx + 4, sy - 2);
+    ctx.moveTo(sx - 5, sy + 2);
+    ctx.lineTo(sx + 5, sy + 2);
+    ctx.stroke();
   }
 
   return {

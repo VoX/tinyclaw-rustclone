@@ -2,7 +2,7 @@ import { query, hasComponent } from 'bitecs';
 import { Position, Velocity, Rotation, Health, Player, Sprite, ResourceNode,
          WorldItem, Projectile, Structure, Animal, Campfire, Furnace, Workbench,
          ToolCupboard, SleepingBag, StorageBox, Door, Dead, Inventory, Hotbar,
-         Hunger, Thirst, Temperature, NetworkSync } from '../../shared/components.js';
+         Hunger, Thirst, Temperature, NetworkSync, Armor } from '../../shared/components.js';
 import { MSG, ENTITY_TYPE } from '../../shared/protocol.js';
 import { INTEREST_RADIUS, TILE_SIZE, ITEM } from '../../shared/constants.js';
 
@@ -101,6 +101,13 @@ export function createNetworkSyncSystem(gameState) {
             const slot = Hotbar.selectedSlot[eid];
             state.held = Inventory.items[eid]?.[slot] || 0;
           }
+          if (hasComponent(world, eid, Armor)) {
+            state.armorHead = Armor.headSlot[eid] || 0;
+            state.armorChest = Armor.chestSlot[eid] || 0;
+            state.armorLegs = Armor.legsSlot[eid] || 0;
+          }
+        } else if (entityType === ENTITY_TYPE.LOOT_BAG) {
+          // Loot bags just need position and type (already sent)
         }
 
         // Check if changed from prev state
@@ -158,6 +165,11 @@ export function createNetworkSyncSystem(gameState) {
             hunger: Math.round(Hunger.current[playerEid]),
             thirst: Math.round(Thirst.current[playerEid]),
             temp: Math.round(Temperature.current[playerEid]),
+            armor: {
+              head: hasComponent(world, playerEid, Armor) ? Armor.headSlot[playerEid] : 0,
+              chest: hasComponent(world, playerEid, Armor) ? Armor.chestSlot[playerEid] : 0,
+              legs: hasComponent(world, playerEid, Armor) ? Armor.legsSlot[playerEid] : 0,
+            },
           }));
         } catch (e) {}
       }

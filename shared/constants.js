@@ -241,6 +241,7 @@ export const BIOME_TEMP_MOD = {
   [BIOME.DESERT]: 15,
   [BIOME.SNOW]: -20,
   [BIOME.MOUNTAIN]: -10,
+  [BIOME.WATER]: 0,
 };
 
 // ── Structure Types ──
@@ -255,6 +256,13 @@ export const STRUCT_TYPE = {
 };
 
 export const STRUCT_TIER = { TWIG: 0, WOOD: 1, STONE: 2, METAL: 3 };
+
+// Upgrade costs per tier: tier index -> [itemId, count]
+export const UPGRADE_COSTS = {
+  [1]: [ITEM.WOOD, 200],       // twig -> wood
+  [2]: [ITEM.STONE, 200],      // wood -> stone
+  [3]: [ITEM.METAL_FRAGS, 200], // stone -> metal
+};
 
 export const STRUCT_HP = {
   [STRUCT_TYPE.FOUNDATION]: [10, 250, 500, 1000],
@@ -351,3 +359,15 @@ export function canGather(itemId, resourceType) {
   if (resourceType === RESOURCE_TYPE.HEMP) return true;
   return isPickaxe(itemId);
 }
+
+// Calculate total armor damage reduction (0-1) from equipped armor slots
+export function getArmorReduction(headSlot, chestSlot, legsSlot) {
+  let reduction = 0;
+  if (headSlot) { const d = ITEM_DEFS[headSlot]; if (d && d.armorPct) reduction += d.armorPct; }
+  if (chestSlot) { const d = ITEM_DEFS[chestSlot]; if (d && d.armorPct) reduction += d.armorPct; }
+  if (legsSlot) { const d = ITEM_DEFS[legsSlot]; if (d && d.armorPct) reduction += d.armorPct; }
+  return Math.min(reduction, 0.65); // cap at 65%
+}
+
+// Water speed multiplier
+export const WATER_SPEED_MULT = 0.5;

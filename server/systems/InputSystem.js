@@ -1,7 +1,7 @@
 import { query, hasComponent } from 'bitecs';
-import { Player, Velocity, Rotation, ActiveTool, Health, Dead } from '../../shared/components.js';
+import { Player, Velocity, Rotation, Position, ActiveTool, Health, Dead } from '../../shared/components.js';
 import { KEY, MOUSE_ACTION } from '../../shared/protocol.js';
-import { PLAYER_SPEED, PLAYER_SPRINT_MULT } from '../../shared/constants.js';
+import { PLAYER_SPEED, PLAYER_SPRINT_MULT, WATER_SPEED_MULT, BIOME } from '../../shared/constants.js';
 
 export function createInputSystem(gameState) {
   return function InputSystem(world) {
@@ -17,7 +17,15 @@ export function createInputSystem(gameState) {
       const input = client.input;
       const keys = input.keys || 0;
       const sprinting = (keys & KEY.SHIFT) !== 0;
-      const speed = PLAYER_SPEED * (sprinting ? PLAYER_SPRINT_MULT : 1.0);
+      let speed = PLAYER_SPEED * (sprinting ? PLAYER_SPRINT_MULT : 1.0);
+
+      // Slow down in water
+      if (gameState.getBiomeAt && hasComponent(world, eid, Position)) {
+        const biome = gameState.getBiomeAt(Position.x[eid], Position.y[eid]);
+        if (biome === BIOME.WATER) {
+          speed *= WATER_SPEED_MULT;
+        }
+      }
 
       let dx = 0, dy = 0;
       if (keys & KEY.W) dy -= 1;

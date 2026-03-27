@@ -13,6 +13,23 @@ export function createItemDespawnSystem(gameState) {
         removeEntity(world, eid);
       }
     }
+
+    // Despawn loot bags
+    if (gameState.lootBagTimers) {
+      for (const [eid, timer] of gameState.lootBagTimers) {
+        const newTimer = timer - 1;
+        if (newTimer <= 0) {
+          gameState.lootBagTimers.delete(eid);
+          if (gameState.containerInv) gameState.containerInv.delete(eid);
+          gameState.removedEntities.add(eid);
+          gameState.entityTypes.delete(eid);
+          removeEntity(world, eid);
+        } else {
+          gameState.lootBagTimers.set(eid, newTimer);
+        }
+      }
+    }
+
     return world;
   };
 }

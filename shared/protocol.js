@@ -30,6 +30,8 @@ export const MSG = {
 
   // Client → Server
   CHAT_SEND: 10,
+  HAMMER_UPGRADE: 11,
+  DRINK_WATER: 12,
 };
 
 // Input key bitmask
@@ -55,6 +57,8 @@ export const INV_ACTION = {
   DROP: 2,
   SPLIT: 3,
   EQUIP: 4,
+  EQUIP_ARMOR: 5,
+  UNEQUIP_ARMOR: 6,
 };
 
 // Event types
@@ -80,4 +84,5 @@ export const ENTITY_TYPE = {
   SLEEPING_BAG: 11,
   DOOR: 12,
   STORAGE_BOX: 13,
+  LOOT_BAG: 14,
 };

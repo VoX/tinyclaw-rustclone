@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 
 import { Position, Velocity, Rotation, Player, Health, Hunger, Thirst, Temperature,
          Inventory, Hotbar, Collider, Sprite, NetworkSync, ActiveTool, Damageable,
-         initInventory, StorageBox } from '../shared/components.js';
+         initInventory, StorageBox, Armor } from '../shared/components.js';
 import { SERVER_TPS, SERVER_TICK_MS, PLAYER_MAX_HP, PLAYER_MAX_HUNGER,
          PLAYER_MAX_THIRST, PLAYER_COLLIDER_RADIUS, ITEM, WORLD_SIZE, TILE_SIZE } from '../shared/constants.js';
 import { MSG, KEY, MOUSE_ACTION, INV_ACTION, ENTITY_TYPE } from '../shared/protocol.js';
@@ -143,6 +143,7 @@ wss.on('connection', (ws) => {
   addComponent(world, eid, NetworkSync);
   addComponent(world, eid, ActiveTool);
   addComponent(world, eid, Damageable);
+  addComponent(world, eid, Armor);
 
   // Random beach spawn
   const maxCoord = WORLD_SIZE * TILE_SIZE;
@@ -200,6 +201,8 @@ wss.on('connection', (ws) => {
     containerAction: null,
     tcAuthAction: null,
     chatMessage: null,
+    hammerUpgradeRequest: null,
+    drinkWaterRequest: null,
     spawnTick: gameState.tick,
   };
   gameState.clients.set(connId, client);
@@ -306,6 +309,14 @@ function handleClientMessage(connId, msg) {
       if (msg.text && typeof msg.text === 'string') {
         client.chatMessage = msg.text.substring(0, 100); // limit length
       }
+      break;
+
+    case MSG.HAMMER_UPGRADE:
+      client.hammerUpgradeRequest = { targetEid: msg.targetEid };
+      break;
+
+    case MSG.DRINK_WATER:
+      client.drinkWaterRequest = true;
       break;
 
     case MSG.PING:

@@ -1,5 +1,5 @@
 import { hasComponent, addEntity, addComponent, removeEntity } from 'bitecs';
-import { Player, Inventory, Hotbar, Position, WorldItem, Collider, Sprite, NetworkSync, Dead } from '../../shared/components.js';
+import { Player, Inventory, Hotbar, Position, WorldItem, Collider, Sprite, NetworkSync, Dead, Armor } from '../../shared/components.js';
 import { ITEM_DEFS, INVENTORY_SLOTS, ITEM_DESPAWN_TICKS, ITEM } from '../../shared/constants.js';
 import { INV_ACTION, ENTITY_TYPE } from '../../shared/protocol.js';
 
@@ -96,6 +96,48 @@ export function createInventorySystem(gameState) {
         if (fromSlot < 0 || fromSlot >= INVENTORY_SLOTS) continue;
         Hotbar.selectedSlot[eid] = Math.min(fromSlot, 5);
         gameState.dirtyInventories.add(eid);
+
+      } else if (req.action === INV_ACTION.EQUIP_ARMOR) {
+        const { fromSlot } = req;
+        if (fromSlot < 0 || fromSlot >= INVENTORY_SLOTS) continue;
+        const itemId = inv.items[fromSlot];
+        const def = ITEM_DEFS[itemId];
+        if (!def || def.cat !== 'armor') continue;
+
+        // Determine which armor slot
+        const slot = def.armorSlot; // 'head', 'chest', 'legs'
+        let currentEquipped = 0;
+        if (slot === 'head') currentEquipped = Armor.headSlot[eid];
+        else if (slot === 'chest') currentEquipped = Armor.chestSlot[eid];
+        else if (slot === 'legs') currentEquipped = Armor.legsSlot[eid];
+
+        // Equip new item
+        if (slot === 'head') Armor.headSlot[eid] = itemId;
+        else if (slot === 'chest') Armor.chestSlot[eid] = itemId;
+        else if (slot === 'legs') Armor.legsSlot[eid] = itemId;
+
+        // Remove from inventory
+        inv.items[fromSlot] = currentEquipped || 0;
+        inv.counts[fromSlot] = currentEquipped ? 1 : 0;
+        gameState.dirtyInventories.add(eid);
+
+      } else if (req.action === INV_ACTION.UNEQUIP_ARMOR) {
+        const armorSlot = req.fromSlot; // 0=head, 1=chest, 2=legs (reuse fromSlot)
+        let itemId = 0;
+        if (armorSlot === 0) { itemId = Armor.headSlot[eid]; Armor.headSlot[eid] = 0; }
+        else if (armorSlot === 1) { itemId = Armor.chestSlot[eid]; Armor.chestSlot[eid] = 0; }
+        else if (armorSlot === 2) { itemId = Armor.legsSlot[eid]; Armor.legsSlot[eid] = 0; }
+        if (itemId) {
+          // Find empty slot
+          for (let s = 0; s < INVENTORY_SLOTS; s++) {
+            if (inv.items[s] === 0) {
+              inv.items[s] = itemId;
+              inv.counts[s] = 1;
+              break;
+            }
+          }
+          gameState.dirtyInventories.add(eid);
+        }
       }
     }
 

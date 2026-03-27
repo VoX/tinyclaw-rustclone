@@ -1,6 +1,6 @@
 import { query, hasComponent, addComponent, addEntity, removeEntity } from 'bitecs';
 import { Health, Dead, Player, Position, Inventory, WorldItem, Collider, Sprite, NetworkSync,
-         Animal, ResourceNode, SleepingBag, Damageable, initInventory } from '../../shared/components.js';
+         Animal, ResourceNode, SleepingBag, Damageable, initInventory, Armor, StorageBox } from '../../shared/components.js';
 import { ITEM_DESPAWN_TICKS, SERVER_TPS, PLAYER_MAX_HP, RESPAWN_WAIT_TICKS, ANIMAL_DEFS } from '../../shared/constants.js';
 import { ENTITY_TYPE, MSG } from '../../shared/protocol.js';
 
@@ -28,35 +28,57 @@ export function createDamageSystem(gameState) {
         addComponent(world, eid, Dead);
         Dead.timer[eid] = RESPAWN_WAIT_TICKS;
 
-        // Drop all inventory items
+        // Create a loot bag with all inventory items
         const px = Position.x[eid];
         const py = Position.y[eid];
+
+        // Collect items for loot bag
+        const lootItems = [];
         for (let s = 0; s < 24; s++) {
           const itemId = Inventory.items[eid][s];
           const count = Inventory.counts[eid][s];
-          if (itemId === 0 || count === 0) continue;
-
-          const dropEid = addEntity(world);
-          addComponent(world, dropEid, Position);
-          addComponent(world, dropEid, WorldItem);
-          addComponent(world, dropEid, Collider);
-          addComponent(world, dropEid, Sprite);
-          addComponent(world, dropEid, NetworkSync);
-
-          Position.x[dropEid] = px + (Math.random() - 0.5) * 2;
-          Position.y[dropEid] = py + (Math.random() - 0.5) * 2;
-          WorldItem.itemId[dropEid] = itemId;
-          WorldItem.quantity[dropEid] = count;
-          WorldItem.despawnTimer[dropEid] = ITEM_DESPAWN_TICKS;
-          Collider.radius[dropEid] = 0.3;
-          Sprite.spriteId[dropEid] = itemId;
-          NetworkSync.lastTick[dropEid] = gameState.tick;
-
-          gameState.entityTypes.set(dropEid, ENTITY_TYPE.WORLD_ITEM);
-          gameState.newEntities.add(dropEid);
-
+          if (itemId !== 0 && count > 0) {
+            lootItems.push({ id: itemId, n: count });
+          }
           Inventory.items[eid][s] = 0;
           Inventory.counts[eid][s] = 0;
+        }
+        // Also drop equipped armor into the loot bag
+        if (hasComponent(world, eid, Armor)) {
+          if (Armor.headSlot[eid]) { lootItems.push({ id: Armor.headSlot[eid], n: 1 }); Armor.headSlot[eid] = 0; }
+          if (Armor.chestSlot[eid]) { lootItems.push({ id: Armor.chestSlot[eid], n: 1 }); Armor.chestSlot[eid] = 0; }
+          if (Armor.legsSlot[eid]) { lootItems.push({ id: Armor.legsSlot[eid], n: 1 }); Armor.legsSlot[eid] = 0; }
+        }
+
+        if (lootItems.length > 0) {
+          const bagEid = addEntity(world);
+          addComponent(world, bagEid, Position);
+          addComponent(world, bagEid, Collider);
+          addComponent(world, bagEid, Sprite);
+          addComponent(world, bagEid, NetworkSync);
+          addComponent(world, bagEid, StorageBox); // reuse storage box for interaction
+          addComponent(world, bagEid, Health);
+
+          Position.x[bagEid] = px;
+          Position.y[bagEid] = py;
+          Collider.radius[bagEid] = 0.4;
+          Sprite.spriteId[bagEid] = 230; // loot bag sprite
+          NetworkSync.lastTick[bagEid] = gameState.tick;
+          Health.current[bagEid] = 1000;
+          Health.max[bagEid] = 1000;
+
+          // Store loot in container inventory
+          if (!gameState.containerInv) gameState.containerInv = new Map();
+          // Pad to 12 slots
+          while (lootItems.length < 12) lootItems.push({ id: 0, n: 0 });
+          gameState.containerInv.set(bagEid, lootItems.slice(0, 12));
+
+          // Track for despawn (5 minutes)
+          if (!gameState.lootBagTimers) gameState.lootBagTimers = new Map();
+          gameState.lootBagTimers.set(bagEid, ITEM_DESPAWN_TICKS);
+
+          gameState.entityTypes.set(bagEid, ENTITY_TYPE.LOOT_BAG);
+          gameState.newEntities.add(bagEid);
         }
 
         gameState.dirtyInventories.add(eid);

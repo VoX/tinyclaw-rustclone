@@ -12,6 +12,7 @@ export function generateWorld(world, gameState, seed = 42) {
   const elevNoise = createNoise2D(seedRng);
   const moistNoise = createNoise2D(seedRng);
   const detailNoise = createNoise2D(seedRng);
+  const riverNoise = createNoise2D(seedRng);
 
   // Generate biome map
   const biomeMap = new Uint8Array(WORLD_SIZE * WORLD_SIZE);
@@ -57,6 +58,38 @@ export function generateWorld(world, gameState, seed = 42) {
     }
   }
 
+  // Add water: rivers and small lakes using river noise
+  for (let y = 0; y < WORLD_SIZE; y++) {
+    for (let x = 0; x < WORLD_SIZE; x++) {
+      const edgeDist = Math.min(x, y, WORLD_SIZE - 1 - x, WORLD_SIZE - 1 - y);
+      const edgePct = edgeDist / WORLD_SIZE;
+      if (edgePct < 0.06) continue; // No water on beach ring
+
+      const nx = x / WORLD_SIZE;
+      const ny = y / WORLD_SIZE;
+
+      // River: thin winding bands using abs of noise
+      const rv = Math.abs(riverNoise(nx * 6, ny * 6));
+      if (rv < 0.02) {
+        biomeMap[y * WORLD_SIZE + x] = BIOME.WATER;
+        continue;
+      }
+
+      // Small lakes: low elevation + high moisture pockets
+      let elev = elevNoise(nx * 4, ny * 4) * 0.5
+               + elevNoise(nx * 8, ny * 8) * 0.3
+               + detailNoise(nx * 16, ny * 16) * 0.2;
+      elev = (elev + 1) / 2;
+      let moist = moistNoise(nx * 3, ny * 3) * 0.6
+                + moistNoise(nx * 6, ny * 6) * 0.4;
+      moist = (moist + 1) / 2;
+
+      if (elev < 0.22 && moist > 0.6) {
+        biomeMap[y * WORLD_SIZE + x] = BIOME.WATER;
+      }
+    }
+  }
+
   gameState.biomeMap = biomeMap;
   gameState.getBiomeAt = (wx, wy) => {
     const tx = Math.floor(wx / TILE_SIZE);
@@ -70,6 +103,7 @@ export function generateWorld(world, gameState, seed = 42) {
   for (let y = 0; y < WORLD_SIZE; y += nodeSpacing) {
     for (let x = 0; x < WORLD_SIZE; x += nodeSpacing) {
       const biome = biomeMap[y * WORLD_SIZE + x];
+      if (biome === BIOME.WATER) { seedRng(); seedRng(); seedRng(); seedRng(); seedRng(); continue; } // skip water, consume rngs to keep determinism
       const r = seedRng();
 
       // Tree placement
@@ -114,6 +148,7 @@ export function generateWorld(world, gameState, seed = 42) {
   for (let y = 0; y < WORLD_SIZE; y += animalSpacing) {
     for (let x = 0; x < WORLD_SIZE; x += animalSpacing) {
       const biome = biomeMap[y * WORLD_SIZE + x];
+      if (biome === BIOME.WATER) { seedRng(); continue; }
       const r = seedRng();
 
       if (biome === BIOME.FOREST) {

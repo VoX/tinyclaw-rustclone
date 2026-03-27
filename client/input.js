@@ -1,4 +1,5 @@
 import { KEY, MOUSE_ACTION, MSG, INV_ACTION } from '../shared/protocol.js';
+import { BIOME, TILE_SIZE } from '../shared/constants.js';
 import { playInventoryOpen, playInventoryClose } from './audio.js';
 
 export function createInput(state, send) {
@@ -82,7 +83,7 @@ export function createInput(state, send) {
         state.showPerf = !state.showPerf;
         break;
       case 'KeyE':
-        // Interact with nearest entity
+        // Interact with nearest entity, or drink water if standing on water tile
         if (state.myEid && state.entities.has(state.myEid)) {
           const me = state.entities.get(state.myEid);
           let nearest = null;
@@ -99,6 +100,16 @@ export function createInput(state, send) {
           }
           if (nearest !== null) {
             send({ type: MSG.INTERACT, targetEid: nearest });
+          }
+          // Also check for water tile drinking
+          if (state.biomeMap) {
+            const tx = Math.floor(me.x / TILE_SIZE);
+            const ty = Math.floor(me.y / TILE_SIZE);
+            if (tx >= 0 && tx < state.worldSize && ty >= 0 && ty < state.worldSize) {
+              if (state.biomeMap[ty * state.worldSize + tx] === BIOME.WATER) {
+                send({ type: MSG.DRINK_WATER });
+              }
+            }
           }
         }
         break;

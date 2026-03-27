@@ -1,5 +1,5 @@
-import { ITEM, ITEM_DEFS, RECIPES, CRAFT_TIER, HOTBAR_SLOTS, INVENTORY_SLOTS, STRUCT_TYPE } from '../../shared/constants.js';
-import { MSG, INV_ACTION } from '../../shared/protocol.js';
+import { ITEM, ITEM_DEFS, RECIPES, CRAFT_TIER, HOTBAR_SLOTS, INVENTORY_SLOTS, STRUCT_TYPE, TILE_SIZE } from '../../shared/constants.js';
+import { MSG, INV_ACTION, ENTITY_TYPE } from '../../shared/protocol.js';
 
 // ── Canvas-drawn item icons ──
 function drawItemIcon(ctx, x, y, size, itemId) {
@@ -253,7 +253,13 @@ export function createUI(state, send) {
       });
 
       slot.addEventListener('dblclick', () => {
-        send({ type: MSG.INVENTORY, action: INV_ACTION.DROP, fromSlot: i });
+        // Double-click: equip if armor, else drop
+        const item = state.inventory[i];
+        if (item?.id && ITEM_DEFS[item.id]?.cat === 'armor') {
+          send({ type: MSG.INVENTORY, action: INV_ACTION.EQUIP_ARMOR, fromSlot: i });
+        } else {
+          send({ type: MSG.INVENTORY, action: INV_ACTION.DROP, fromSlot: i });
+        }
       });
 
       invGrid.appendChild(slot);
@@ -345,27 +351,50 @@ export function createUI(state, send) {
     buildMenu.appendChild(btn);
   }
 
-  // Place building on click
+  // Place building or hammer upgrade on click
   document.getElementById('game-canvas').addEventListener('click', (e) => {
     if (state.showInventory) return;
     const held = state.inventory[state.selectedSlot]?.id;
+
+    const me = state.entities.get(state.myEid);
+    if (!me) return;
+
+    const canvas = e.target;
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const viewScale = 24;
+    const tileSize = state.tileSize;
+
+    const worldX = me.x + (e.clientX - cx) * tileSize / viewScale;
+    const worldY = me.y + (e.clientY - cy) * tileSize / viewScale;
+
+    // Hammer upgrade: find nearest structure to click point
+    if (held === ITEM.HAMMER) {
+      let nearestEid = null;
+      let nearestDist = 4; // max click distance in world units
+      for (const [eid, ent] of state.entities) {
+        if (ent.t !== ENTITY_TYPE.STRUCTURE) continue;
+        const ex = ent.renderX || ent.x;
+        const ey = ent.renderY || ent.y;
+        const dx = ex - worldX;
+        const dy = ey - worldY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestEid = eid;
+        }
+      }
+      if (nearestEid !== null) {
+        send({ type: MSG.HAMMER_UPGRADE, targetEid: nearestEid });
+      }
+      return;
+    }
+
     if (held === ITEM.BUILDING_PLAN || held === ITEM.SLEEPING_BAG ||
         held === ITEM.CAMPFIRE_ITEM || held === ITEM.FURNACE_ITEM ||
         held === ITEM.TOOL_CUPBOARD_ITEM || held === ITEM.WORKBENCH_T1_ITEM ||
         held === ITEM.WORKBENCH_T2_ITEM || held === ITEM.WORKBENCH_T3_ITEM ||
         held === ITEM.STORAGE_BOX) {
-
-      const me = state.entities.get(state.myEid);
-      if (!me) return;
-
-      const canvas = e.target;
-      const cx = canvas.width / 2;
-      const cy = canvas.height / 2;
-      const viewScale = 24;
-      const tileSize = state.tileSize;
-
-      const worldX = me.x + (e.clientX - cx) * tileSize / viewScale;
-      const worldY = me.y + (e.clientY - cy) * tileSize / viewScale;
 
       const pieceType = held === ITEM.BUILDING_PLAN ? buildPiece : 1;
 
@@ -493,6 +522,66 @@ export function createUI(state, send) {
     // Inventory screen
     if (inventoryScreen) {
       inventoryScreen.style.display = state.showInventory ? 'flex' : 'none';
+    }
+
+    // Update armor equipment slots (shown in inventory screen)
+    if (state.showInventory) {
+      let armorPanel = document.getElementById('armor-panel');
+      if (!armorPanel) {
+        armorPanel = document.createElement('div');
+        armorPanel.id = 'armor-panel';
+        armorPanel.style.cssText = 'display:flex;gap:4px;margin-bottom:8px;justify-content:center;';
+        const armorSlots = ['Head', 'Chest', 'Legs'];
+        for (let i = 0; i < 3; i++) {
+          const slotDiv = document.createElement('div');
+          slotDiv.className = 'inv-slot armor-slot';
+          slotDiv.dataset.armorSlot = i;
+          slotDiv.style.cssText = 'position:relative;border:2px solid #666;';
+          const label = document.createElement('div');
+          label.className = 'armor-label';
+          label.textContent = armorSlots[i];
+          label.style.cssText = 'font-size:8px;color:#888;position:absolute;top:1px;left:2px;';
+          slotDiv.appendChild(label);
+          const iconCanvas = document.createElement('canvas');
+          iconCanvas.width = 40;
+          iconCanvas.height = 40;
+          iconCanvas.className = 'armor-icon-canvas';
+          slotDiv.appendChild(iconCanvas);
+          const nameEl = document.createElement('div');
+          nameEl.className = 'armor-item-name';
+          nameEl.style.cssText = 'font-size:8px;color:#ccc;text-align:center;';
+          slotDiv.appendChild(nameEl);
+          // Click to unequip
+          slotDiv.addEventListener('click', () => {
+            send({ type: MSG.INVENTORY, action: INV_ACTION.UNEQUIP_ARMOR, fromSlot: i });
+          });
+          armorPanel.appendChild(slotDiv);
+        }
+        invGrid.parentElement.insertBefore(armorPanel, invGrid);
+      }
+      // Update armor slot visuals
+      const armorItems = [state.armor.head, state.armor.chest, state.armor.legs];
+      const armorSlotDivs = armorPanel.children;
+      for (let i = 0; i < 3; i++) {
+        const slotDiv = armorSlotDivs[i];
+        const iconCanvas = slotDiv.querySelector('.armor-icon-canvas');
+        const nameEl = slotDiv.querySelector('.armor-item-name');
+        const itemId = armorItems[i];
+        if (itemId && itemId !== 0) {
+          const ictx = iconCanvas.getContext('2d');
+          ictx.clearRect(0, 0, 40, 40);
+          drawItemIcon(ictx, 0, 0, 40, itemId);
+          iconCanvas.style.display = 'block';
+          nameEl.textContent = ITEM_DEFS[itemId]?.name || '';
+          slotDiv.style.borderColor = '#8a6a3a';
+        } else {
+          const ictx = iconCanvas.getContext('2d');
+          ictx.clearRect(0, 0, 40, 40);
+          iconCanvas.style.display = 'none';
+          nameEl.textContent = '';
+          slotDiv.style.borderColor = '#666';
+        }
+      }
     }
 
     // Update inventory grid with canvas icons

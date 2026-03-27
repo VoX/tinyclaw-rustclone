@@ -107,6 +107,7 @@ export function createNetworkSyncSystem(gameState) {
           state.open = Door.isOpen[eid];
         } else if (entityType === ENTITY_TYPE.PLAYER) {
           state.sprite = Sprite.spriteId[eid];
+          state.name = gameState.playerNames.get(eid) || '';
           if (hasComponent(world, eid, Hotbar)) {
             const slot = Hotbar.selectedSlot[eid];
             state.held = Inventory.items[eid]?.[slot] || 0;
@@ -198,7 +199,7 @@ export function createNetworkSyncSystem(gameState) {
 
       const cx = Position.x[eid];
       const cy = Position.y[eid];
-      const senderName = `Player ${connId}`;
+      const senderName = gameState.playerNames.get(eid) || `Player ${connId}`;
 
       // Broadcast to players within interest radius
       const chatMsg = JSON.stringify({

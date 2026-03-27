@@ -32,6 +32,8 @@ export const MSG = {
   CHAT_SEND: 10,
   HAMMER_UPGRADE: 11,
   DRINK_WATER: 12,
+  RELOAD: 13,
+  CLIP_UPDATE: 65,
 };
 
 // Input key bitmask

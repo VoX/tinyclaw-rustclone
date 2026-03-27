@@ -108,7 +108,7 @@ export function createDamageSystem(gameState) {
         if (killerEid && killerEid !== eid) {
           const killerEntityType = gameState.entityTypes.get(killerEid);
           if (killerEntityType === ENTITY_TYPE.PLAYER) {
-            killerName = `Player ${Player.connectionId[killerEid] || killerEid}`;
+            killerName = gameState.playerNames?.get(killerEid) || `Player ${Player.connectionId[killerEid] || killerEid}`;
             killerType = 'player';
           } else if (killerEntityType === ENTITY_TYPE.ANIMAL && hasComponent(world, killerEid, Animal)) {
             const at = Animal.animalType[killerEid];
@@ -129,11 +129,12 @@ export function createDamageSystem(gameState) {
             killerName,
             killerType,
             survived: survivedSeconds,
+            respawnTime: Math.ceil(RESPAWN_WAIT_TICKS / SERVER_TPS),
           }));
         }
 
         // Broadcast death event (for kill feed)
-        const victimName = `Player ${connId}`;
+        const victimName = gameState.playerNames?.get(eid) || `Player ${connId}`;
         gameState.events.push({
           type: 'death',
           eid,

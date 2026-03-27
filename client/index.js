@@ -28,6 +28,8 @@ const state = {
   hunger: 100, thirst: 100, temp: 20,
   isDead: false,
   deathInfo: null,       // { killerName, killerType, survived }
+  deathTime: 0,
+  respawnTime: 10000,    // ms countdown before respawn allowed
   damageFlashAlpha: 0,
   worldSize: 2000,
   tileSize: 2,
@@ -59,6 +61,13 @@ const state = {
   chatBubbles: new Map(),  // eid -> { text, expiry }
   // Tutorial hint
   tutorialExpiry: 0,       // timestamp when tutorial hint disappears
+  // Clip/ammo HUD
+  clipAmmo: 0,
+  clipMax: 0,
+  // Build preview
+  buildPiece: 0,       // currently selected build piece type (set by UI)
+  mouseScreenX: 0,
+  mouseScreenY: 0,
 };
 
 // Initialize inventory slots
@@ -103,6 +112,7 @@ function handleServerMessage(msg) {
     case MSG.PLAYER_ID:
       state.myEid = msg.eid;
       state.myConnId = msg.connId;
+      state.myName = msg.name || '';
       break;
 
     case MSG.WORLD_INFO:
@@ -202,6 +212,8 @@ function handleServerMessage(msg) {
         killerType: msg.killerType || 'environment',
         survived: msg.survived || 0,
       };
+      state.deathTime = Date.now();
+      state.respawnTime = (msg.respawnTime || 10) * 1000; // ms
       state.damageFlashAlpha = 0; // clear flash on death screen
       playDeath();
       break;
@@ -289,6 +301,11 @@ function handleServerMessage(msg) {
 
     case MSG.SPAWN_BAGS:
       state.spawnBags = msg.bags || [];
+      break;
+
+    case MSG.CLIP_UPDATE:
+      state.clipAmmo = msg.ammo;
+      state.clipMax = msg.max;
       break;
   }
 }

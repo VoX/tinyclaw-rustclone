@@ -121,8 +121,14 @@ export function createRenderer(canvas, state) {
     // Health bars
     ui.drawHealthBars(ctx, sortedEntities, camX, camY, w, h, viewScale);
 
+    // Player names
+    ui.drawPlayerNames(ctx, sortedEntities, camX, camY, w, h, viewScale);
+
     // Hammer upgrade preview
     ui.drawHammerPreview(ctx, me, sortedEntities, camX, camY, w, h, viewScale, animTime);
+
+    // Building placement preview
+    ui.drawBuildPreview(ctx, w, h, camX, camY, viewScale, sortedEntities);
 
     // ── Draw particles ──
     particles.draw(ctx, camX, camY, w, h, viewScale);
@@ -141,6 +147,9 @@ export function createRenderer(canvas, state) {
 
     // ── Temperature visual effects ──
     ui.drawTemperatureEffects(ctx, w, h, sortedEntities, camX, camY, viewScale);
+
+    // ── Ammo HUD for ranged weapons ──
+    ui.drawAmmoHUD(ctx, w, h);
 
     // ── Tutorial hint for new players ──
     ui.drawTutorialHint(ctx, w, h);

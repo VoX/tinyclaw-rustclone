@@ -282,17 +282,59 @@ export function createUI(state, send) {
   }
   buildInvGrid();
 
-  // Build craft panel with item icons
+  // Build craft panel with item icons — dynamic, updates on inventory changes
+  let lastCraftHash = '';
   function buildCraftPanel() {
+    // Compute inventory resource counts
+    const invCounts = {};
+    for (let i = 0; i < INVENTORY_SLOTS; i++) {
+      const item = state.inventory[i];
+      if (item?.id && item.id !== 0) {
+        invCounts[item.id] = (invCounts[item.id] || 0) + item.n;
+      }
+    }
+
+    // Simple hash to avoid rebuilding every frame
+    const hash = JSON.stringify(invCounts) + ':' + state.workbenchTier;
+    if (hash === lastCraftHash) return;
+    lastCraftHash = hash;
+
+    const wbTier = state.workbenchTier || 0;
+
+    // Sort recipes: craftable first, then by tier
+    const sorted = [...RECIPES].sort((a, b) => {
+      const aCraftable = canCraftRecipe(a, invCounts, wbTier) ? 0 : 1;
+      const bCraftable = canCraftRecipe(b, invCounts, wbTier) ? 0 : 1;
+      if (aCraftable !== bCraftable) return aCraftable - bCraftable;
+      return a.tier - b.tier;
+    });
+
     craftPanel.innerHTML = '<h3>Crafting</h3>';
-    for (const recipe of RECIPES) {
+    for (const recipe of sorted) {
       const btn = document.createElement('div');
       btn.className = 'craft-recipe';
 
       const resultDef = ITEM_DEFS[recipe.result];
-      const tierLabel = recipe.tier === CRAFT_TIER.HAND ? '' : ` [WB${recipe.tier}]`;
+      const tierNeeded = recipe.tier;
+      const hasTier = wbTier >= tierNeeded;
+      const hasResources = recipe.ing.every(([id, n]) => (invCounts[id] || 0) >= n);
+      const craftable = hasTier && hasResources;
 
-      let ingText = recipe.ing.map(([id, n]) => `${ITEM_DEFS[id]?.name || '?'} x${n}`).join(', ');
+      // Tier label
+      const tierNames = { 0: '', 1: 'Workbench T1', 2: 'Workbench T2', 3: 'Workbench T3' };
+      let tierLabel = '';
+      if (tierNeeded > 0) {
+        tierLabel = hasTier
+          ? ` <span style="color:#8a8">[${tierNames[tierNeeded]}]</span>`
+          : ` <span style="color:#a44">[Need ${tierNames[tierNeeded]}]</span>`;
+      }
+
+      // Ingredient text with have/need coloring
+      let ingText = recipe.ing.map(([id, n]) => {
+        const have = invCounts[id] || 0;
+        const color = have >= n ? '#8a8' : '#a44';
+        return `<span style="color:${color}">${ITEM_DEFS[id]?.name || '?'} ${have}/${n}</span>`;
+      }).join(', ');
 
       // Icon + info container
       const row = document.createElement('div');
@@ -316,6 +358,10 @@ export function createUI(state, send) {
 
       btn.appendChild(row);
 
+      if (!craftable) {
+        btn.style.opacity = '0.5';
+      }
+
       btn.addEventListener('click', () => {
         send({ type: MSG.CRAFT, recipeId: recipe.id });
       });
@@ -323,6 +369,12 @@ export function createUI(state, send) {
       craftPanel.appendChild(btn);
     }
   }
+
+  function canCraftRecipe(recipe, invCounts, wbTier) {
+    if (recipe.tier > wbTier) return false;
+    return recipe.ing.every(([id, n]) => (invCounts[id] || 0) >= n);
+  }
+
   buildCraftPanel();
 
   // Death screen
@@ -360,6 +412,7 @@ export function createUI(state, send) {
     btn.textContent = opt.label;
     btn.addEventListener('click', () => {
       buildPiece = opt.type;
+      state.buildPiece = opt.type;
       buildMode = false;
       buildMenu.style.display = 'none';
     });
@@ -555,6 +608,11 @@ export function createUI(state, send) {
       inventoryScreen.style.display = state.showInventory ? 'flex' : 'none';
     }
 
+    // Update craft panel when inventory is open
+    if (state.showInventory) {
+      buildCraftPanel();
+    }
+
     // Update armor equipment slots (shown in inventory screen)
     if (state.showInventory) {
       let armorPanel = document.getElementById('armor-panel');
@@ -659,14 +717,25 @@ export function createUI(state, send) {
     // Death screen
     if (deathScreen) {
       deathScreen.style.display = state.isDead ? 'flex' : 'none';
-      // Show death stats
+      // Show death stats + respawn timer
       const deathStats = document.getElementById('death-stats');
       if (deathStats && state.isDead && state.deathInfo) {
         const info = state.deathInfo;
         const mins = Math.floor(info.survived / 60);
         const secs = info.survived % 60;
         const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-        deathStats.innerHTML = `Killed by <span style="color:#e44">${info.killerName}</span><br>Survived: ${timeStr}`;
+        const elapsed = Date.now() - (state.deathTime || 0);
+        const remaining = Math.max(0, Math.ceil((state.respawnTime - elapsed) / 1000));
+        const timerText = remaining > 0 ? `<br><span style="color:#ff8;font-size:18px;">Respawn in ${remaining}s</span>` : '';
+        deathStats.innerHTML = `Killed by <span style="color:#e44">${info.killerName}</span><br>Survived: ${timeStr}${timerText}`;
+      }
+      // Respawn button enable/disable
+      const canRespawn = Date.now() - (state.deathTime || 0) >= state.respawnTime;
+      const respawnBeachBtn = document.getElementById('respawn-beach');
+      if (respawnBeachBtn) {
+        respawnBeachBtn.disabled = !canRespawn;
+        respawnBeachBtn.style.opacity = canRespawn ? '1' : '0.4';
+        respawnBeachBtn.style.pointerEvents = canRespawn ? '' : 'none';
       }
       // Update spawn bag buttons
       const bagContainer = document.getElementById('spawn-bags');
@@ -681,6 +750,7 @@ export function createUI(state, send) {
             btn.textContent = `Sleeping Bag (${bag.x}, ${bag.y})`;
             btn.style.cssText = 'padding:10px 24px;font-size:13px;background:rgba(40,40,40,0.9);color:#ddd;border:2px solid #555;border-radius:6px;cursor:pointer;z-index:1;text-transform:uppercase;letter-spacing:1px;margin:4px;';
             btn.addEventListener('click', () => {
+              if (Date.now() - (state.deathTime || 0) < state.respawnTime) return;
               send({ type: MSG.RESPAWN, bagEid: bag.eid });
               state.spawnBags = [];
             });
@@ -688,6 +758,11 @@ export function createUI(state, send) {
             btn.addEventListener('mouseleave', () => { btn.style.borderColor = '#555'; btn.style.color = '#ddd'; });
             bagContainer.appendChild(btn);
           }
+        }
+        // Disable bag buttons during countdown too
+        for (const btn of bagContainer.querySelectorAll('.bag-spawn-btn')) {
+          btn.style.opacity = canRespawn ? '1' : '0.4';
+          btn.style.pointerEvents = canRespawn ? '' : 'none';
         }
       }
     }

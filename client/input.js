@@ -118,6 +118,10 @@ export function createInput(state, send) {
         // Quick drop
         send({ type: MSG.INVENTORY, action: INV_ACTION.DROP, fromSlot: state.selectedSlot });
         break;
+      case 'KeyR':
+        // Reload ranged weapon
+        send({ type: MSG.RELOAD });
+        break;
       case 'Digit1': state.selectedSlot = 0; break;
       case 'Digit2': state.selectedSlot = 1; break;
       case 'Digit3': state.selectedSlot = 2; break;
@@ -152,6 +156,8 @@ export function createInput(state, send) {
   canvas.addEventListener('mousemove', (e) => {
     mouseX = e.clientX;
     mouseY = e.clientY;
+    state.mouseScreenX = mouseX;
+    state.mouseScreenY = mouseY;
     // Calculate angle from center of screen
     const cx = canvas.width / 2;
     const cy = canvas.height / 2;

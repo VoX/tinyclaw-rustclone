@@ -1,17 +1,64 @@
 import { query, hasComponent, addEntity, addComponent } from 'bitecs';
 import { Player, Position, Rotation, Health, ActiveTool, Inventory, Hotbar, Dead,
          Projectile, Velocity, Collider, NetworkSync, Sprite, Damageable, ResourceNode, Armor, Animal } from '../../shared/components.js';
-import { MOUSE_ACTION } from '../../shared/protocol.js';
+import { MOUSE_ACTION, MSG } from '../../shared/protocol.js';
 import { ITEM_DEFS, SERVER_TPS, getArmorReduction } from '../../shared/constants.js';
 import { reduceDurability } from '../../shared/inventory.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
 
 export function createCombatSystem(gameState) {
   const attackCooldowns = new Map(); // eid -> ticks remaining
+  // Clip state: eid -> { itemId, ammo }  (tracks loaded rounds per player)
+  if (!gameState.clipState) gameState.clipState = new Map();
 
   return function CombatSystem(world) {
     const players = query(world, [Player, Position, Health]);
     const now = gameState.tick;
+
+    // Process reload requests
+    for (const [connId, client] of gameState.clients) {
+      if (!client.reloadRequest) continue;
+      client.reloadRequest = false;
+
+      const eid = client.playerEid;
+      if (!eid || hasComponent(world, eid, Dead)) continue;
+
+      const slot = Hotbar.selectedSlot[eid];
+      const itemId = Inventory.items[eid]?.[slot] || 0;
+      const def = ITEM_DEFS[itemId];
+      if (!def || def.cat !== 'ranged') continue;
+
+      const clipSize = def.clipSize || 1;
+      let clip = gameState.clipState.get(eid);
+      if (clip && clip.itemId !== itemId) clip = null;
+      if (!clip) clip = { itemId, ammo: 0 };
+
+      const needed = clipSize - clip.ammo;
+      if (needed <= 0) continue; // already full
+
+      // Find ammo in inventory
+      let totalLoaded = 0;
+      for (let s = 0; s < 24 && totalLoaded < needed; s++) {
+        if (Inventory.items[eid][s] === def.ammoType && Inventory.counts[eid][s] > 0) {
+          const take = Math.min(Inventory.counts[eid][s], needed - totalLoaded);
+          Inventory.counts[eid][s] -= take;
+          if (Inventory.counts[eid][s] === 0) Inventory.items[eid][s] = 0;
+          totalLoaded += take;
+        }
+      }
+
+      if (totalLoaded > 0) {
+        clip.ammo += totalLoaded;
+        clip.itemId = itemId;
+        gameState.clipState.set(eid, clip);
+        gameState.dirtyInventories.add(eid);
+
+        // Send clip update
+        if (client.ws) {
+          try { client.ws.send(JSON.stringify({ type: MSG.CLIP_UPDATE, ammo: clip.ammo, max: clipSize })); } catch (e) {}
+        }
+      }
+    }
 
     for (let i = 0; i < players.length; i++) {
       const eid = players[i];
@@ -36,20 +83,25 @@ export function createCombatSystem(gameState) {
       const py = Position.y[eid];
 
       if (def.cat === 'ranged') {
-        // Check ammo
-        const ammoType = def.ammoType;
-        if (ammoType) {
-          let ammoSlot = -1;
-          for (let s = 0; s < 24; s++) {
-            if (Inventory.items[eid][s] === ammoType && Inventory.counts[eid][s] > 0) {
-              ammoSlot = s;
-              break;
-            }
-          }
-          if (ammoSlot === -1) continue; // no ammo
-          Inventory.counts[eid][ammoSlot]--;
-          if (Inventory.counts[eid][ammoSlot] === 0) Inventory.items[eid][ammoSlot] = 0;
-          gameState.dirtyInventories.add(eid);
+        // Clip-based ammo system
+        const clipSize = def.clipSize || 1;
+        let clip = gameState.clipState.get(eid);
+        // Reset clip if weapon changed
+        if (clip && clip.itemId !== itemId) clip = null;
+        if (!clip) clip = { itemId, ammo: 0 };
+
+        // Check clip has ammo
+        if (clip.ammo <= 0) continue; // need to reload
+
+        // Consume one round from clip
+        clip.ammo--;
+        gameState.clipState.set(eid, clip);
+
+        // Send clip update to client
+        const clipConnId = Player.connectionId[eid];
+        const clipClient = gameState.clients.get(clipConnId);
+        if (clipClient && clipClient.ws) {
+          try { clipClient.ws.send(JSON.stringify({ type: MSG.CLIP_UPDATE, ammo: clip.ammo, max: clipSize })); } catch (e) {}
         }
 
         // Spawn projectile

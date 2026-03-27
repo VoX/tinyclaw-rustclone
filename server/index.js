@@ -58,6 +58,7 @@ const gameState = {
   campfirePositions: new Map(),
   containerInv: new Map(),     // eid -> [{id, n}, ...] for storage boxes
   animalSpawns: [],            // {x, y, animalType, respawnAt} for respawning
+  playerNames: new Map(),      // eid -> name string
   biomeMap: null,
   getBiomeAt: null,
   nextConnId: 1,
@@ -136,6 +137,16 @@ const httpServer = createServer((req, res) => {
   res.end(readFileSync(filePath));
 });
 
+// ── Random player name generation ──
+const NAME_ADJ = ['Rusty','Salty','Sneaky','Lucky','Dusty','Rocky','Smoky','Stormy','Frosty','Sandy',
+  'Shady','Grumpy','Sleepy','Brave','Swift','Wild','Calm','Bold','Lone','Grim'];
+const NAME_NOUN = ['Survivor','Wanderer','Builder','Hunter','Bandit','Nomad','Raider','Scout','Drifter','Hermit',
+  'Trapper','Forager','Outcast','Pioneer','Ranger','Crafter','Scavenger','Settler','Exile','Vagrant'];
+function randomPlayerName() {
+  return NAME_ADJ[Math.floor(Math.random() * NAME_ADJ.length)] + ' ' +
+         NAME_NOUN[Math.floor(Math.random() * NAME_NOUN.length)];
+}
+
 // ── WebSocket Server ──
 const wss = new WebSocketServer({ server: httpServer });
 
@@ -204,12 +215,15 @@ wss.on('connection', (ws) => {
   Hotbar.selectedSlot[eid] = 0;
 
   gameState.entityTypes.set(eid, ENTITY_TYPE.PLAYER);
+  gameState.playerNames.set(eid, playerName);
   gameState.newEntities.add(eid);
 
+  const playerName = randomPlayerName();
   const client = {
     ws,
     playerEid: eid,
     connId,
+    playerName,
     input: { keys: 0, mouseAngle: 0, mouseAction: MOUSE_ACTION.NONE },
     mouseAction: MOUSE_ACTION.NONE,
     sprinting: false,
@@ -223,6 +237,7 @@ wss.on('connection', (ws) => {
     chatMessage: null,
     hammerUpgradeRequest: null,
     drinkWaterRequest: null,
+    reloadRequest: false,
     spawnTick: gameState.tick,
     spawnProtectionUntil: gameState.tick + 10 * SERVER_TPS, // 10s spawn protection
     isFirstSpawn: true,
@@ -236,6 +251,7 @@ wss.on('connection', (ws) => {
     type: MSG.PLAYER_ID,
     eid,
     connId,
+    name: playerName,
   }));
 
   ws.send(JSON.stringify({
@@ -263,6 +279,7 @@ wss.on('connection', (ws) => {
     gameState.clients.delete(connId);
     gameState.removedEntities.add(eid);
     gameState.entityTypes.delete(eid);
+    gameState.playerNames.delete(eid);
     removeEntity(world, eid);
   });
 
@@ -356,6 +373,10 @@ function handleClientMessage(connId, msg) {
 
     case MSG.DRINK_WATER:
       client.drinkWaterRequest = true;
+      break;
+
+    case MSG.RELOAD:
+      client.reloadRequest = true;
       break;
 
     case MSG.PING:

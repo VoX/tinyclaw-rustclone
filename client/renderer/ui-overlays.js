@@ -1,5 +1,5 @@
 import { ENTITY_TYPE } from '../../shared/protocol.js';
-import { TILE_SIZE, ITEM, STRUCT_TIER } from '../../shared/constants.js';
+import { TILE_SIZE, ITEM, ITEM_DEFS, STRUCT_TIER } from '../../shared/constants.js';
 
 export function createUIOverlays(state) {
   let minimapCanvas = null;
@@ -26,6 +26,28 @@ export function createUIOverlays(state) {
         ctx.fillRect(sx - barW / 2, sy - 22, barW * pct, barH);
       }
     }
+  }
+
+  function drawPlayerNames(ctx, sortedEntities, camX, camY, w, h, viewScale) {
+    ctx.save();
+    ctx.font = '10px Consolas, monospace';
+    ctx.textAlign = 'center';
+    for (const e of sortedEntities) {
+      if (e.t !== 1) continue; // ENTITY_TYPE.PLAYER
+      if (!e.name) continue;
+      if (e.eid === state.myEid) continue;
+      const ex = e.renderX || e.x;
+      const ey = e.renderY || e.y;
+      const sx = (ex - camX) * viewScale / TILE_SIZE + w / 2;
+      const sy = (ey - camY) * viewScale / TILE_SIZE + h / 2;
+      if (sx < -60 || sx > w + 60 || sy < -60 || sy > h + 60) continue;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      const tw = ctx.measureText(e.name).width;
+      ctx.fillRect(sx - tw / 2 - 2, sy - 34, tw + 4, 12);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(e.name, sx, sy - 24);
+    }
+    ctx.restore();
   }
 
   function drawHammerPreview(ctx, me, sortedEntities, camX, camY, w, h, viewScale, animTime) {
@@ -640,6 +662,119 @@ export function createUIOverlays(state) {
     ctx.textAlign = 'left';
   }
 
+  function drawBuildPreview(ctx, w, h, camX, camY, viewScale, sortedEntities) {
+    const heldItem = state.inventory?.[state.selectedSlot];
+    if (!heldItem?.id) return;
+    const itemId = heldItem.id;
+
+    // Only show for building plan and deployables
+    const isBuildPlan = itemId === ITEM.BUILDING_PLAN;
+    const isDeployable = [ITEM.SLEEPING_BAG, ITEM.CAMPFIRE_ITEM, ITEM.FURNACE_ITEM,
+      ITEM.TOOL_CUPBOARD_ITEM, ITEM.WORKBENCH_T1_ITEM, ITEM.WORKBENCH_T2_ITEM,
+      ITEM.WORKBENCH_T3_ITEM, ITEM.STORAGE_BOX].includes(itemId);
+    if (!isBuildPlan && !isDeployable) return;
+
+    const me = state.myEid ? state.entities.get(state.myEid) : null;
+    if (!me) return;
+
+    // Convert mouse screen coords to world coords
+    const worldX = me.x + (state.mouseScreenX - w / 2) * TILE_SIZE / viewScale;
+    const worldY = me.y + (state.mouseScreenY - h / 2) * TILE_SIZE / viewScale;
+
+    // Snap to 2x2 tile grid
+    const gridSize = TILE_SIZE * 2;
+    const snappedX = Math.round(worldX / gridSize) * gridSize;
+    const snappedY = Math.round(worldY / gridSize) * gridSize;
+
+    // Check placement validity
+    const dx = snappedX - me.x;
+    const dy = snappedY - me.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const maxDist = 8; // max build distance in world units
+    let valid = dist <= maxDist;
+
+    // Check for overlap with existing entities
+    if (valid) {
+      for (const e of sortedEntities) {
+        if (e.t === 5 || e.t === 12) { // STRUCTURE or DOOR
+          const ex = e.renderX || e.x;
+          const ey = e.renderY || e.y;
+          const odx = ex - snappedX;
+          const ody = ey - snappedY;
+          if (Math.abs(odx) < 1.5 && Math.abs(ody) < 1.5) {
+            valid = false;
+            break;
+          }
+        }
+      }
+    }
+
+    // Draw ghost
+    const sx = (snappedX - camX) * viewScale / TILE_SIZE + w / 2;
+    const sy = (snappedY - camY) * viewScale / TILE_SIZE + h / 2;
+    const ghostSize = viewScale * 2; // 2 tiles wide
+
+    ctx.save();
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = valid ? 'rgba(0,200,0,0.4)' : 'rgba(200,0,0,0.4)';
+    ctx.strokeStyle = valid ? '#0f0' : '#f00';
+    ctx.lineWidth = 2;
+
+    if (isBuildPlan) {
+      const piece = state.buildPiece || 1;
+      if (piece === 1) { // Foundation
+        ctx.fillRect(sx - ghostSize / 2, sy - ghostSize / 2, ghostSize, ghostSize);
+        ctx.strokeRect(sx - ghostSize / 2, sy - ghostSize / 2, ghostSize, ghostSize);
+      } else if (piece === 2 || piece === 3 || piece === 7) { // Wall/Doorway/Window
+        ctx.fillRect(sx - ghostSize / 2, sy - 4, ghostSize, 8);
+        ctx.strokeRect(sx - ghostSize / 2, sy - 4, ghostSize, 8);
+      } else { // Ceiling/Stairs
+        ctx.fillRect(sx - ghostSize / 2, sy - ghostSize / 2, ghostSize, ghostSize);
+        ctx.strokeRect(sx - ghostSize / 2, sy - ghostSize / 2, ghostSize, ghostSize);
+      }
+    } else {
+      // Deployable — circle
+      const r = viewScale * 0.5;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  function drawAmmoHUD(ctx, w, h) {
+    // Only show if holding a ranged weapon
+    const heldItem = state.inventory?.[state.selectedSlot];
+    if (!heldItem?.id) return;
+    const def = ITEM_DEFS[heldItem.id];
+    if (!def || def.cat !== 'ranged') return;
+
+    const ammo = state.clipAmmo || 0;
+    const max = state.clipMax || def.clipSize || 1;
+
+    ctx.save();
+    ctx.font = 'bold 16px Consolas, monospace';
+    ctx.textAlign = 'right';
+
+    const x = w / 2 + 160;
+    const y = h - 70;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(x - 70, y - 16, 74, 24);
+
+    ctx.fillStyle = ammo === 0 ? '#e44' : '#fff';
+    ctx.fillText(`${ammo} / ${max}`, x, y);
+
+    if (ammo === 0) {
+      ctx.font = '10px Consolas, monospace';
+      ctx.fillStyle = '#aaa';
+      ctx.fillText('[R] Reload', x, y + 14);
+    }
+    ctx.restore();
+  }
+
   function drawTutorialHint(ctx, w, h) {
     if (!state.tutorialExpiry || Date.now() > state.tutorialExpiry) return;
     const remaining = state.tutorialExpiry - Date.now();
@@ -678,12 +813,15 @@ export function createUIOverlays(state) {
 
   return {
     drawHealthBars,
+    drawPlayerNames,
     drawHammerPreview,
     drawNightOverlay,
     drawGoldenHour,
     drawEdgeVignette,
     drawDamageFlash,
     drawTemperatureEffects,
+    drawBuildPreview,
+    drawAmmoHUD,
     drawTutorialHint,
     drawChatBubbles,
     drawMinimap,

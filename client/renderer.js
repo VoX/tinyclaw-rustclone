@@ -999,7 +999,7 @@ export function createRenderer(canvas, state) {
     state.notifications = state.notifications.filter(n => now - n.time < 5000);
 
     const notifX = w - 300;
-    const notifY = mapSize > 0 ? 210 : 20;
+    const notifY = 210;
 
     for (let i = 0; i < Math.min(state.notifications.length, 8); i++) {
       const n = state.notifications[state.notifications.length - 1 - i];

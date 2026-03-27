@@ -13,6 +13,7 @@ import { SERVER_TPS, SERVER_TICK_MS, PLAYER_MAX_HP, PLAYER_MAX_HUNGER,
 import { MSG, KEY, MOUSE_ACTION, INV_ACTION, ENTITY_TYPE } from '../shared/protocol.js';
 
 import { generateWorld, serializeBiomeMap } from './world.js';
+import { saveWorld, loadWorld } from './persistence.js';
 import { createInputSystem } from './systems/InputSystem.js';
 import { createMovementSystem } from './systems/MovementSystem.js';
 import { createAnimalAISystem } from './systems/AnimalAISystem.js';
@@ -63,6 +64,9 @@ const gameState = {
 // ── World Generation ──
 console.log('Generating world...');
 generateWorld(world, gameState, 12345);
+
+// ── Load saved world state ──
+loadWorld(world, gameState);
 
 // ── Systems ──
 const systems = [
@@ -324,6 +328,23 @@ function gameLoop() {
 
 // Run frequently enough to stay close to 20 TPS (50ms per tick)
 setInterval(gameLoop, 5);
+
+// ── Auto-save every 60 seconds ──
+setInterval(() => {
+  saveWorld(world, gameState);
+}, 60 * 1000);
+
+// ── Save on shutdown ──
+process.on('SIGINT', () => {
+  console.log('Saving world before shutdown...');
+  saveWorld(world, gameState);
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  console.log('Saving world before shutdown...');
+  saveWorld(world, gameState);
+  process.exit(0);
+});
 
 httpServer.listen(PORT, () => {
   console.log(`Rust Clone server running on port ${PORT}`);

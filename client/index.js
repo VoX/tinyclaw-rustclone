@@ -305,6 +305,11 @@ function clientLoop(timestamp) {
     renderer.resetEventIndex();
   }
 
+  // Start ambient audio once connected
+  if (state.connected && state.myEid) {
+    startAmbient(state.lightLevel);
+  }
+
   // Render
   renderer.render(dt);
   ui.update();

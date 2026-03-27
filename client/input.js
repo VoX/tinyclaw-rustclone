@@ -1,4 +1,5 @@
 import { KEY, MOUSE_ACTION, MSG, INV_ACTION } from '../shared/protocol.js';
+import { playInventoryOpen, playInventoryClose } from './audio.js';
 
 export function createInput(state, send) {
   let keys = 0;
@@ -21,6 +22,8 @@ export function createInput(state, send) {
       case 'Tab':
         e.preventDefault();
         state.showInventory = !state.showInventory;
+        if (state.showInventory) playInventoryOpen();
+        else playInventoryClose();
         break;
       case 'KeyM':
         state.showMap = !state.showMap;

@@ -1,0 +1,71 @@
+// ── Message Types: Client → Server ──
+export const MSG = {
+  // Client → Server
+  INPUT: 1,
+  CRAFT: 2,
+  BUILD: 3,
+  INTERACT: 4,
+  INVENTORY: 5,
+  RESPAWN: 6,
+  PING: 7,
+
+  // Server → Client
+  SNAPSHOT: 50,
+  DELTA: 51,
+  EVENT: 52,
+  INVENTORY_UPDATE: 53,
+  PONG: 54,
+  PLAYER_ID: 55,
+  WORLD_INFO: 56,
+  DEATH: 57,
+  DESPAWN: 58,
+};
+
+// Input key bitmask
+export const KEY = {
+  W: 1,
+  A: 2,
+  S: 4,
+  D: 8,
+  SHIFT: 16,
+  SPACE: 32,
+};
+
+// Mouse action
+export const MOUSE_ACTION = {
+  NONE: 0,
+  PRIMARY: 1,
+  SECONDARY: 2,
+};
+
+// Inventory actions
+export const INV_ACTION = {
+  MOVE: 1,
+  DROP: 2,
+  SPLIT: 3,
+  EQUIP: 4,
+};
+
+// Event types
+export const EVENT_TYPE = {
+  SOUND: 1,
+  HIT_MARKER: 2,
+  DEATH_NOTICE: 3,
+  CHAT: 4,
+};
+
+// Entity type tags for network serialization
+export const ENTITY_TYPE = {
+  PLAYER: 1,
+  RESOURCE_NODE: 2,
+  WORLD_ITEM: 3,
+  PROJECTILE: 4,
+  STRUCTURE: 5,
+  ANIMAL: 6,
+  CAMPFIRE: 7,
+  FURNACE: 8,
+  WORKBENCH: 9,
+  TOOL_CUPBOARD: 10,
+  SLEEPING_BAG: 11,
+  DOOR: 12,
+};

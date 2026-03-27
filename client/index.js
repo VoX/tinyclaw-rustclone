@@ -96,21 +96,19 @@ function handleServerMessage(msg) {
             existing.prevX = existing.x;
             existing.prevY = existing.y;
             if (e.eid === state.myEid && e.x !== undefined && e.y !== undefined) {
-              // For local player: blend toward server position to avoid snapping
-              const serverX = e.x;
-              const serverY = e.y;
-              const dx = serverX - existing.x;
-              const dy = serverY - existing.y;
+              // Store server position separately for correction
+              existing._serverX = e.x;
+              existing._serverY = e.y;
+              // Only snap if server disagrees significantly (collision, teleport, respawn)
+              const dx = e.x - existing.x;
+              const dy = e.y - existing.y;
               const dist = Math.sqrt(dx * dx + dy * dy);
-              if (dist > 10) {
-                // Too far off — snap to server
-                existing.x = serverX;
-                existing.y = serverY;
-              } else {
-                // Gently correct toward server position
-                existing.x += dx * 0.15;
-                existing.y += dy * 0.15;
+              if (dist > 5) {
+                // Big desync — trust server (collision or respawn)
+                existing.x = e.x;
+                existing.y = e.y;
               }
+              // Otherwise ignore server position — trust client prediction
               delete e.x;
               delete e.y;
             }
@@ -210,6 +208,14 @@ function clientLoop(timestamp) {
     // Predict movement — apply directly for responsive feel
     me.x += dx * speed * (dt / 1000);
     me.y += dy * speed * (dt / 1000);
+
+    // When idle, gently drift toward server position to correct accumulated error
+    if (dx === 0 && dy === 0 && me._serverX !== undefined) {
+      const corrX = me._serverX - me.x;
+      const corrY = me._serverY - me.y;
+      me.x += corrX * 0.1;
+      me.y += corrY * 0.1;
+    }
 
     // Clamp
     const maxCoord = state.worldSize * state.tileSize;

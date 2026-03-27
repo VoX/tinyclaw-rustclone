@@ -355,16 +355,20 @@ export function createEntityRenderer(state) {
     ctx.save();
     ctx.globalAlpha = depleted ? 0.25 : 1.0;
 
+    // Scale resource nodes 2.5x: translate to position, scale, draw at origin
+    ctx.translate(sx, sy);
+    ctx.scale(2.5, 2.5);
+
     if (rt === RESOURCE_TYPE.TREE) {
-      drawTree(ctx, sx, sy, eid, sizeVar);
+      drawTree(ctx, 0, 0, eid, sizeVar);
     } else if (rt === RESOURCE_TYPE.HEMP) {
-      drawHemp(ctx, sx, sy, eid);
+      drawHemp(ctx, 0, 0, eid);
     } else if (rt === RESOURCE_TYPE.STONE_NODE) {
-      drawStoneNode(ctx, sx, sy, eid, sizeVar);
+      drawStoneNode(ctx, 0, 0, eid, sizeVar);
     } else if (rt === RESOURCE_TYPE.METAL_NODE) {
-      drawMetalNode(ctx, sx, sy, eid, sizeVar);
+      drawMetalNode(ctx, 0, 0, eid, sizeVar);
     } else if (rt === RESOURCE_TYPE.SULFUR_NODE) {
-      drawSulfurNode(ctx, sx, sy, eid, sizeVar);
+      drawSulfurNode(ctx, 0, 0, eid, sizeVar);
     }
 
     ctx.restore();

@@ -509,7 +509,7 @@ function spawnResourceNode(world, gameState, tileX, tileY, resourceType, rng) {
   Health.current[eid] = def.hp;
   Health.max[eid] = def.hp;
 
-  Collider.radius[eid] = resourceType === RESOURCE_TYPE.TREE ? 0.6 : 0.4;
+  Collider.radius[eid] = resourceType === RESOURCE_TYPE.TREE ? 1.5 : (resourceType === RESOURCE_TYPE.HEMP ? 0.4 : 1.0);
   Collider.isStatic[eid] = 1;
   Sprite.spriteId[eid] = 50 + resourceType;
   NetworkSync.lastTick[eid] = 0;

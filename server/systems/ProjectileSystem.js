@@ -33,14 +33,31 @@ export function createProjectileSystem(gameState) {
       const projRadius = Collider.radius[eid] || 0.15;
 
       const targets = gameState.spatialHash ? gameState.spatialHash.query(px, py, 3) : [];
+      let destroyed = false;
       for (let j = 0; j < targets.length; j++) {
         const target = targets[j];
-        if (!hasComponent(world, target, Health) || !hasComponent(world, target, Collider)) continue;
         if (target === sourceEid) continue;
         if (target === eid) continue;
+        if (!hasComponent(world, target, Collider)) continue;
+
+        // Resource nodes block projectiles without taking damage
+        if (hasComponent(world, target, ResourceNode)) {
+          const dx = px - Position.x[target];
+          const dy = py - Position.y[target];
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const hitDist = projRadius + (Collider.radius[target] || 0.4);
+          if (dist < hitDist) {
+            gameState.removedEntities.add(eid);
+            gameState.entityTypes.delete(eid);
+            removeEntity(world, eid);
+            destroyed = true;
+            break;
+          }
+          continue;
+        }
+
+        if (!hasComponent(world, target, Health)) continue;
         if (hasComponent(world, target, Dead)) continue;
-        // Don't hit resource nodes — they aren't combat targets
-        if (hasComponent(world, target, ResourceNode)) continue;
 
         const dx = px - Position.x[target];
         const dy = py - Position.y[target];
@@ -87,9 +104,11 @@ export function createProjectileSystem(gameState) {
           gameState.removedEntities.add(eid);
           gameState.entityTypes.delete(eid);
           removeEntity(world, eid);
+          destroyed = true;
           break;
         }
       }
+      if (destroyed) continue;
     }
     return world;
   };

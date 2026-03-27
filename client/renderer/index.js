@@ -82,6 +82,10 @@ export function createRenderer(canvas, state) {
           const color = evt.weather === 1 ? '#8af' : evt.weather === 2 ? '#ccc' : '#ee8';
           state.notifications.push({ text: evt.text, time: Date.now(), color });
         }
+      } else if (evt.type === 'heli_spawn') {
+        state.notifications.push({ text: 'A helicopter approaches...', time: Date.now(), color: '#f84' });
+      } else if (evt.type === 'heli_crate') {
+        state.notifications.push({ text: 'A locked crate has dropped!', time: Date.now(), color: '#ff4' });
       }
     }
   }

@@ -49,6 +49,8 @@ export const MSG = {
   RECYCLE_RESULT: 72,
   RESEARCH_OPEN: 73,
   RESEARCH_RESULT: 74,
+  HELI_EVENT: 75,
+  TEAM_UPDATE: 76,
 };
 
 // Input key bitmask
@@ -108,4 +110,6 @@ export const ENTITY_TYPE = {
   LOOT_CRATE: 18,
   RECYCLER: 19,
   RESEARCH_TABLE: 20,
+  HELICOPTER: 21,
+  HELI_CRATE: 22,
 };

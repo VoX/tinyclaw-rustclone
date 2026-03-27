@@ -74,6 +74,11 @@ function createPanner(x, y) {
   return panner;
 }
 
+// ── Sound variation helpers ──
+// ±20% pitch, ±30% volume for natural variation
+function varyPitch(freq) { return freq * (0.8 + Math.random() * 0.4); }
+function varyVolume(vol) { return vol * (0.7 + Math.random() * 0.6); }
+
 // ── Sound generators ──
 
 function playNoise(duration, freq, type, volume, filterFreq, destNode) {
@@ -81,9 +86,10 @@ function playNoise(duration, freq, type, volume, filterFreq, destNode) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = type || 'sine';
-  osc.frequency.value = freq;
+  osc.frequency.value = varyPitch(freq);
 
-  gain.gain.setValueAtTime(volume || 0.1, ctx.currentTime);
+  const vol = varyVolume(volume || 0.1);
+  gain.gain.setValueAtTime(vol, ctx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
 
   const dest = destNode || masterGain;
@@ -105,17 +111,18 @@ function playNoise(duration, freq, type, volume, filterFreq, destNode) {
 
 function playWhiteNoiseBurst(duration, volume, destNode) {
   if (!ctx || !initialized) return;
+  const vol = varyVolume(volume);
   const bufferSize = ctx.sampleRate * duration;
   const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < bufferSize; i++) {
-    data[i] = (Math.random() * 2 - 1) * volume;
+    data[i] = (Math.random() * 2 - 1) * vol;
   }
   const source = ctx.createBufferSource();
   source.buffer = buffer;
 
   const gain = ctx.createGain();
-  gain.gain.setValueAtTime(volume, ctx.currentTime);
+  gain.gain.setValueAtTime(vol, ctx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
 
   const filter = ctx.createBiquadFilter();
@@ -256,20 +263,98 @@ export function playDoorOpen() {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = 'sawtooth';
-  osc.frequency.setValueAtTime(200, ctx.currentTime);
-  osc.frequency.linearRampToValueAtTime(350, ctx.currentTime + 0.15);
-  gain.gain.setValueAtTime(0.03, ctx.currentTime);
+  osc.frequency.setValueAtTime(varyPitch(200), ctx.currentTime);
+  osc.frequency.linearRampToValueAtTime(varyPitch(350), ctx.currentTime + 0.15);
+  gain.gain.setValueAtTime(varyVolume(0.03), ctx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
   osc.connect(gain);
   gain.connect(masterGain);
   osc.start(ctx.currentTime);
   osc.stop(ctx.currentTime + 0.2);
+  // Creak noise
+  playWhiteNoiseBurst(0.1, 0.02);
+}
+
+export function playDoorClose() {
+  if (!ctx || !initialized) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(varyPitch(300), ctx.currentTime);
+  osc.frequency.linearRampToValueAtTime(varyPitch(150), ctx.currentTime + 0.12);
+  gain.gain.setValueAtTime(varyVolume(0.04), ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+  osc.connect(gain);
+  gain.connect(masterGain);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + 0.15);
+  // Thud
+  playNoise(0.06, 80, 'sine', 0.03);
 }
 
 export function playPlaceStructure() {
   if (!ctx || !initialized) return;
   playNoise(0.15, 120, 'triangle', 0.06);
   playWhiteNoiseBurst(0.08, 0.04);
+}
+
+export function playHeliApproach() {
+  if (!ctx || !initialized) return;
+  // Low rumble + chopping sound
+  playNoise(0.8, 45, 'sawtooth', 0.06);
+  playNoise(0.6, 90, 'square', 0.04);
+  playWhiteNoiseBurst(0.5, 0.03);
+}
+
+export function playCrateDrop() {
+  if (!ctx || !initialized) return;
+  // Impact thud
+  playNoise(0.3, 60, 'sine', 0.12);
+  playNoise(0.2, 120, 'triangle', 0.06);
+  playWhiteNoiseBurst(0.15, 0.08);
+}
+
+// ── Campfire crackling loop ──
+let campfireInterval = null;
+let activeCampfires = []; // [{x, y}]
+
+export function updateCampfires(campfirePositions) {
+  activeCampfires = campfirePositions;
+  if (activeCampfires.length > 0 && !campfireInterval) {
+    startCampfireSounds();
+  } else if (activeCampfires.length === 0 && campfireInterval) {
+    clearInterval(campfireInterval);
+    campfireInterval = null;
+  }
+}
+
+function startCampfireSounds() {
+  if (campfireInterval) return;
+  campfireInterval = setInterval(() => {
+    if (!ctx || ctx.state !== 'running' || activeCampfires.length === 0) return;
+    // Pick closest campfire
+    let closest = null;
+    let minDist = Infinity;
+    for (const cf of activeCampfires) {
+      const dx = cf.x - listenerX;
+      const dy = cf.y - listenerY;
+      const d = dx * dx + dy * dy;
+      if (d < minDist) { minDist = d; closest = cf; }
+    }
+    if (!closest || minDist > 60 * 60) return; // too far
+
+    const panner = createPanner(closest.x, closest.y);
+    if (!panner) return;
+    panner.connect(masterGain);
+
+    // Random crackle
+    const dur = 0.03 + Math.random() * 0.06;
+    const freq = 200 + Math.random() * 800;
+    playNoise(dur, freq, 'sawtooth', 0.015, 1200, panner);
+    if (Math.random() > 0.5) {
+      playWhiteNoiseBurst(0.02 + Math.random() * 0.03, 0.01, panner);
+    }
+  }, 80 + Math.random() * 120);
 }
 
 // ── Ambient system ──

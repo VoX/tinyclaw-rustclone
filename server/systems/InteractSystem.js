@@ -1,10 +1,11 @@
 import { query, hasComponent } from 'bitecs';
 import { Player, Position, Inventory, Dead, ToolCupboard, Campfire, Furnace,
-         Workbench, Hotbar, NPC, Recycler, ResearchTable } from '../../shared/components.js';
+         Workbench, Hotbar, NPC, Recycler, ResearchTable, HeliCrate } from '../../shared/components.js';
 import { StorageBox } from '../../shared/components.js';
 import { MSG, ENTITY_TYPE } from '../../shared/protocol.js';
 import { ITEM, ITEM_DEFS, INVENTORY_SLOTS, SERVER_TPS, NPC_TRADES,
          RECYCLE_YIELDS, RECIPES, RESEARCH_SCRAP_COST, RESEARCHABLE_RECIPES } from '../../shared/constants.js';
+import { areTeammates } from './TeamSystem.js';
 import { addToInventory } from '../../shared/inventory.js';
 
 const CONTAINER_SLOTS = 12;
@@ -166,6 +167,29 @@ export function createInteractSystem(gameState) {
         continue;
       }
 
+      // Heli Crate interaction (acts like storage box but with lock timer)
+      if (hasComponent(world, targetEid, HeliCrate)) {
+        client.interactRequest = null;
+        // Check if still locked
+        if (gameState.tick < HeliCrate.unlockTick[targetEid]) {
+          const remaining = Math.ceil((HeliCrate.unlockTick[targetEid] - gameState.tick) / 20);
+          try {
+            client.ws.send(JSON.stringify({
+              type: MSG.HELI_EVENT,
+              event: 'locked',
+              seconds: remaining,
+            }));
+          } catch (e) {}
+          continue;
+        }
+        openContainers.set(eid, { type: 'storage', eid: targetEid });
+        if (!gameState.containerInv.has(targetEid)) {
+          gameState.containerInv.set(targetEid, []);
+        }
+        sendStorageState(client, targetEid);
+        continue;
+      }
+
       // Storage Box interaction
       if (hasComponent(world, targetEid, StorageBox)) {
         client.interactRequest = null;
@@ -229,6 +253,16 @@ export function createInteractSystem(gameState) {
         // or if the player is already authorized (re-auth is a no-op)
         if (authSet.size === 0 || authSet.has(eid)) {
           authSet.add(eid);
+          // Auto-authorize teammates
+          if (gameState.playerTeam) {
+            const teamId = gameState.playerTeam.get(eid);
+            if (teamId && gameState.teams) {
+              const members = gameState.teams.get(teamId);
+              if (members) {
+                for (const m of members) authSet.add(m);
+              }
+            }
+          }
           gameState.tcAuth.set(tcEid, authSet);
         }
       } else if (action.action === 'deauthorize') {

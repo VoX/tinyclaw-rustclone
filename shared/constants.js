@@ -441,6 +441,21 @@ export const RESEARCHABLE_RECIPES = RECIPES
 // ── Sleeping bag limit ──
 export const MAX_SLEEPING_BAGS = 3;
 
+// ── Helicopter Event ──
+export const HELI_MIN_INTERVAL = 15 * 60 * SERVER_TPS; // 15 min
+export const HELI_MAX_INTERVAL = 20 * 60 * SERVER_TPS; // 20 min
+export const HELI_SPEED = 30; // tiles/sec — crosses map in ~17s
+export const HELI_CRATE_UNLOCK_TICKS = 15 * 60 * SERVER_TPS; // 15 min to unlock
+export const HELI_CRATE_LOOT = [
+  [ITEM.ASSAULT_RIFLE, 1],
+  [ITEM.RIFLE_AMMO, 60],
+  [ITEM.METAL_FRAGS, 200],
+  [ITEM.SCRAP, 100],
+  [ITEM.C4, 1],
+  [ITEM.SEMI_AUTO_PISTOL, 1],
+  [ITEM.PISTOL_AMMO, 40],
+];
+
 // Water speed multiplier
 export const WATER_SPEED_MULT = 0.5;
 

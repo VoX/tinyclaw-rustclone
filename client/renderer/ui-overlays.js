@@ -371,6 +371,7 @@ export function createUIOverlays(state) {
 
       if (e.t === ENTITY_TYPE.PLAYER) {
         if (e.eid === state.myEid) { color = '#0f0'; radius = 3; }
+        else if (state.teamMembers.some(m => m.eid === e.eid)) { color = '#0f0'; radius = 2.5; }
         else { color = '#fff'; radius = 2; }
       } else if (e.t === ENTITY_TYPE.ANIMAL) {
         color = '#f44'; radius = 1.5;
@@ -381,6 +382,10 @@ export function createUIOverlays(state) {
         color = 'rgba(180,180,150,0.6)'; radius = 1.5;
       } else if (e.t === ENTITY_TYPE.NPC) {
         color = '#4f4'; radius = 2.5;
+      } else if (e.t === ENTITY_TYPE.HELICOPTER) {
+        color = '#f84'; radius = 4;
+      } else if (e.t === ENTITY_TYPE.HELI_CRATE) {
+        color = e.locked ? '#f44' : '#4f4'; radius = 3;
       }
 
       if (color) {
@@ -389,6 +394,25 @@ export function createUIOverlays(state) {
         ctx.arc(dotX, dotY, radius, 0, Math.PI * 2);
         ctx.fill();
       }
+    }
+
+    // Draw helicopter path on minimap if active
+    if (state.heliActive) {
+      const h = state.heliActive;
+      const hsx = (h.sx / TILE_SIZE - px) * scale + mapSize / 2;
+      const hsy = (h.sy / TILE_SIZE - py) * scale + mapSize / 2;
+      const hex = (h.ex / TILE_SIZE - px) * scale + mapSize / 2;
+      const hey = (h.ey / TILE_SIZE - py) * scale + mapSize / 2;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 136, 68, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(mapX + hsx, mapY + hsy);
+      ctx.lineTo(mapX + hex, mapY + hey);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
     }
 
     ctx.font = '9px Consolas, monospace';
@@ -518,6 +542,63 @@ export function createUIOverlays(state) {
         ctx.strokeStyle = '#28a';
         ctx.lineWidth = 1;
         ctx.strokeRect(mx - 3, my - 3, 6, 6);
+      }
+    }
+
+    // Draw helicopter path on full map
+    if (state.heliActive) {
+      const ha = state.heliActive;
+      const hsx = mapX + (ha.sx / ts) * scale;
+      const hsy = mapY + (ha.sy / ts) * scale;
+      const hex = mapX + (ha.ex / ts) * scale;
+      const hey = mapY + (ha.ey / ts) * scale;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 136, 68, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(hsx, hsy);
+      ctx.lineTo(hex, hey);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+
+      // Drop point marker
+      const dpx = mapX + (ha.dropX / ts) * scale;
+      const dpy = mapY + (ha.dropY / ts) * scale;
+      ctx.fillStyle = '#f84';
+      ctx.beginPath();
+      ctx.arc(dpx, dpy, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Draw heli crate on full map
+    for (const [eid, ent] of state.entities) {
+      if (ent.t === ENTITY_TYPE.HELI_CRATE) {
+        const cx = mapX + (ent.x / ts) * scale;
+        const cy = mapY + (ent.y / ts) * scale;
+        ctx.fillStyle = ent.locked ? '#f44' : '#4f4';
+        ctx.fillRect(cx - 4, cy - 4, 8, 8);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(cx - 4, cy - 4, 8, 8);
+      }
+      if (ent.t === ENTITY_TYPE.HELICOPTER) {
+        const hx = mapX + (ent.x / ts) * scale;
+        const hy = mapY + (ent.y / ts) * scale;
+        const pulse = 1 + Math.sin(animTime * 0.005) * 0.3;
+        ctx.fillStyle = '#f84';
+        ctx.beginPath();
+        ctx.arc(hx, hy, 6 * pulse, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.font = '8px Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fff';
+        ctx.fillText('HELI', hx, hy - 8);
+        ctx.textAlign = 'left';
       }
     }
 

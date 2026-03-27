@@ -21,6 +21,14 @@ const CHUNK_SIZE = 64;
 
 export function createTerrainRenderer(state) {
   let biomeChunks = new Map();
+  let decoChunks = new Map();
+  // Cache the last rendered frame as an offscreen canvas to avoid redraw when camera hasn't moved
+  let cachedTerrainCanvas = null;
+  let cachedTerrainCamX = null;
+  let cachedTerrainCamY = null;
+  let cachedTerrainW = 0;
+  let cachedTerrainH = 0;
+  const CAM_MOVE_THRESHOLD = 0.5; // tiles of camera movement before redraw
 
   function renderBiomeChunk(chunkX, chunkY) {
     const key = `${chunkX},${chunkY}`;
@@ -254,11 +262,107 @@ export function createTerrainRenderer(state) {
     }
 
     biomeChunks.set(key, chunkCanvas);
-    if (biomeChunks.size > 100) {
+    if (biomeChunks.size > 150) {
       const first = biomeChunks.keys().next().value;
       biomeChunks.delete(first);
     }
     return chunkCanvas;
+  }
+
+  function renderDecoChunk(chunkX, chunkY, viewScale) {
+    const key = `${chunkX},${chunkY}`;
+    if (decoChunks.has(key)) return decoChunks.get(key);
+    if (!state.biomeMap) return null;
+
+    const ws = state.worldSize;
+    const ts = 2;
+    const DECO_PX = CHUNK_SIZE * 4; // match biome chunk resolution
+    const decoCanvas = document.createElement('canvas');
+    decoCanvas.width = DECO_PX;
+    decoCanvas.height = DECO_PX;
+    const dctx = decoCanvas.getContext('2d');
+
+    const startTX = chunkX * CHUNK_SIZE;
+    const startTY = chunkY * CHUNK_SIZE;
+    const sc = 4 / 24 * (viewScale || 24); // relative scale
+
+    for (let dy = 0; dy < CHUNK_SIZE; dy += 2) {
+      for (let dx = 0; dx < CHUNK_SIZE; dx += 2) {
+        const tx = startTX + dx;
+        const ty = startTY + dy;
+        if (tx < 0 || ty < 0 || tx >= ws || ty >= ws) continue;
+
+        const biome = state.biomeMap[ty * ws + tx];
+        const r = seededRand(tx, ty, 777);
+        if (r > 0.12) continue;
+
+        const r2 = seededRand(tx, ty, 888);
+        const r3 = seededRand(tx, ty, 999);
+        const ox = (r2 - 0.5) * ts * 0.8;
+        const oy = (r3 - 0.5) * ts * 0.8;
+        // Position relative to chunk canvas
+        const sx = (dx + 0.5 + ox / ts) * 4;
+        const sy = (dy + 0.5 + oy / ts) * 4;
+
+        const s = 4 / 24 * 24; // normalized scale
+
+        if (biome === BIOME.GRASSLAND) {
+          const colors = ['#e44', '#e8e', '#ff0', '#f80', '#88f'];
+          const col = colors[Math.floor(r2 * colors.length)];
+          dctx.fillStyle = col;
+          dctx.globalAlpha = 0.7;
+          dctx.beginPath();
+          dctx.arc(sx, sy, 2 * s / 24, 0, Math.PI * 2);
+          dctx.fill();
+          dctx.fillStyle = '#fff';
+          dctx.globalAlpha = 0.3;
+          dctx.beginPath();
+          dctx.arc(sx - s / 24, sy - s / 24, 1 * s / 24, 0, Math.PI * 2);
+          dctx.fill();
+          dctx.globalAlpha = 1;
+        } else if (biome === BIOME.FOREST) {
+          const s2 = s / 24;
+          dctx.fillStyle = '#a03020';
+          dctx.globalAlpha = 0.6;
+          dctx.beginPath();
+          dctx.arc(sx, sy - 1.5 * s2, 2.5 * s2, Math.PI, 0);
+          dctx.fill();
+          dctx.fillStyle = '#ddc';
+          dctx.fillRect(sx - 0.8 * s2, sy - 1.5 * s2, 1.6 * s2, 2.5 * s2);
+          dctx.fillStyle = '#fff';
+          dctx.globalAlpha = 0.4;
+          dctx.beginPath();
+          dctx.arc(sx - 0.5 * s2, sy - 2 * s2, 0.5 * s2, 0, Math.PI * 2);
+          dctx.fill();
+          dctx.globalAlpha = 1;
+        } else if (biome === BIOME.DESERT) {
+          const s2 = s / 24;
+          dctx.fillStyle = '#3a7a2a';
+          dctx.globalAlpha = 0.65;
+          dctx.fillRect(sx - 1 * s2, sy - 4 * s2, 2 * s2, 5 * s2);
+          dctx.fillRect(sx - 3 * s2, sy - 3 * s2, 2 * s2, 1.2 * s2);
+          dctx.fillRect(sx - 3 * s2, sy - 3 * s2, 1.2 * s2, 2 * s2);
+          dctx.fillRect(sx + 1 * s2, sy - 2 * s2, 2 * s2, 1.2 * s2);
+          dctx.fillRect(sx + 1.8 * s2, sy - 2 * s2, 1.2 * s2, 2 * s2);
+          dctx.globalAlpha = 1;
+        } else if (biome === BIOME.MOUNTAIN || biome === BIOME.BEACH || biome === BIOME.SNOW) {
+          const s2 = s / 24;
+          dctx.fillStyle = biome === BIOME.SNOW ? '#bbc' : (biome === BIOME.BEACH ? '#c8b888' : '#666');
+          dctx.globalAlpha = 0.5;
+          dctx.beginPath();
+          dctx.ellipse(sx, sy, 2 * s2, 1.2 * s2, r2 * Math.PI, 0, Math.PI * 2);
+          dctx.fill();
+          dctx.globalAlpha = 1;
+        }
+      }
+    }
+
+    decoChunks.set(key, decoCanvas);
+    if (decoChunks.size > 150) {
+      const first = decoChunks.keys().next().value;
+      decoChunks.delete(first);
+    }
+    return decoCanvas;
   }
 
   function drawTerrain(ctx, w, h, camX, camY, viewScale) {
@@ -293,93 +397,30 @@ export function createTerrainRenderer(state) {
     }
   }
 
-  // ── Environment decorations (client-only, seeded from biome) ──
+  // ── Environment decorations (client-only, seeded from biome) ── cached per chunk
   function drawDecorations(ctx, w, h, camX, camY, viewScale) {
     if (!state.biomeMap) return;
-    const ws = state.worldSize;
-    const ts = 2; // TILE_SIZE
-    const tilesX = Math.ceil(w / viewScale) + 4;
-    const tilesY = Math.ceil(h / viewScale) + 4;
-    const startTX = Math.floor(camX / ts - tilesX / 2);
-    const startTY = Math.floor(camY / ts - tilesY / 2);
 
-    for (let dy = 0; dy < tilesY; dy += 2) {
-      for (let dx = 0; dx < tilesX; dx += 2) {
-        const tx = startTX + dx;
-        const ty = startTY + dy;
-        if (tx < 0 || ty < 0 || tx >= ws || ty >= ws) continue;
+    const tilesX = Math.ceil(w / viewScale) + 2;
+    const tilesY = Math.ceil(h / viewScale) + 2;
+    const startTileX = Math.floor(camX / 2 - tilesX / 2);
+    const startTileY = Math.floor(camY / 2 - tilesY / 2);
 
-        const biome = state.biomeMap[ty * ws + tx];
-        const r = seededRand(tx, ty, 777);
-        if (r > 0.12) continue; // ~6% of tiles get a decoration
+    const startChunkX = Math.floor(startTileX / CHUNK_SIZE);
+    const startChunkY = Math.floor(startTileY / CHUNK_SIZE);
+    const endChunkX = Math.ceil((startTileX + tilesX) / CHUNK_SIZE);
+    const endChunkY = Math.ceil((startTileY + tilesY) / CHUNK_SIZE);
 
-        const r2 = seededRand(tx, ty, 888);
-        const r3 = seededRand(tx, ty, 999);
-        const ox = (r2 - 0.5) * ts * 0.8;
-        const oy = (r3 - 0.5) * ts * 0.8;
-        const sx = ((tx * ts + ts / 2 + ox) - camX) * viewScale / ts + w / 2;
-        const sy = ((ty * ts + ts / 2 + oy) - camY) * viewScale / ts + h / 2;
+    for (let cy = startChunkY; cy <= endChunkY; cy++) {
+      for (let cx = startChunkX; cx <= endChunkX; cx++) {
+        const chunk = renderDecoChunk(cx, cy, viewScale);
+        if (!chunk) continue;
 
-        if (sx < -20 || sx > w + 20 || sy < -20 || sy > h + 20) continue;
+        const screenX = (cx * CHUNK_SIZE * 2 - camX) * viewScale / 2 + w / 2;
+        const screenY = (cy * CHUNK_SIZE * 2 - camY) * viewScale / 2 + h / 2;
+        const size = CHUNK_SIZE * viewScale;
 
-        const sc = viewScale / 24; // scale relative to default zoom
-
-        if (biome === BIOME.GRASSLAND) {
-          // Flowers
-          const colors = ['#e44', '#e8e', '#ff0', '#f80', '#88f'];
-          const col = colors[Math.floor(r2 * colors.length)];
-          ctx.fillStyle = col;
-          ctx.globalAlpha = 0.7;
-          ctx.beginPath();
-          ctx.arc(sx, sy, 2 * sc, 0, Math.PI * 2);
-          ctx.fill();
-          // Petal hint
-          ctx.fillStyle = '#fff';
-          ctx.globalAlpha = 0.3;
-          ctx.beginPath();
-          ctx.arc(sx - sc, sy - sc, 1 * sc, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.globalAlpha = 1;
-        } else if (biome === BIOME.FOREST) {
-          // Mushrooms
-          ctx.fillStyle = '#a03020';
-          ctx.globalAlpha = 0.6;
-          ctx.beginPath();
-          ctx.arc(sx, sy - 1.5 * sc, 2.5 * sc, Math.PI, 0);
-          ctx.fill();
-          // Stem
-          ctx.fillStyle = '#ddc';
-          ctx.fillRect(sx - 0.8 * sc, sy - 1.5 * sc, 1.6 * sc, 2.5 * sc);
-          // White dots
-          ctx.fillStyle = '#fff';
-          ctx.globalAlpha = 0.4;
-          ctx.beginPath();
-          ctx.arc(sx - 0.5 * sc, sy - 2 * sc, 0.5 * sc, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(sx + 1 * sc, sy - 1.8 * sc, 0.4 * sc, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.globalAlpha = 1;
-        } else if (biome === BIOME.DESERT) {
-          // Cactus
-          ctx.fillStyle = '#3a7a2a';
-          ctx.globalAlpha = 0.65;
-          ctx.fillRect(sx - 1 * sc, sy - 4 * sc, 2 * sc, 5 * sc);
-          // Arms
-          ctx.fillRect(sx - 3 * sc, sy - 3 * sc, 2 * sc, 1.2 * sc);
-          ctx.fillRect(sx - 3 * sc, sy - 3 * sc, 1.2 * sc, 2 * sc);
-          ctx.fillRect(sx + 1 * sc, sy - 2 * sc, 2 * sc, 1.2 * sc);
-          ctx.fillRect(sx + 1.8 * sc, sy - 2 * sc, 1.2 * sc, 2 * sc);
-          ctx.globalAlpha = 1;
-        } else if (biome === BIOME.MOUNTAIN || biome === BIOME.BEACH || biome === BIOME.SNOW) {
-          // Small rocks
-          ctx.fillStyle = biome === BIOME.SNOW ? '#bbc' : (biome === BIOME.BEACH ? '#c8b888' : '#666');
-          ctx.globalAlpha = 0.5;
-          ctx.beginPath();
-          ctx.ellipse(sx, sy, 2 * sc, 1.2 * sc, r2 * Math.PI, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.globalAlpha = 1;
-        }
+        ctx.drawImage(chunk, screenX, screenY, size, size);
       }
     }
   }

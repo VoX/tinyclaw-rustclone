@@ -38,6 +38,8 @@ import { createInventorySystem } from './systems/InventorySystem.js';
 import { createInteractSystem } from './systems/InteractSystem.js';
 import { createDecaySystem } from './systems/DecaySystem.js';
 import { createWeatherSystem } from './systems/WeatherSystem.js';
+import { createHelicopterSystem } from './systems/HelicopterSystem.js';
+import { createTeamSystem } from './systems/TeamSystem.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = 8780;
@@ -98,6 +100,8 @@ const systems = [
   createDecaySystem(gameState),
   createDayNightSystem(gameState),
   createWeatherSystem(gameState),
+  createHelicopterSystem(gameState),
+  createTeamSystem(gameState),
   createNetworkSyncSystem(gameState),
 ];
 

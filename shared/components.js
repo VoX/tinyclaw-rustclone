@@ -44,6 +44,8 @@ export const StorageBox = { slots: [] }; // slots stored as array of {itemId, co
 export const NPC = { npcType: [] }; // 1 = merchant
 export const Recycler = { active: [] };
 export const ResearchTable = { active: [] };
+export const Helicopter = { startX: [], startY: [], endX: [], endY: [], progress: [], dropX: [], dropY: [], dropped: [] };
+export const HeliCrate = { unlockTick: [], looted: [] };
 
 // For TC auth and door auth, we store per-entity data in Maps on the server (not in ECS)
 // This is because bitECS doesn't support dynamic-length arrays well
@@ -63,4 +65,5 @@ export const allComponents = [
   Projectile, MeleeHitbox, Damageable,
   Structure, Door, ToolCupboard, SleepingBag, StorageBox,
   ResourceNode, Animal, Campfire, Workbench, Furnace, NPC, Recycler, ResearchTable,
+  Helicopter, HeliCrate,
 ];

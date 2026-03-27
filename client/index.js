@@ -6,9 +6,10 @@ import { createInput } from './input.js';
 import { createUI } from './ui/index.js';
 import { updateFootsteps, playHitGather, playHitAttack, playDeath,
          playPickup, playCraftComplete, playInventoryOpen, playInventoryClose,
-         playGunshot, playBowShot, playDoorOpen, playPlaceStructure,
+         playGunshot, playBowShot, playDoorOpen, playDoorClose, playPlaceStructure,
          startAmbient, updateListenerPosition,
-         playHitGatherAt, playHitAttackAt, playGunshotAt } from './audio.js';
+         playHitGatherAt, playHitAttackAt, playGunshotAt,
+         playHeliApproach, playCrateDrop, updateCampfires } from './audio.js';
 
 // ── Game State ──
 const state = {
@@ -97,6 +98,12 @@ const state = {
   // Sleeping bag count
   bagCount: 0,
   maxBags: 3,
+  // Helicopter event
+  heliActive: null, // { sx, sy, ex, ey, dropX, dropY }
+  heliCratePos: null, // { x, y }
+  heliNotification: 0, // timestamp for "crate locked" notification
+  // Team
+  teamMembers: [], // [{ eid, name }]
 };
 
 // Initialize inventory slots
@@ -208,6 +215,10 @@ function handleServerMessage(msg) {
       // Remove entities
       if (msg.removed) {
         for (const eid of msg.removed) {
+          const ent = state.entities.get(eid);
+          if (ent && ent.t === ENTITY_TYPE.HELICOPTER) {
+            state.heliActive = null;
+          }
           state.entities.delete(eid);
         }
       }
@@ -412,6 +423,26 @@ function handleServerMessage(msg) {
     case MSG.SAVE_NOTIFY:
       state.saveNotify = Date.now();
       break;
+
+    case MSG.TEAM_UPDATE:
+      state.teamMembers = msg.members || [];
+      break;
+
+    case MSG.HELI_EVENT:
+      if (msg.event === 'spawn') {
+        state.heliActive = { sx: msg.sx, sy: msg.sy, ex: msg.ex, ey: msg.ey, dropX: msg.dropX, dropY: msg.dropY };
+        state.notifications.push({ text: 'A helicopter has been spotted!', time: Date.now(), color: '#f84' });
+        playHeliApproach();
+      } else if (msg.event === 'crate_drop') {
+        state.heliCratePos = { x: msg.x, y: msg.y };
+        state.notifications.push({ text: 'A locked crate has been dropped!', time: Date.now(), color: '#ff4' });
+        playCrateDrop();
+      } else if (msg.event === 'locked') {
+        const mins = Math.floor(msg.seconds / 60);
+        const secs = msg.seconds % 60;
+        state.notifications.push({ text: `Crate locked: ${mins}m ${secs}s remaining`, time: Date.now(), color: '#f84' });
+      }
+      break;
   }
 }
 
@@ -566,6 +597,15 @@ function clientLoop(timestamp) {
       updateListenerPosition(me.renderX || me.x, me.renderY || me.y);
     }
     startAmbient(state.lightLevel);
+
+    // Update campfire positions for crackling audio
+    const cfPositions = [];
+    for (const [eid, e] of state.entities) {
+      if (e.t === ENTITY_TYPE.CAMPFIRE && e.lit) {
+        cfPositions.push({ x: e.x, y: e.y });
+      }
+    }
+    updateCampfires(cfPositions);
   }
 
   // Render

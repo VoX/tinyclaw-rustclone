@@ -5,6 +5,7 @@ import { MOUSE_ACTION, MSG } from '../../shared/protocol.js';
 import { ITEM_DEFS, SERVER_TPS, getArmorReduction } from '../../shared/constants.js';
 import { reduceDurability } from '../../shared/inventory.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
+import { areTeammates } from './TeamSystem.js';
 
 export function createCombatSystem(gameState) {
   const attackCooldowns = new Map(); // eid -> ticks remaining
@@ -166,6 +167,8 @@ export function createCombatSystem(gameState) {
             const targetConnId = Player.connectionId[targetEid];
             const targetClient = gameState.clients.get(targetConnId);
             if (targetClient && gameState.tick < targetClient.spawnProtectionUntil) continue;
+            // No friendly fire
+            if (areTeammates(gameState, eid, targetEid)) continue;
           }
 
           // Apply damage (reduced by target armor)

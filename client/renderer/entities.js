@@ -66,6 +66,10 @@ export function createEntityRenderer(state) {
       drawRecycler(ctx, sx, sy, e);
     } else if (type === ENTITY_TYPE.RESEARCH_TABLE) {
       drawResearchTable(ctx, sx, sy, e);
+    } else if (type === ENTITY_TYPE.HELICOPTER) {
+      drawHelicopter(ctx, sx, sy, e);
+    } else if (type === ENTITY_TYPE.HELI_CRATE) {
+      drawHeliCrate(ctx, sx, sy, e);
     }
   }
 
@@ -1392,6 +1396,113 @@ export function createEntityRenderer(state) {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#8cf';
     ctx.fillText('RESEARCH', sx, sy - 12);
+
+    ctx.restore();
+  }
+
+  // ── Helicopter drawing ──
+  function drawHelicopter(ctx, sx, sy, e) {
+    ctx.save();
+    const t = animTime * 0.001;
+
+    // Shadow on ground
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(sx + 8, sy + 20, 18, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body
+    ctx.fillStyle = '#3a3a3a';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, 20, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Cockpit window
+    ctx.fillStyle = '#6af';
+    ctx.beginPath();
+    ctx.ellipse(sx + 12, sy - 1, 6, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Tail
+    ctx.fillStyle = '#333';
+    ctx.fillRect(sx - 28, sy - 3, 12, 6);
+
+    // Tail rotor
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1.5;
+    const tailAngle = t * 40;
+    ctx.beginPath();
+    ctx.moveTo(sx - 28, sy - 5 + Math.sin(tailAngle) * 4);
+    ctx.lineTo(sx - 28, sy + 5 + Math.sin(tailAngle + Math.PI) * 4);
+    ctx.stroke();
+
+    // Main rotor (spinning blades)
+    ctx.strokeStyle = 'rgba(100,100,100,0.5)';
+    ctx.lineWidth = 2;
+    const rotorAngle = t * 25;
+    for (let b = 0; b < 2; b++) {
+      const a = rotorAngle + b * Math.PI;
+      ctx.beginPath();
+      ctx.moveTo(sx + Math.cos(a) * 25, sy - 8 + Math.sin(a) * 3);
+      ctx.lineTo(sx + Math.cos(a + Math.PI) * 25, sy - 8 + Math.sin(a + Math.PI) * 3);
+      ctx.stroke();
+    }
+
+    // Rotor hub
+    ctx.fillStyle = '#555';
+    ctx.beginPath();
+    ctx.arc(sx, sy - 8, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  // ── Heli Crate drawing ──
+  function drawHeliCrate(ctx, sx, sy, e) {
+    ctx.save();
+    const locked = e.locked;
+    const t = animTime * 0.001;
+
+    // Crate body
+    ctx.fillStyle = locked ? '#8a5a20' : '#6a9a30';
+    ctx.fillRect(sx - 12, sy - 10, 24, 20);
+
+    // Metal bands
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(sx - 12, sy - 10, 24, 20);
+    ctx.beginPath();
+    ctx.moveTo(sx, sy - 10);
+    ctx.lineTo(sx, sy + 10);
+    ctx.stroke();
+
+    // Lock or open indicator
+    if (locked) {
+      // Lock icon
+      ctx.fillStyle = '#c44';
+      ctx.beginPath();
+      ctx.arc(sx, sy - 2, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(sx - 4, sy, 8, 6);
+
+      // Pulsing lock glow
+      const pulse = 0.3 + Math.sin(t * 3) * 0.2;
+      ctx.strokeStyle = `rgba(255, 60, 60, ${pulse})`;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(sx - 14, sy - 12, 28, 24);
+    } else {
+      // Open indicator (green glow)
+      ctx.fillStyle = '#4f4';
+      ctx.font = '8px Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('OPEN', sx, sy + 2);
+    }
+
+    // Label
+    ctx.font = '7px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = locked ? '#f84' : '#4f4';
+    ctx.fillText('HELI CRATE', sx, sy - 14);
 
     ctx.restore();
   }

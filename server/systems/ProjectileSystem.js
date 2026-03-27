@@ -2,6 +2,7 @@ import { query, removeEntity, hasComponent } from 'bitecs';
 import { Projectile, Position, Velocity, Collider, Health, Dead, Damageable, Player, ResourceNode, Armor, Sprite } from '../../shared/components.js';
 import { getArmorReduction, SERVER_TPS } from '../../shared/constants.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
+import { areTeammates } from './TeamSystem.js';
 
 export function createProjectileSystem(gameState) {
   const ARROW_GRAVITY = 3.0; // tiles/sec^2 downward (Y increases)
@@ -52,6 +53,8 @@ export function createProjectileSystem(gameState) {
             const targetConnId = Player.connectionId[target];
             const targetClient = gameState.clients.get(targetConnId);
             if (targetClient && gameState.tick < targetClient.spawnProtectionUntil) continue;
+            // No friendly fire
+            if (areTeammates(gameState, sourceEid, target)) continue;
           }
 
           // Hit! Apply armor reduction

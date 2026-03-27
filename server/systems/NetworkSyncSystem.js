@@ -2,7 +2,7 @@ import { query, hasComponent } from 'bitecs';
 import { Position, Velocity, Rotation, Health, Player, Sprite, ResourceNode,
          WorldItem, Projectile, Structure, Animal, Campfire, Furnace, Workbench,
          ToolCupboard, SleepingBag, StorageBox, Door, Dead, Inventory, Hotbar,
-         Hunger, Thirst, Temperature, NetworkSync, Armor } from '../../shared/components.js';
+         Hunger, Thirst, Temperature, NetworkSync, Armor, Helicopter, HeliCrate } from '../../shared/components.js';
 import { MSG, ENTITY_TYPE } from '../../shared/protocol.js';
 import { INTEREST_RADIUS, TILE_SIZE, ITEM } from '../../shared/constants.js';
 
@@ -136,6 +136,19 @@ export function createNetworkSyncSystem(gameState) {
           // Just needs position and type
         } else if (entityType === ENTITY_TYPE.RESEARCH_TABLE) {
           // Just needs position and type
+        } else if (entityType === ENTITY_TYPE.HELICOPTER) {
+          if (hasComponent(world, eid, Helicopter)) {
+            state.heliProgress = Math.round(Helicopter.progress[eid] * 1000) / 1000;
+            state.heliSX = Helicopter.startX[eid];
+            state.heliSY = Helicopter.startY[eid];
+            state.heliEX = Helicopter.endX[eid];
+            state.heliEY = Helicopter.endY[eid];
+          }
+        } else if (entityType === ENTITY_TYPE.HELI_CRATE) {
+          if (hasComponent(world, eid, HeliCrate)) {
+            state.unlockTick = HeliCrate.unlockTick[eid];
+            state.locked = tick < HeliCrate.unlockTick[eid] ? 1 : 0;
+          }
         }
 
         // Check if changed from prev state

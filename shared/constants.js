@@ -274,6 +274,9 @@ export const RECIPES = [
   { id: 13, result: ITEM.BONE_ARROW, count: 5, tier: CRAFT_TIER.HAND, ing: [[ITEM.WOOD, 15], [ITEM.BONE_FRAGMENTS, 10]] },
   { id: 14, result: ITEM.PAPER_MAP, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.WOOD, 10]] },
   { id: 15, result: ITEM.TORCH, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.WOOD, 30], [ITEM.CLOTH, 1]] },
+  { id: 37, result: ITEM.WORKBENCH_T1_ITEM, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.WOOD, 500], [ITEM.STONE, 200]] },
+  { id: 38, result: ITEM.WORKBENCH_T2_ITEM, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.WOOD, 500], [ITEM.METAL_FRAGS, 250], [ITEM.STONE, 100]] },
+  { id: 39, result: ITEM.WORKBENCH_T3_ITEM, count: 1, tier: CRAFT_TIER.WORKBENCH_T2, ing: [[ITEM.WOOD, 1000], [ITEM.METAL_FRAGS, 500], [ITEM.STONE, 200]] },
   // Workbench T1
   { id: 16, result: ITEM.METAL_HATCHET, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.WOOD, 100], [ITEM.METAL_FRAGS, 75]] },
   { id: 17, result: ITEM.METAL_PICKAXE, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.WOOD, 100], [ITEM.METAL_FRAGS, 75]] },
@@ -291,6 +294,7 @@ export const RECIPES = [
   { id: 28, result: ITEM.SEMI_AUTO_PISTOL, count: 1, tier: CRAFT_TIER.WORKBENCH_T2, ing: [[ITEM.METAL_FRAGS, 200], [ITEM.METAL_PIPE, 1], [ITEM.SPRING, 1]] },
   { id: 29, result: ITEM.SHOTGUN, count: 1, tier: CRAFT_TIER.WORKBENCH_T2, ing: [[ITEM.METAL_FRAGS, 200], [ITEM.METAL_PIPE, 1], [ITEM.WOOD, 50]] },
   { id: 30, result: ITEM.RIFLE_AMMO, count: 20, tier: CRAFT_TIER.WORKBENCH_T2, ing: [[ITEM.METAL_FRAGS, 3], [ITEM.GUNPOWDER, 5]] },
+  { id: 36, result: ITEM.SHOTGUN_AMMO, count: 12, tier: CRAFT_TIER.WORKBENCH_T2, ing: [[ITEM.METAL_FRAGS, 5], [ITEM.GUNPOWDER, 3]] },
   { id: 31, result: ITEM.SATCHEL_CHARGE, count: 1, tier: CRAFT_TIER.WORKBENCH_T2, ing: [[ITEM.ROPE, 4], [ITEM.GUNPOWDER, 20], [ITEM.SMALL_STASH, 1]] },
   { id: 32, result: ITEM.METAL_PIPE, count: 1, tier: CRAFT_TIER.WORKBENCH_T2, ing: [[ITEM.METAL_FRAGS, 100]] },
   { id: 33, result: ITEM.SPRING, count: 1, tier: CRAFT_TIER.WORKBENCH_T2, ing: [[ITEM.METAL_FRAGS, 50]] },

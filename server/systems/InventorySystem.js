@@ -149,7 +149,6 @@ export function createInventorySystem(gameState) {
         gameState.dirtyInventories.add(eid);
       }
 
-      client.interactRequest = null; // Consumed
     }
 
     return world;

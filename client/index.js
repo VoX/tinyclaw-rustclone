@@ -110,6 +110,13 @@ function handleServerMessage(msg) {
           state.entities.delete(eid);
         }
       }
+      // Sync death state from own entity data
+      if (state.myEid) {
+        const me = state.entities.get(state.myEid);
+        if (me) {
+          state.isDead = !!me.dead;
+        }
+      }
       break;
 
     case MSG.INVENTORY_UPDATE:

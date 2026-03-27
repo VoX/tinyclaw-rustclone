@@ -84,7 +84,7 @@ export function createUI(state, send) {
   // Death screen
   document.getElementById('respawn-beach').addEventListener('click', () => {
     send({ type: MSG.RESPAWN, bagEid: null });
-    state.isDead = false;
+    // isDead will be cleared by the server's next delta update when respawn succeeds
   });
 
   // Build menu placeholder

@@ -1,7 +1,7 @@
 import { query, hasComponent } from 'bitecs';
 import { Player, Velocity, Rotation, Position, ActiveTool, Health, Dead, Collider } from '../../shared/components.js';
 import { KEY, MOUSE_ACTION } from '../../shared/protocol.js';
-import { PLAYER_SPEED, PLAYER_SPRINT_MULT, WATER_SPEED_MULT, BIOME, WORLD_SIZE, TILE_SIZE, SERVER_TPS } from '../../shared/constants.js';
+import { PLAYER_SPEED, PLAYER_SPRINT_MULT, WATER_SPEED_MULT, ROAD_SPEED_MULT, BIOME, WORLD_SIZE, TILE_SIZE, SERVER_TPS } from '../../shared/constants.js';
 
 export function createInputSystem(gameState) {
   // Max distance a player can move per tick (sprint speed + tolerance)
@@ -64,6 +64,7 @@ export function createInputSystem(gameState) {
         if (gameState.getBiomeAt) {
           const biome = gameState.getBiomeAt(Position.x[eid], Position.y[eid]);
           if (biome === BIOME.WATER) speed *= WATER_SPEED_MULT;
+          else if (biome === BIOME.ROAD) speed *= ROAD_SPEED_MULT;
         }
 
         let dx = 0, dy = 0;

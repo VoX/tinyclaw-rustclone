@@ -85,4 +85,5 @@ export const ENTITY_TYPE = {
   DOOR: 12,
   STORAGE_BOX: 13,
   LOOT_BAG: 14,
+  BARREL: 15,
 };

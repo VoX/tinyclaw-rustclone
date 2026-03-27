@@ -1,18 +1,21 @@
 import { query, hasComponent, addEntity, addComponent, removeEntity } from 'bitecs';
 import { Animal, Position, Velocity, Health, Rotation, Player, Dead, Collider, Damageable,
          WorldItem, Sprite, NetworkSync } from '../../shared/components.js';
-import { AI_STATE, ANIMAL_DEFS, ANIMAL_TYPE, SERVER_TPS, ITEM_DESPAWN_TICKS, TILE_SIZE } from '../../shared/constants.js';
+import { AI_STATE, ANIMAL_DEFS, ANIMAL_TYPE, SERVER_TPS, ITEM_DESPAWN_TICKS, TILE_SIZE, BIOME, WORLD_SIZE } from '../../shared/constants.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
 
 const ANIMAL_RESPAWN_TICKS = 5 * 60 * SERVER_TPS; // 5 minutes
+const DEER_FLEE_RANGE = 15;
+const DEER_SAFE_RANGE = 25;
+const WOLF_PACK_RANGE = 12; // wolves within this range join the chase
+const BEAR_TERRITORY_RANGE = 15;
+const BEAR_DEAGGRO_RANGE = 25;
+const WATER_CHECK_AHEAD = 2; // tiles ahead to check for water
 
 export function createAnimalAISystem(gameState) {
-  const wanderChangeInterval = 5 * SERVER_TPS; // Change wander direction every 5s
-  let wanderTick = 0;
   const attackCooldowns = new Map(); // eid -> next attack tick
 
   return function AnimalAISystem(world) {
-    wanderTick++;
     const animals = query(world, [Animal, Position, Velocity, Health]);
     const players = query(world, [Player, Position]);
 
@@ -55,6 +58,7 @@ export function createAnimalAISystem(gameState) {
         });
 
         // Remove animal
+        attackCooldowns.delete(eid);
         gameState.removedEntities.add(eid);
         gameState.entityTypes.delete(eid);
         removeEntity(world, eid);
@@ -82,77 +86,157 @@ export function createAnimalAISystem(gameState) {
         }
       }
 
-      const state = Animal.aiState[eid];
+      const curState = Animal.aiState[eid];
 
-      // State transitions
+      // ── State transitions ──
+
       if (def.behavior === 'flee') {
-        if (nearestDist < 8) {
+        // Deer: flee when player within 15 tiles, safe at 25
+        if (nearestDist < DEER_FLEE_RANGE && nearestPlayer >= 0) {
           Animal.aiState[eid] = AI_STATE.FLEE;
           Animal.targetEid[eid] = nearestPlayer;
-        } else if (state === AI_STATE.FLEE && nearestDist > 15) {
+        } else if (curState === AI_STATE.FLEE && nearestDist > DEER_SAFE_RANGE) {
           Animal.aiState[eid] = AI_STATE.WANDER;
-        } else if (state === AI_STATE.IDLE) {
+        } else if (curState === AI_STATE.IDLE && gameState.tick >= Animal.idleUntil[eid]) {
           Animal.aiState[eid] = AI_STATE.WANDER;
         }
       } else if (def.behavior === 'aggro') {
-        if (nearestDist < def.aggroRange && nearestPlayer >= 0) {
-          Animal.aiState[eid] = AI_STATE.CHASE;
-          Animal.targetEid[eid] = nearestPlayer;
-        } else if (state === AI_STATE.CHASE && nearestDist > def.aggroRange * 2) {
-          Animal.aiState[eid] = AI_STATE.WANDER;
-        } else if (state === AI_STATE.IDLE) {
-          Animal.aiState[eid] = AI_STATE.WANDER;
+        if (type === ANIMAL_TYPE.WOLF) {
+          // Wolf pack: aggro when any wolf nearby is already chasing
+          let shouldAggro = nearestDist < def.aggroRange && nearestPlayer >= 0;
+          if (!shouldAggro && curState !== AI_STATE.CHASE && nearestPlayer >= 0 && nearestDist < WOLF_PACK_RANGE * 1.5) {
+            // Check if any nearby wolf is already chasing
+            for (let k = 0; k < animals.length; k++) {
+              const otherEid = animals[k];
+              if (otherEid === eid) continue;
+              if (Animal.animalType[otherEid] !== ANIMAL_TYPE.WOLF) continue;
+              if (Animal.aiState[otherEid] !== AI_STATE.CHASE) continue;
+              const ddx = Position.x[otherEid] - ax;
+              const ddy = Position.y[otherEid] - ay;
+              if (ddx * ddx + ddy * ddy < WOLF_PACK_RANGE * WOLF_PACK_RANGE) {
+                shouldAggro = true;
+                break;
+              }
+            }
+          }
+          if (shouldAggro) {
+            Animal.aiState[eid] = AI_STATE.CHASE;
+            Animal.targetEid[eid] = nearestPlayer;
+          } else if (curState === AI_STATE.CHASE && nearestDist > def.aggroRange * 2) {
+            Animal.aiState[eid] = AI_STATE.WANDER;
+          } else if (curState === AI_STATE.IDLE && gameState.tick >= Animal.idleUntil[eid]) {
+            Animal.aiState[eid] = AI_STATE.WANDER;
+          }
+        } else if (type === ANIMAL_TYPE.BEAR) {
+          // Bear: territorial — aggro when player enters territory, deaggro when they leave
+          const wasHit = hasComponent(world, eid, Damageable) && Damageable.lastHitTime[eid] > gameState.tick - SERVER_TPS * 5;
+          if ((nearestDist < BEAR_TERRITORY_RANGE || wasHit) && nearestPlayer >= 0) {
+            Animal.aiState[eid] = AI_STATE.CHASE;
+            Animal.targetEid[eid] = nearestPlayer;
+          } else if (curState === AI_STATE.CHASE && nearestDist > BEAR_DEAGGRO_RANGE && !wasHit) {
+            // Return home
+            Animal.aiState[eid] = AI_STATE.WANDER;
+            Animal.wanderTargetX[eid] = Animal.homeX[eid] || ax;
+            Animal.wanderTargetY[eid] = Animal.homeY[eid] || ay;
+          } else if (curState === AI_STATE.IDLE && gameState.tick >= Animal.idleUntil[eid]) {
+            Animal.aiState[eid] = AI_STATE.WANDER;
+          }
+        } else {
+          // Generic aggro fallback
+          if (nearestDist < def.aggroRange && nearestPlayer >= 0) {
+            Animal.aiState[eid] = AI_STATE.CHASE;
+            Animal.targetEid[eid] = nearestPlayer;
+          } else if (curState === AI_STATE.CHASE && nearestDist > def.aggroRange * 2) {
+            Animal.aiState[eid] = AI_STATE.WANDER;
+          } else if (curState === AI_STATE.IDLE && gameState.tick >= Animal.idleUntil[eid]) {
+            Animal.aiState[eid] = AI_STATE.WANDER;
+          }
         }
       } else if (def.behavior === 'flee_fight') {
-        if (nearestDist < 3 && hasComponent(world, eid, Damageable) && Damageable.lastHitTime[eid] > gameState.tick - SERVER_TPS * 3) {
+        // Boar: fight back if hit recently and close, otherwise flee
+        const wasHitRecently = hasComponent(world, eid, Damageable) && Damageable.lastHitTime[eid] > gameState.tick - SERVER_TPS * 3;
+        if (nearestDist < 3 && wasHitRecently) {
           Animal.aiState[eid] = AI_STATE.CHASE;
           Animal.targetEid[eid] = nearestPlayer;
         } else if (nearestDist < 8) {
           Animal.aiState[eid] = AI_STATE.FLEE;
           Animal.targetEid[eid] = nearestPlayer;
-        } else if (state === AI_STATE.FLEE && nearestDist > 15) {
+        } else if (curState === AI_STATE.FLEE && nearestDist > 15) {
           Animal.aiState[eid] = AI_STATE.WANDER;
-        } else if (state === AI_STATE.IDLE) {
+        } else if (curState === AI_STATE.IDLE && gameState.tick >= Animal.idleUntil[eid]) {
           Animal.aiState[eid] = AI_STATE.WANDER;
         }
       }
 
-      // Execute behavior based on state
+      // ── Execute behavior ──
       const newState = Animal.aiState[eid];
       const speed = def.speed / SERVER_TPS;
 
-      if (newState === AI_STATE.WANDER) {
-        if (wanderTick % wanderChangeInterval === 0 || (Animal.wanderTargetX[eid] === 0 && Animal.wanderTargetY[eid] === 0)) {
-          Animal.wanderTargetX[eid] = ax + (Math.random() - 0.5) * 20;
-          Animal.wanderTargetY[eid] = ay + (Math.random() - 0.5) * 20;
-        }
-        const dx = Animal.wanderTargetX[eid] - ax;
-        const dy = Animal.wanderTargetY[eid] - ay;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 1) {
-          Velocity.vx[eid] = (dx / dist) * speed * 0.5;
-          Velocity.vy[eid] = (dy / dist) * speed * 0.5;
+      if (newState === AI_STATE.IDLE) {
+        Velocity.vx[eid] = 0;
+        Velocity.vy[eid] = 0;
+
+      } else if (newState === AI_STATE.WANDER) {
+        // Natural wandering: smooth direction changes with occasional idle pauses
+        const wtx = Animal.wanderTargetX[eid];
+        const wty = Animal.wanderTargetY[eid];
+        const dxW = wtx - ax;
+        const dyW = wty - ay;
+        const distW = Math.sqrt(dxW * dxW + dyW * dyW);
+
+        if (distW < 1.5 || wtx === 0 && wty === 0) {
+          // Reached target or no target — pick new one or idle
+          if (Math.random() < 0.3) {
+            // Pause and idle for 2-5 seconds
+            Animal.aiState[eid] = AI_STATE.IDLE;
+            Animal.idleUntil[eid] = gameState.tick + Math.floor((2 + Math.random() * 3) * SERVER_TPS);
+            Velocity.vx[eid] = 0;
+            Velocity.vy[eid] = 0;
+          } else {
+            // Pick a new wander target: slight angle deviation from current heading
+            const baseAngle = Animal.wanderAngle[eid] || (Math.random() * Math.PI * 2);
+            const newAngle = baseAngle + (Math.random() - 0.5) * 1.2; // +-~34 degrees
+            const wanderDist = 5 + Math.random() * 10;
+            Animal.wanderAngle[eid] = newAngle;
+            Animal.wanderTargetX[eid] = ax + Math.cos(newAngle) * wanderDist;
+            Animal.wanderTargetY[eid] = ay + Math.sin(newAngle) * wanderDist;
+            // Clamp to world bounds
+            const maxCoord = WORLD_SIZE * TILE_SIZE;
+            Animal.wanderTargetX[eid] = Math.max(2, Math.min(maxCoord - 2, Animal.wanderTargetX[eid]));
+            Animal.wanderTargetY[eid] = Math.max(2, Math.min(maxCoord - 2, Animal.wanderTargetY[eid]));
+          }
         } else {
-          Velocity.vx[eid] = 0;
-          Velocity.vy[eid] = 0;
+          const rawVx = (dxW / distW) * speed * 0.5;
+          const rawVy = (dyW / distW) * speed * 0.5;
+
+          // Water avoidance: check if next position is water
+          const adjusted = avoidWater(ax, ay, rawVx, rawVy, gameState);
+          Velocity.vx[eid] = adjusted[0];
+          Velocity.vy[eid] = adjusted[1];
         }
+
       } else if (newState === AI_STATE.FLEE && nearestPlayer >= 0) {
-        const dx = ax - Position.x[nearestPlayer];
-        const dy = ay - Position.y[nearestPlayer];
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 0) {
-          Velocity.vx[eid] = (dx / dist) * speed;
-          Velocity.vy[eid] = (dy / dist) * speed;
+        let fdx = ax - Position.x[nearestPlayer];
+        let fdy = ay - Position.y[nearestPlayer];
+        const fdist = Math.sqrt(fdx * fdx + fdy * fdy);
+        if (fdist > 0) {
+          let vx = (fdx / fdist) * speed;
+          let vy = (fdy / fdist) * speed;
+          // Water avoidance during flee — deflect rather than stop
+          const adjusted = avoidWater(ax, ay, vx, vy, gameState);
+          Velocity.vx[eid] = adjusted[0];
+          Velocity.vy[eid] = adjusted[1];
         }
+
       } else if (newState === AI_STATE.CHASE && Animal.targetEid[eid] >= 0) {
         const target = Animal.targetEid[eid];
         if (hasComponent(world, target, Position)) {
-          const dx = Position.x[target] - ax;
-          const dy = Position.y[target] - ay;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist > 1.2) {
-            Velocity.vx[eid] = (dx / dist) * speed;
-            Velocity.vy[eid] = (dy / dist) * speed;
+          const cdx = Position.x[target] - ax;
+          const cdy = Position.y[target] - ay;
+          const cdist = Math.sqrt(cdx * cdx + cdy * cdy);
+          if (cdist > 1.2) {
+            Velocity.vx[eid] = (cdx / cdist) * speed;
+            Velocity.vy[eid] = (cdy / cdist) * speed;
           } else {
             // Attack
             Velocity.vx[eid] = 0;
@@ -171,7 +255,7 @@ export function createAnimalAISystem(gameState) {
                   y: Position.y[target],
                   damage: def.damage,
                 });
-                attackCooldowns.set(eid, gameState.tick + SERVER_TPS); // 1 second cooldown
+                attackCooldowns.set(eid, gameState.tick + SERVER_TPS);
               }
             }
           }
@@ -187,7 +271,6 @@ export function createAnimalAISystem(gameState) {
       const spawn = gameState.animalSpawns[i];
       if (gameState.tick >= spawn.respawnAt) {
         gameState.animalSpawns.splice(i, 1);
-        // Spawn new animal near the death location
         const newEid = addEntity(world);
         addComponent(world, newEid, Position);
         addComponent(world, newEid, Velocity);
@@ -210,6 +293,9 @@ export function createAnimalAISystem(gameState) {
         Animal.animalType[newEid] = spawn.animalType;
         Animal.aiState[newEid] = AI_STATE.IDLE;
         Animal.aggroRange[newEid] = def.aggroRange;
+        Animal.homeX[newEid] = Position.x[newEid];
+        Animal.homeY[newEid] = Position.y[newEid];
+        Animal.wanderAngle[newEid] = Math.random() * Math.PI * 2;
         Health.current[newEid] = def.hp;
         Health.max[newEid] = def.hp;
         Collider.radius[newEid] = 0.5;
@@ -223,4 +309,36 @@ export function createAnimalAISystem(gameState) {
 
     return world;
   };
+}
+
+// Check if a world position is water
+function isWater(wx, wy, gameState) {
+  if (!gameState.getBiomeAt) return false;
+  return gameState.getBiomeAt(wx, wy) === BIOME.WATER;
+}
+
+// Deflect velocity away from water tiles ahead
+function avoidWater(ax, ay, vx, vy, gameState) {
+  if (!gameState.getBiomeAt) return [vx, vy];
+  const checkDist = WATER_CHECK_AHEAD * TILE_SIZE;
+  const nextX = ax + (vx > 0 ? checkDist : vx < 0 ? -checkDist : 0);
+  const nextY = ay + (vy > 0 ? checkDist : vy < 0 ? -checkDist : 0);
+
+  if (!isWater(nextX, nextY, gameState)) return [vx, vy];
+
+  // Try rotating 90 degrees both ways, pick the one that's not water
+  const rotations = [Math.PI / 2, -Math.PI / 2, Math.PI];
+  for (const rot of rotations) {
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+    const rvx = vx * cos - vy * sin;
+    const rvy = vx * sin + vy * cos;
+    const rnx = ax + (rvx > 0 ? checkDist : rvx < 0 ? -checkDist : 0);
+    const rny = ay + (rvy > 0 ? checkDist : rvy < 0 ? -checkDist : 0);
+    if (!isWater(rnx, rny, gameState)) {
+      return [rvx, rvy];
+    }
+  }
+  // All directions water — stop
+  return [0, 0];
 }

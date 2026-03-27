@@ -10,6 +10,7 @@ const BIOME_COLORS = {
   [BIOME.SNOW]:      '#dde8f0',
   [BIOME.MOUNTAIN]:  '#7a7a7a',
   [BIOME.WATER]:     '#2850a0',
+  [BIOME.ROAD]:      '#8a7a5a',
 };
 
 const RESOURCE_COLORS = {
@@ -264,6 +265,20 @@ export function createRenderer(canvas, state) {
             cctx.arc(px + r1 * DETAIL, py + r3 * DETAIL, 0.4, 0, Math.PI * 2);
             cctx.fill();
           }
+        } else if (biome === BIOME.ROAD) {
+          // Gravel/dirt speckles
+          if (r1 > 0.3) {
+            cctx.fillStyle = `rgba(100,85,55,${0.2 + r2 * 0.2})`;
+            cctx.beginPath();
+            cctx.arc(px + r2 * DETAIL, py + r3 * DETAIL, 0.3 + r1 * 0.3, 0, Math.PI * 2);
+            cctx.fill();
+          }
+          if (r2 > 0.6) {
+            cctx.fillStyle = `rgba(150,135,100,0.25)`;
+            cctx.beginPath();
+            cctx.arc(px + r3 * DETAIL, py + r1 * DETAIL, 0.2 + r2 * 0.2, 0, Math.PI * 2);
+            cctx.fill();
+          }
         } else if (biome === BIOME.BEACH) {
           // Sand ripple
           if (r1 > 0.6) {
@@ -426,6 +441,8 @@ export function createRenderer(canvas, state) {
         drawStorageBox(ctx, sx, sy, e);
       } else if (type === ENTITY_TYPE.LOOT_BAG) {
         drawLootBag(ctx, sx, sy, e);
+      } else if (type === ENTITY_TYPE.BARREL) {
+        drawBarrel(ctx, sx, sy, e);
       }
 
       // Health bar for damaged entities (not local player)
@@ -2214,6 +2231,35 @@ export function createRenderer(canvas, state) {
     // Metal latch
     ctx.fillStyle = '#888';
     ctx.fillRect(sx - 2, sy - 4, 4, 3);
+  }
+
+  function drawBarrel(ctx, sx, sy, e) {
+    // Wooden barrel shape
+    ctx.fillStyle = '#6a5030';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, 7, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#4a3520';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Metal bands
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy - 4, 6.5, 2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + 4, 6.5, 2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // Wood grain
+    ctx.strokeStyle = 'rgba(40,25,10,0.3)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(sx - 3, sy - 8);
+    ctx.lineTo(sx - 3, sy + 8);
+    ctx.moveTo(sx + 3, sy - 8);
+    ctx.lineTo(sx + 3, sy + 8);
+    ctx.stroke();
   }
 
   function drawLootBag(ctx, sx, sy, e) {

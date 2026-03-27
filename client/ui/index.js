@@ -161,6 +161,21 @@ function drawItemIcon(ctx, x, y, size, itemId) {
     ctx.moveTo(cx, cy - s * 0.45);
     ctx.lineTo(cx + s * 0.1, cy - s * 0.7);
     ctx.stroke();
+  } else if (itemId === ITEM.SCRAP) {
+    // Scrap: jagged metal piece
+    ctx.fillStyle = '#999';
+    ctx.beginPath();
+    ctx.moveTo(cx - s * 0.4, cy - s * 0.2);
+    ctx.lineTo(cx - s * 0.1, cy - s * 0.5);
+    ctx.lineTo(cx + s * 0.3, cy - s * 0.3);
+    ctx.lineTo(cx + s * 0.5, cy + s * 0.1);
+    ctx.lineTo(cx + s * 0.1, cy + s * 0.5);
+    ctx.lineTo(cx - s * 0.3, cy + s * 0.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
   } else {
     // Fallback: colored square
     ctx.fillStyle = '#888';

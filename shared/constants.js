@@ -85,6 +85,7 @@ export const ITEM = {
   METAL_PIPE: 74,
   SPRING: 75,
   SMALL_STASH: 76,
+  SCRAP: 77,
   // Armor
   LEATHER_HEAD: 90,
   LEATHER_CHEST: 91,
@@ -160,6 +161,7 @@ export const ITEM_DEFS = {
   [ITEM.METAL_PIPE]: { name: 'Metal Pipe', maxStack: 5, cat: 'resource' },
   [ITEM.SPRING]: { name: 'Spring', maxStack: 5, cat: 'resource' },
   [ITEM.SMALL_STASH]: { name: 'Small Stash', maxStack: 5, cat: 'resource' },
+  [ITEM.SCRAP]: { name: 'Scrap', maxStack: 1000, cat: 'resource' },
   // Explosives
   [ITEM.SATCHEL_CHARGE]: { name: 'Satchel Charge', maxStack: 10, cat: 'explosive', structDamage: 200 },
   [ITEM.C4]: { name: 'C4', maxStack: 10, cat: 'explosive', structDamage: 500 },
@@ -232,6 +234,7 @@ export const BIOME = {
   SNOW: 4,
   MOUNTAIN: 5,
   WATER: 6,
+  ROAD: 7,
 };
 
 export const BIOME_TEMP_MOD = {
@@ -242,6 +245,7 @@ export const BIOME_TEMP_MOD = {
   [BIOME.SNOW]: -20,
   [BIOME.MOUNTAIN]: -10,
   [BIOME.WATER]: 0,
+  [BIOME.ROAD]: 0,
 };
 
 // ── Structure Types ──
@@ -371,3 +375,6 @@ export function getArmorReduction(headSlot, chestSlot, legsSlot) {
 
 // Water speed multiplier
 export const WATER_SPEED_MULT = 0.5;
+
+// Road speed multiplier (20% faster)
+export const ROAD_SPEED_MULT = 1.2;

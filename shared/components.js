@@ -35,7 +35,7 @@ export const SleepingBag = { ownerPlayerId: [], cooldown: [] };
 
 // ── World / Resources ──
 export const ResourceNode = { resourceType: [], remaining: [], maxAmount: [], respawnTimer: [] };
-export const Animal = { animalType: [], aiState: [], aggroRange: [], wanderTargetX: [], wanderTargetY: [], targetEid: [] };
+export const Animal = { animalType: [], aiState: [], aggroRange: [], wanderTargetX: [], wanderTargetY: [], targetEid: [], idleUntil: [], wanderAngle: [], homeX: [], homeY: [] };
 export const Campfire = { fuelRemaining: [], cookSlot0: [], cookSlot1: [], cookProgress0: [], cookProgress1: [] };
 export const Workbench = { tier: [] };
 export const Furnace = { fuelRemaining: [], inputItem: [], inputCount: [], outputItem: [], outputCount: [], smeltProgress: [] };

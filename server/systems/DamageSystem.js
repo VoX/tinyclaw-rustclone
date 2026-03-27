@@ -145,6 +145,37 @@ export function createDamageSystem(gameState) {
         });
       } else {
         // Non-player entity died: remove it
+        const deathX = Position.x[eid];
+        const deathY = Position.y[eid];
+
+        // Barrel loot drops
+        if (gameState.barrelLoot && gameState.barrelLoot.has(eid)) {
+          const loot = gameState.barrelLoot.get(eid);
+          for (const [itemId, count] of loot) {
+            const dropEid = addEntity(world);
+            addComponent(world, dropEid, Position);
+            addComponent(world, dropEid, WorldItem);
+            addComponent(world, dropEid, Collider);
+            addComponent(world, dropEid, Sprite);
+            addComponent(world, dropEid, NetworkSync);
+
+            Position.x[dropEid] = deathX + (Math.random() - 0.5) * 2;
+            Position.y[dropEid] = deathY + (Math.random() - 0.5) * 2;
+            WorldItem.itemId[dropEid] = itemId;
+            WorldItem.quantity[dropEid] = count;
+            WorldItem.despawnTimer[dropEid] = ITEM_DESPAWN_TICKS;
+            Collider.radius[dropEid] = 0.3;
+            Sprite.spriteId[dropEid] = itemId;
+            NetworkSync.lastTick[dropEid] = gameState.tick;
+            gameState.entityTypes.set(dropEid, ENTITY_TYPE.WORLD_ITEM);
+            gameState.newEntities.add(dropEid);
+          }
+          gameState.barrelLoot.delete(eid);
+
+          // Visual break event
+          gameState.events.push({ type: 'hit', x: deathX, y: deathY });
+        }
+
         gameState.removedEntities.add(eid);
         gameState.entityTypes.delete(eid);
         // Clean up associated data (storage box inventory, TC auth, door auth)

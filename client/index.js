@@ -1,6 +1,6 @@
 import { MSG, KEY, MOUSE_ACTION, INV_ACTION, ENTITY_TYPE } from '../shared/protocol.js';
 import { ITEM, ITEM_DEFS, RECIPES, CRAFT_TIER, BIOME, TILE_SIZE, WORLD_SIZE,
-         INVENTORY_SLOTS, HOTBAR_SLOTS, STRUCT_TYPE, WATER_SPEED_MULT } from '../shared/constants.js';
+         INVENTORY_SLOTS, HOTBAR_SLOTS, STRUCT_TYPE, WATER_SPEED_MULT, ROAD_SPEED_MULT } from '../shared/constants.js';
 import { createRenderer } from './renderer.js';
 import { createInput } from './input.js';
 import { createUI } from './ui/index.js';
@@ -349,8 +349,11 @@ function clientLoop(timestamp) {
       const tx = Math.floor(me.x / state.tileSize);
       const ty = Math.floor(me.y / state.tileSize);
       if (tx >= 0 && tx < state.worldSize && ty >= 0 && ty < state.worldSize) {
-        if (state.biomeMap[ty * state.worldSize + tx] === BIOME.WATER) {
+        const currentBiome = state.biomeMap[ty * state.worldSize + tx];
+        if (currentBiome === BIOME.WATER) {
           speed *= WATER_SPEED_MULT;
+        } else if (currentBiome === BIOME.ROAD) {
+          speed *= ROAD_SPEED_MULT;
         }
       }
     }

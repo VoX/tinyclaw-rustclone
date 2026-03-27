@@ -137,7 +137,8 @@ export function createInteractSystem(gameState) {
       if (hasComponent(world, targetEid, ResearchTable)) {
         client.interactRequest = null;
         // Find researchable items in player inventory
-        const learnedRecipes = gameState.learnedRecipes?.get(eid) || new Set();
+        const playerUuid = gameState.eidToUuid?.get(eid);
+        const learnedRecipes = (playerUuid && gameState.learnedRecipesByUuid?.get(playerUuid)) || new Set();
         const researchable = [];
         for (let s = 0; s < INVENTORY_SLOTS; s++) {
           const itemId = Inventory.items[eid][s];
@@ -409,10 +410,12 @@ export function createInteractSystem(gameState) {
       }
       if (scrapCount < RESEARCH_SCRAP_COST) continue;
 
-      // Check not already learned
-      if (!gameState.learnedRecipes) gameState.learnedRecipes = new Map();
-      if (!gameState.learnedRecipes.has(eid)) gameState.learnedRecipes.set(eid, new Set());
-      const learned = gameState.learnedRecipes.get(eid);
+      // Check not already learned (UUID-keyed for persistence across reconnects)
+      if (!gameState.learnedRecipesByUuid) gameState.learnedRecipesByUuid = new Map();
+      const researchUuid = gameState.eidToUuid?.get(eid);
+      if (!researchUuid) continue; // need UUID to track learned recipes
+      if (!gameState.learnedRecipesByUuid.has(researchUuid)) gameState.learnedRecipesByUuid.set(researchUuid, new Set());
+      const learned = gameState.learnedRecipesByUuid.get(researchUuid);
       if (learned.has(recipeId)) continue;
 
       // Consume the item

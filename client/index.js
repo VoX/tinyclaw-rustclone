@@ -700,11 +700,14 @@ function clientLoop(timestamp) {
   }
 
   // Interpolate remote entities (local player sets renderX/Y directly above)
+  // Scale interpolation factor by dt to be frame-rate independent (target: 16.67ms = 60fps)
+  const dtScale = Math.min(dt / 16.67, 3); // clamp to avoid overshoot on lag spikes
+  const interpFactor = 1 - Math.pow(1 - INTERP_FACTOR, dtScale);
   for (const [eid, e] of state.entities) {
     if (eid === state.myEid) continue;
     if (e.prevX !== undefined) {
-      e.renderX = (e.renderX || e.prevX) + (e.x - (e.renderX || e.prevX)) * INTERP_FACTOR;
-      e.renderY = (e.renderY || e.prevY) + (e.y - (e.renderY || e.prevY)) * INTERP_FACTOR;
+      e.renderX = (e.renderX || e.prevX) + (e.x - (e.renderX || e.prevX)) * interpFactor;
+      e.renderY = (e.renderY || e.prevY) + (e.y - (e.renderY || e.prevY)) * interpFactor;
     } else {
       e.renderX = e.x;
       e.renderY = e.y;

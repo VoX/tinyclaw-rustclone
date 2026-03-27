@@ -197,9 +197,11 @@ export function createRenderer(canvas, state) {
       targetY = me.renderY !== undefined ? me.renderY : me.y;
     }
 
-    // Smooth camera
-    camX += (targetX - camX) * CAM_SMOOTH;
-    camY += (targetY - camY) * CAM_SMOOTH;
+    // Smooth camera (frame-rate independent)
+    const camDtScale = Math.min(dt / 16.67, 3);
+    const camFactor = 1 - Math.pow(1 - CAM_SMOOTH, camDtScale);
+    camX += (targetX - camX) * camFactor;
+    camY += (targetY - camY) * camFactor;
 
     // Screen shake
     if (state.screenShakeAmount > 0) {

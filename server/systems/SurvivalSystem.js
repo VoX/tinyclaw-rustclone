@@ -1,6 +1,6 @@
 import { query, hasComponent } from 'bitecs';
-import { Player, Health, Hunger, Thirst, Temperature, Dead, Sleeper, Position, Armor } from '../../shared/components.js';
-import { SERVER_TPS, BIOME_TEMP_MOD, BIOME, WEATHER, RADIATION_DAMAGE_RATE, ITEM_DEFS } from '../../shared/constants.js';
+import { Player, Health, Hunger, Thirst, Temperature, Dead, Sleeper, Position, Armor, Inventory, Hotbar } from '../../shared/components.js';
+import { SERVER_TPS, BIOME_TEMP_MOD, BIOME, WEATHER, RADIATION_DAMAGE_RATE, ITEM_DEFS, ITEM, INVENTORY_SLOTS } from '../../shared/constants.js';
 
 export function createSurvivalSystem(gameState) {
   // Rates per tick
@@ -134,6 +134,37 @@ export function createSurvivalSystem(gameState) {
 
       // Restore thirst by 30
       Thirst.current[eid] = Math.min(100, Thirst.current[eid] + 30);
+      gameState.dirtyInventories.add(eid);
+    }
+
+    // Handle bandage use requests
+    for (const [connId, client] of gameState.clients) {
+      if (!client.useBandageRequest) continue;
+      client.useBandageRequest = null;
+
+      const eid = client.playerEid;
+      if (!eid || hasComponent(world, eid, Dead)) continue;
+
+      // Already at full HP — no need
+      if (Health.current[eid] >= Health.max[eid]) continue;
+
+      // Find a bandage in inventory and consume it
+      let bandageSlot = -1;
+      for (let s = 0; s < INVENTORY_SLOTS; s++) {
+        if (Inventory.items[eid][s] === ITEM.BANDAGE && Inventory.counts[eid][s] > 0) {
+          bandageSlot = s;
+          break;
+        }
+      }
+      if (bandageSlot < 0) continue;
+
+      // Consume one bandage
+      Inventory.counts[eid][bandageSlot]--;
+      if (Inventory.counts[eid][bandageSlot] === 0) Inventory.items[eid][bandageSlot] = 0;
+
+      // Heal 15 HP
+      const healAmount = ITEM_DEFS[ITEM.BANDAGE]?.healAmount || 15;
+      Health.current[eid] = Math.min(Health.max[eid], Health.current[eid] + healAmount);
       gameState.dirtyInventories.add(eid);
     }
 

@@ -23,7 +23,6 @@ export function createNetworkSyncSystem(gameState) {
 
   return function NetworkSyncSystem(world) {
     const tick = gameState.tick;
-    const entities = query(world, [Position, NetworkSync]);
     const interestDist = INTEREST_RADIUS * TILE_SIZE;
 
     // Build per-client delta updates
@@ -48,23 +47,16 @@ export function createNetworkSyncSystem(gameState) {
       const delta = [];
       const removals = [];
 
-      // Use spatial hash for interest management if available
+      // Use spatial hash to get only nearby entities instead of iterating all
       const nearbyEids = gameState.spatialHash
         ? gameState.spatialHash.query(px, py, interestDist)
-        : null;
-      const eidSet = nearbyEids ? new Set(nearbyEids) : null;
+        : query(world, [Position, NetworkSync]);
 
-      for (let i = 0; i < entities.length; i++) {
-        const eid = entities[i];
+      for (let i = 0; i < nearbyEids.length; i++) {
+        const eid = nearbyEids[i];
 
-        // Interest check via spatial hash or distance
-        if (eidSet) {
-          if (!eidSet.has(eid)) continue;
-        } else {
-          const dx = Position.x[eid] - px;
-          const dy = Position.y[eid] - py;
-          if (dx * dx + dy * dy > interestDist * interestDist) continue;
-        }
+        // Skip entities without required components (spatial hash may include non-NetworkSync entities)
+        if (!hasComponent(world, eid, NetworkSync)) continue;
 
         const entityType = gameState.entityTypes.get(eid) || 0;
         const isNew = gameState.newEntities.has(eid);

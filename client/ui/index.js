@@ -1,6 +1,12 @@
 import { ITEM, ITEM_DEFS, RECIPES, CRAFT_TIER, HOTBAR_SLOTS, INVENTORY_SLOTS, STRUCT_TYPE, TILE_SIZE } from '../../shared/constants.js';
 import { MSG, INV_ACTION, ENTITY_TYPE } from '../../shared/protocol.js';
 
+// Sanitize user-provided strings before inserting into DOM via innerHTML
+function sanitizeHTML(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // ── Image-based item icons ──
 const itemIconImages = new Map(); // itemId -> Image (loaded)
 const itemIconLoading = new Set(); // itemIds currently loading
@@ -276,19 +282,19 @@ export function createUI(state, send) {
     if (!itemId || itemId === 0) { tooltip.style.display = 'none'; return; }
     const def = ITEM_DEFS[itemId];
     if (!def) { tooltip.style.display = 'none'; return; }
-    let text = `<b style="color:#e8c030">${def.name}</b>`;
+    let text = `<b style="color:#e8c030">${sanitizeHTML(def.name)}</b>`;
     if (def.damage) text += `\nDamage: ${def.damage}`;
     if (def.fireRate) text += `\nFire Rate: ${def.fireRate}/s`;
     if (def.range) text += `\nRange: ${def.range}`;
     if (def.gatherMult) text += `\nGather: ${def.gatherMult}x`;
     if (def.maxStack > 1) text += `\nStack: ${count}/${def.maxStack}`;
-    if (def.cat) text += `\nType: ${def.cat}`;
+    if (def.cat) text += `\nType: ${sanitizeHTML(def.cat)}`;
     const recipe = RECIPES.find(r => r.result === itemId);
     if (recipe) {
       text += '\n\n<span style="color:#888">Recipe:</span>';
       for (const [ingId, ingN] of recipe.ing) {
         const ingDef = ITEM_DEFS[ingId];
-        text += `\n  ${ingDef?.name || '?'} x${ingN}`;
+        text += `\n  ${sanitizeHTML(ingDef?.name || '?')} x${ingN}`;
       }
     }
     tooltip.innerHTML = text;
@@ -640,7 +646,7 @@ export function createUI(state, send) {
       let ingText = recipe.ing.map(([id, n]) => {
         const have = invCounts[id] || 0;
         const color = have >= n ? '#8a8' : '#a44';
-        return `<span style="color:${color}">${ITEM_DEFS[id]?.name || '?'} ${have}/${n}</span>`;
+        return `<span style="color:${color}">${sanitizeHTML(ITEM_DEFS[id]?.name || '?')} ${have}/${n}</span>`;
       }).join(', ');
 
       // Icon + info container
@@ -658,7 +664,7 @@ export function createUI(state, send) {
 
       const info = document.createElement('div');
       info.innerHTML = `
-        <div class="craft-name">${resultDef?.name || '?'} x${recipe.count}${tierLabel}</div>
+        <div class="craft-name">${sanitizeHTML(resultDef?.name || '?')} x${recipe.count}${tierLabel}</div>
         <div class="craft-cost">${ingText}</div>
       `;
       row.appendChild(info);
@@ -737,11 +743,17 @@ export function createUI(state, send) {
     const canvas = e.target;
     const cx = canvas.width / 2;
     const cy = canvas.height / 2;
-    const viewScale = 24;
+    const viewScale = 24 * (state.adsZoom || 1.0) * (state.deathZoom || 1.0);
     const tileSize = state.tileSize;
 
     const worldX = me.x + (e.clientX - cx) * tileSize / viewScale;
     const worldY = me.y + (e.clientY - cy) * tileSize / viewScale;
+
+    // Bandage use: consume bandage and heal
+    if (held === ITEM.BANDAGE) {
+      send({ type: MSG.USE_BANDAGE });
+      return;
+    }
 
     // Hammer upgrade: find nearest structure to click point
     if (held === ITEM.HAMMER) {
@@ -791,7 +803,7 @@ export function createUI(state, send) {
     const canvas = e.target;
     const cx = canvas.width / 2;
     const cy = canvas.height / 2;
-    const viewScale = 24;
+    const viewScale = 24 * (state.adsZoom || 1.0) * (state.deathZoom || 1.0);
     const tileSize = state.tileSize;
     const worldX = me.x + (e.clientX - cx) * tileSize / viewScale;
     const worldY = me.y + (e.clientY - cy) * tileSize / viewScale;
@@ -1033,7 +1045,7 @@ export function createUI(state, send) {
         const remaining = Math.max(0, Math.ceil((state.respawnTime - elapsed) / 1000));
         const timerText = remaining > 0 ? `<br><span style="color:#ff8;font-size:18px;">Respawn in ${remaining}s</span>` : '';
         const resText = info.resourcesGathered > 0 ? `<br>Resources gathered: <span style="color:#8d8">${info.resourcesGathered}</span>` : '';
-        deathStats.innerHTML = `Killed by <span style="color:#e44">${info.killerName}</span><br>Survived: ${timeStr}${resText}${timerText}`;
+        deathStats.innerHTML = `Killed by <span style="color:#e44">${sanitizeHTML(info.killerName)}</span><br>Survived: ${timeStr}${resText}${timerText}`;
       }
       // Respawn button enable/disable
       const canRespawn = Date.now() - (state.deathTime || 0) >= state.respawnTime;
@@ -1289,7 +1301,7 @@ export function createUI(state, send) {
 
       const left = document.createElement('div');
       left.style.cssText = 'font-size:11px;color:#ccc;flex:1;';
-      left.innerHTML = `<b>${item.itemName}</b> x${item.count}<br><span style="font-size:9px;color:#8a8">→ ${item.yields.map(y => `${y.count}x ${y.itemName}`).join(', ')}</span>`;
+      left.innerHTML = `<b>${sanitizeHTML(item.itemName)}</b> x${item.count}<br><span style="font-size:9px;color:#8a8">→ ${item.yields.map(y => `${y.count}x ${sanitizeHTML(y.itemName)}`).join(', ')}</span>`;
       row.appendChild(left);
 
       // Tooltip on row

@@ -36,6 +36,7 @@ export function saveWorld(world, gameState) {
     resourceDepletion: [],
     players: {},  // UUID -> player data
     sleepers: [],  // offline player bodies in the world
+    learnedRecipes: {},  // UUID -> [recipeId, ...]
   };
 
   // ── Save player data keyed by UUID ──
@@ -182,6 +183,7 @@ export function saveWorld(world, gameState) {
       owner: SleepingBag.ownerPlayerId[eid],
       ownerUuid,
       cooldown: SleepingBag.cooldown[eid],
+      placedTick: SleepingBag.placedTick[eid] || 0,
       isBed: entityType === ENTITY_TYPE.BED,
       spriteId: Sprite.spriteId[eid],
     });
@@ -237,6 +239,13 @@ export function saveWorld(world, gameState) {
       if (uuid) uuids.push(uuid);
     }
     data.doorAuth[key] = uuids;
+  }
+
+  // Save learned recipes by UUID
+  if (gameState.learnedRecipesByUuid) {
+    for (const [uuid, recipes] of gameState.learnedRecipesByUuid) {
+      data.learnedRecipes[uuid] = [...recipes];
+    }
   }
 
   // Save depleted resource nodes
@@ -372,7 +381,7 @@ export function loadWorld(world, gameState) {
         Collider.radius[eid] = 0;
         Collider.isStatic[eid] = 0;
       } else {
-        Collider.radius[eid] = 0.9;
+        Collider.radius[eid] = 2.0;
         Collider.isStatic[eid] = 1;
       }
       Sprite.spriteId[eid] = 200 + s.type;
@@ -500,6 +509,7 @@ export function loadWorld(world, gameState) {
       Position.y[eid] = bag.y;
       SleepingBag.ownerPlayerId[eid] = bag.owner;
       SleepingBag.cooldown[eid] = bag.cooldown || 0;
+      SleepingBag.placedTick[eid] = bag.placedTick || 0;
       Collider.radius[eid] = bag.isBed ? 0.5 : 0.4;
       Sprite.spriteId[eid] = bag.spriteId || (bag.isBed ? 216 : 210);
       NetworkSync.lastTick[eid] = 0;
@@ -590,6 +600,14 @@ export function loadWorld(world, gameState) {
         } else {
           gameState.doorAuth.set(eid, new Set(uuids));
         }
+      }
+    }
+
+    // Restore learned recipes by UUID
+    if (data.learnedRecipes) {
+      if (!gameState.learnedRecipesByUuid) gameState.learnedRecipesByUuid = new Map();
+      for (const [uuid, recipes] of Object.entries(data.learnedRecipes)) {
+        gameState.learnedRecipesByUuid.set(uuid, new Set(recipes));
       }
     }
 

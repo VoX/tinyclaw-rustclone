@@ -338,6 +338,7 @@ wss.on('connection', (ws, req) => {
     chatMessage: null,
     hammerUpgradeRequest: null,
     drinkWaterRequest: null,
+    useBandageRequest: null,
     reloadRequest: false,
     spawnTick: gameState.tick,
     spawnProtectionUntil: restored ? gameState.tick : gameState.tick + 10 * SERVER_TPS,
@@ -510,7 +511,13 @@ function handleClientMessage(connId, msg) {
       break;
 
     case MSG.DRINK_WATER:
+      if (!checkRateLimit(client)) break;
       client.drinkWaterRequest = true;
+      break;
+
+    case MSG.USE_BANDAGE:
+      if (!checkRateLimit(client)) break;
+      client.useBandageRequest = true;
       break;
 
     case MSG.RELOAD:
@@ -576,13 +583,41 @@ function gameLoop() {
     const tickStart = performance.now();
 
     try {
-      // Rebuild spatial hash
+      // Update spatial hash incrementally — only move entities that changed position
       const sh = gameState.spatialHash;
-      sh.clear();
+      if (!gameState._shPrevX) {
+        gameState._shPrevX = new Map();
+        gameState._shPrevY = new Map();
+      }
+      const prevXMap = gameState._shPrevX;
+      const prevYMap = gameState._shPrevY;
       const allPositioned = query(world, [Position]);
+      const positionedSet = new Set();
       for (let i = 0; i < allPositioned.length; i++) {
         const eid = allPositioned[i];
-        sh.insert(eid, Position.x[eid], Position.y[eid]);
+        positionedSet.add(eid);
+        const x = Position.x[eid];
+        const y = Position.y[eid];
+        const px = prevXMap.get(eid);
+        const py = prevYMap.get(eid);
+        if (px === undefined) {
+          // New entity — insert
+          sh.insert(eid, x, y);
+        } else {
+          const dx = x - px;
+          const dy = y - py;
+          if (dx * dx + dy * dy > 0.0025) { // > 0.05 movement threshold
+            sh.update(eid, x, y);
+          }
+        }
+        prevXMap.set(eid, x);
+        prevYMap.set(eid, y);
+      }
+      // Remove entities no longer in the world
+      for (const eid of gameState.removedEntities) {
+        sh.remove(eid);
+        prevXMap.delete(eid);
+        prevYMap.delete(eid);
       }
 
       // Run all systems

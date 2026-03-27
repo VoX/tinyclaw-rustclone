@@ -22,12 +22,6 @@ const CHUNK_SIZE = 64;
 export function createTerrainRenderer(state) {
   let biomeChunks = new Map();
   let decoChunks = new Map();
-  // Cache the last rendered frame as an offscreen canvas to avoid redraw when camera hasn't moved
-  let cachedTerrainCanvas = null;
-  let cachedTerrainCamX = null;
-  let cachedTerrainCamY = null;
-  let cachedTerrainW = 0;
-  let cachedTerrainH = 0;
   const CAM_MOVE_THRESHOLD = 0.5; // tiles of camera movement before redraw
 
   function renderBiomeChunk(chunkX, chunkY) {

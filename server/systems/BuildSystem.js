@@ -212,6 +212,7 @@ export function createBuildSystem(gameState) {
         addComponent(world, newEid, SleepingBag);
         SleepingBag.ownerPlayerId[newEid] = eid;
         SleepingBag.cooldown[newEid] = 0;
+        SleepingBag.placedTick[newEid] = gameState.tick;
         Collider.radius[newEid] = 0.4;
         Sprite.spriteId[newEid] = 210;
         // Track UUID ownership for persistence
@@ -226,9 +227,10 @@ export function createBuildSystem(gameState) {
             playerBags.push(bagEid);
           }
         }
-        // Also count beds (entity type BED uses SleepingBag component)
+        // Sort by placedTick ascending so oldest is first
+        playerBags.sort((a, b) => (SleepingBag.placedTick[a] || 0) - (SleepingBag.placedTick[b] || 0));
         while (playerBags.length > MAX_SLEEPING_BAGS) {
-          // Remove oldest (lowest eid = placed first)
+          // Remove oldest (lowest placedTick)
           const oldest = playerBags.shift();
           if (oldest === newEid) continue; // don't remove the one we just placed
           gameState.removedEntities.add(oldest);
@@ -282,6 +284,7 @@ export function createBuildSystem(gameState) {
         addComponent(world, newEid, SleepingBag);
         SleepingBag.ownerPlayerId[newEid] = eid;
         SleepingBag.cooldown[newEid] = 0;
+        SleepingBag.placedTick[newEid] = gameState.tick;
         Collider.radius[newEid] = 0.5;
         Sprite.spriteId[newEid] = 216; // bed sprite (different from sleeping bag 210)
         // Track UUID ownership for persistence

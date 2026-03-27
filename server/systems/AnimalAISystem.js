@@ -89,6 +89,19 @@ export function createAnimalAISystem(gameState) {
 
       const curState = Animal.aiState[eid];
 
+      // Clear stale target: if the target entity no longer exists, reset to IDLE
+      if ((curState === AI_STATE.CHASE || curState === AI_STATE.FLEE) && Animal.targetEid[eid] >= 0) {
+        const targetEid = Animal.targetEid[eid];
+        if (!hasComponent(world, targetEid, Position)) {
+          Animal.aiState[eid] = AI_STATE.IDLE;
+          Animal.targetEid[eid] = -1;
+          Animal.idleUntil[eid] = gameState.tick + Math.floor((1 + Math.random() * 2) * SERVER_TPS);
+          Velocity.vx[eid] = 0;
+          Velocity.vy[eid] = 0;
+          continue;
+        }
+      }
+
       // ── State transitions ──
 
       if (def.behavior === 'flee') {

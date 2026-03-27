@@ -200,7 +200,9 @@ export function createCombatSystem(gameState) {
             type: 'hit',
             x: Position.x[targetEid],
             y: Position.y[targetEid],
-            damage: def.damage,
+            damage: dmg,
+            sourceEid: eid,
+            material: 'flesh',
           });
 
           // Reduce weapon durability

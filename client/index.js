@@ -60,8 +60,9 @@ const state = {
   entityCount: 0,
   // Chat bubbles (above player heads)
   chatBubbles: new Map(),  // eid -> { text, expiry }
-  // Tutorial hint
-  tutorialExpiry: 0,       // timestamp when tutorial hint disappears
+  // Tutorial progression
+  tutorialStep: 0,         // 0=inactive, 1=gather wood, 2=craft hatchet, 3=ready
+  tutorialStepTime: 0,     // timestamp when current step appeared
   // Clip/ammo HUD
   clipAmmo: 0,
   clipMax: 0,
@@ -107,6 +108,13 @@ const state = {
   // ADS (aim down sights)
   ads: false,
   adsZoom: 1.0, // smooth interpolation target, 1.0 = normal, 1.2 = zoomed
+  // Melee combat effects
+  meleeSwingTime: 0, // timestamp when swing started (0 = no swing)
+  screenShakeAmount: 0, // pixels of screen shake remaining
+  damageNumbers: [], // [{ x, y, text, time, color }]
+  // Death camera
+  deathZoom: 1.0, // smoothly interpolates on death/respawn
+  deathDesaturation: 0, // 0-1 greyscale amount
 };
 
 // Initialize inventory slots
@@ -531,6 +539,28 @@ function clientLoop(timestamp) {
     state.damageFlashAlpha = Math.max(0, state.damageFlashAlpha - dt * 0.003);
   }
 
+  // Tutorial progression check
+  if (state.tutorialStep === 1) {
+    // Step 1: "Hit a tree to gather wood" — check if player has wood
+    const hasWood = state.inventory.some(s => s.id === ITEM.WOOD && s.n > 0);
+    if (hasWood) {
+      state.tutorialStep = 2;
+      state.tutorialStepTime = Date.now();
+    }
+  } else if (state.tutorialStep === 2) {
+    // Step 2: "Craft a Stone Hatchet" — check if player has one
+    const hasHatchet = state.inventory.some(s => s.id === ITEM.STONE_HATCHET && s.n > 0);
+    if (hasHatchet) {
+      state.tutorialStep = 3;
+      state.tutorialStepTime = Date.now();
+    }
+  } else if (state.tutorialStep === 3) {
+    // Step 3: "You're ready to survive!" — disappear after 5s
+    if (Date.now() - state.tutorialStepTime > 5000) {
+      state.tutorialStep = 0;
+    }
+  }
+
   // Clean expired chat bubbles and old notifications
   const now = Date.now();
   for (const [eid, bubble] of state.chatBubbles) {
@@ -593,6 +623,19 @@ function clientLoop(timestamp) {
     if (dx !== 0 && dy !== 0) {
       dx *= 0.7071;
       dy *= 0.7071;
+    }
+
+    // Melee lunge: small forward movement toward cursor on swing
+    if (state.meleeSwingTime > 0) {
+      const swingElapsed = now - state.meleeSwingTime;
+      if (swingElapsed < 150) {
+        const lungeAngle = input.getMouseAngle();
+        const lungeSpeed = 0.5 * (1 - swingElapsed / 150); // 0.5 units over 150ms
+        me.x += Math.cos(lungeAngle) * lungeSpeed * (dt / 1000) * 40;
+        me.y += Math.sin(lungeAngle) * lungeSpeed * (dt / 1000) * 40;
+      } else {
+        state.meleeSwingTime = 0;
+      }
     }
 
     // Move locally — this IS the player's position, no prediction needed
@@ -667,6 +710,12 @@ function clientLoop(timestamp) {
   // Smooth ADS zoom transition
   const adsTarget = state.ads ? 1.2 : 1.0;
   state.adsZoom += (adsTarget - state.adsZoom) * Math.min(1, dt * 0.008);
+
+  // Death camera: zoom out and desaturate on death, zoom back on respawn
+  const deathZoomTarget = state.isDead ? 0.6 : 1.0;
+  const deathDesatTarget = state.isDead ? 0.8 : 0;
+  state.deathZoom += (deathZoomTarget - state.deathZoom) * Math.min(1, dt * 0.003);
+  state.deathDesaturation += (deathDesatTarget - state.deathDesaturation) * Math.min(1, dt * 0.004);
 
   // Render
   renderer.render(dt);

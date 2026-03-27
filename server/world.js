@@ -128,7 +128,7 @@ export function generateWorld(world, gameState, seed = 42) {
   };
 
   // Scatter resource nodes (skip road tiles)
-  const nodeSpacing = 8;
+  const nodeSpacing = 12;
   for (let y = 0; y < WORLD_SIZE; y += nodeSpacing) {
     for (let x = 0; x < WORLD_SIZE; x += nodeSpacing) {
       const biome = biomeMap[y * WORLD_SIZE + x];

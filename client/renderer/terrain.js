@@ -322,19 +322,49 @@ export function createTerrainRenderer(state) {
           dctx.globalAlpha = 1;
         } else if (biome === BIOME.FOREST) {
           const s2 = s / 24;
-          dctx.fillStyle = '#a03020';
-          dctx.globalAlpha = 0.6;
-          dctx.beginPath();
-          dctx.arc(sx, sy - 1.5 * s2, 2.5 * s2, Math.PI, 0);
-          dctx.fill();
-          dctx.fillStyle = '#ddc';
-          dctx.fillRect(sx - 0.8 * s2, sy - 1.5 * s2, 1.6 * s2, 2.5 * s2);
-          dctx.fillStyle = '#fff';
-          dctx.globalAlpha = 0.4;
-          dctx.beginPath();
-          dctx.arc(sx - 0.5 * s2, sy - 2 * s2, 0.5 * s2, 0, Math.PI * 2);
-          dctx.fill();
-          dctx.globalAlpha = 1;
+          const logSeed = seededRand(tx, ty, 3456);
+          if (logSeed < 0.3) {
+            // Fallen log: horizontal trunk with bark detail
+            const logAngle = r2 * Math.PI;
+            dctx.save();
+            dctx.translate(sx, sy);
+            dctx.rotate(logAngle);
+            dctx.globalAlpha = 0.65;
+            // Trunk
+            dctx.fillStyle = '#5a3a1a';
+            dctx.fillRect(-5 * s2, -1 * s2, 10 * s2, 2 * s2);
+            // Bark detail
+            dctx.fillStyle = '#4a2a10';
+            dctx.fillRect(-4 * s2, -1 * s2, 1 * s2, 2 * s2);
+            dctx.fillRect(-1 * s2, -1 * s2, 1 * s2, 2 * s2);
+            dctx.fillRect(2 * s2, -1 * s2, 1 * s2, 2 * s2);
+            // Cross-section circle at one end
+            dctx.fillStyle = '#8a6a3a';
+            dctx.beginPath();
+            dctx.arc(5 * s2, 0, 1.2 * s2, 0, Math.PI * 2);
+            dctx.fill();
+            // Moss patches
+            dctx.fillStyle = '#3a6a2a';
+            dctx.globalAlpha = 0.4;
+            dctx.fillRect(-3 * s2, -1.2 * s2, 2 * s2, 0.8 * s2);
+            dctx.restore();
+            dctx.globalAlpha = 1;
+          } else {
+            // Regular mushroom decoration
+            dctx.fillStyle = '#a03020';
+            dctx.globalAlpha = 0.6;
+            dctx.beginPath();
+            dctx.arc(sx, sy - 1.5 * s2, 2.5 * s2, Math.PI, 0);
+            dctx.fill();
+            dctx.fillStyle = '#ddc';
+            dctx.fillRect(sx - 0.8 * s2, sy - 1.5 * s2, 1.6 * s2, 2.5 * s2);
+            dctx.fillStyle = '#fff';
+            dctx.globalAlpha = 0.4;
+            dctx.beginPath();
+            dctx.arc(sx - 0.5 * s2, sy - 2 * s2, 0.5 * s2, 0, Math.PI * 2);
+            dctx.fill();
+            dctx.globalAlpha = 1;
+          }
         } else if (biome === BIOME.DESERT) {
           const s2 = s / 24;
           dctx.fillStyle = '#3a7a2a';
@@ -345,9 +375,67 @@ export function createTerrainRenderer(state) {
           dctx.fillRect(sx + 1 * s2, sy - 2 * s2, 2 * s2, 1.2 * s2);
           dctx.fillRect(sx + 1.8 * s2, sy - 2 * s2, 1.2 * s2, 2 * s2);
           dctx.globalAlpha = 1;
-        } else if (biome === BIOME.MOUNTAIN || biome === BIOME.BEACH || biome === BIOME.SNOW) {
+        } else if (biome === BIOME.MOUNTAIN) {
           const s2 = s / 24;
-          dctx.fillStyle = biome === BIOME.SNOW ? '#bbc' : (biome === BIOME.BEACH ? '#c8b888' : '#666');
+          // Ruins/rubble: broken wall segments and scattered stones
+          const ruinSeed = seededRand(tx, ty, 1234);
+          if (ruinSeed < 0.35) {
+            // Rubble pile: scattered stone blocks
+            dctx.fillStyle = '#555';
+            dctx.globalAlpha = 0.6;
+            dctx.fillRect(sx - 2.5 * s2, sy - 1 * s2, 2 * s2, 1.5 * s2);
+            dctx.fillRect(sx + 0.5 * s2, sy - 0.5 * s2, 1.5 * s2, 1 * s2);
+            dctx.fillStyle = '#6a6a6a';
+            dctx.fillRect(sx - 1 * s2, sy - 2 * s2, 3 * s2, 2 * s2);
+            // Broken wall segment
+            dctx.fillStyle = '#777';
+            dctx.fillRect(sx - 3 * s2, sy - 3 * s2, 1.5 * s2, 4 * s2);
+            dctx.globalAlpha = 0.3;
+            dctx.fillStyle = '#444';
+            dctx.fillRect(sx - 3 * s2, sy + 0.5 * s2, 5 * s2, 0.5 * s2);
+            dctx.globalAlpha = 1;
+          } else {
+            // Regular rock decoration
+            dctx.fillStyle = '#666';
+            dctx.globalAlpha = 0.5;
+            dctx.beginPath();
+            dctx.ellipse(sx, sy, 2 * s2, 1.2 * s2, r2 * Math.PI, 0, Math.PI * 2);
+            dctx.fill();
+            dctx.globalAlpha = 1;
+          }
+        } else if (biome === BIOME.BEACH) {
+          const s2 = s / 24;
+          // Occasional grass patches near shore for smoother transition
+          const grassSeed = seededRand(tx, ty, 2345);
+          if (grassSeed < 0.4) {
+            dctx.fillStyle = '#7aaa4a';
+            dctx.globalAlpha = 0.4;
+            dctx.beginPath();
+            dctx.ellipse(sx, sy, 2.5 * s2, 1.5 * s2, r2 * Math.PI, 0, Math.PI * 2);
+            dctx.fill();
+            // Small grass blades
+            dctx.strokeStyle = '#6a9a3a';
+            dctx.lineWidth = 0.4;
+            for (let g = 0; g < 3; g++) {
+              const gx = sx + (seededRand(tx, ty, 2400 + g) - 0.5) * 4 * s2;
+              const gy = sy + (seededRand(tx, ty, 2500 + g) - 0.5) * 3 * s2;
+              dctx.beginPath();
+              dctx.moveTo(gx, gy);
+              dctx.lineTo(gx + (seededRand(tx, ty, 2600 + g) - 0.5) * 2 * s2, gy - 2 * s2);
+              dctx.stroke();
+            }
+            dctx.globalAlpha = 1;
+          } else {
+            dctx.fillStyle = '#c8b888';
+            dctx.globalAlpha = 0.5;
+            dctx.beginPath();
+            dctx.ellipse(sx, sy, 2 * s2, 1.2 * s2, r2 * Math.PI, 0, Math.PI * 2);
+            dctx.fill();
+            dctx.globalAlpha = 1;
+          }
+        } else if (biome === BIOME.SNOW) {
+          const s2 = s / 24;
+          dctx.fillStyle = '#bbc';
           dctx.globalAlpha = 0.5;
           dctx.beginPath();
           dctx.ellipse(sx, sy, 2 * s2, 1.2 * s2, r2 * Math.PI, 0, Math.PI * 2);

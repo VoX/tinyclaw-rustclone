@@ -47,6 +47,20 @@ export function createRenderer(canvas, state) {
         };
         const color = colors[evt.material] || '#aaa';
         particles.emit(evt.x, evt.y, color, 6, 30, 400);
+        // Floating damage number
+        if (evt.damage) {
+          state.damageNumbers.push({
+            x: evt.x, y: evt.y,
+            text: `-${evt.damage}`,
+            time: Date.now(),
+            color: evt.material === 'flesh' ? '#ff4444' : '#ffcc00',
+          });
+        }
+        // Screen shake for melee hits from local player
+        if (evt.sourceEid === state.myEid) {
+          state.screenShakeAmount = Math.max(state.screenShakeAmount, 3);
+          state.meleeSwingTime = Date.now();
+        }
       } else if (evt.type === 'muzzle') {
         particles.emitDirectional(evt.x, evt.y, evt.angle, '#ffdd44', 4, 60, 0.5, 200);
         particles.emitDirectional(evt.x, evt.y, evt.angle, '#ff8800', 2, 40, 0.3, 150);
@@ -187,10 +201,18 @@ export function createRenderer(canvas, state) {
     camX += (targetX - camX) * CAM_SMOOTH;
     camY += (targetY - camY) * CAM_SMOOTH;
 
+    // Screen shake
+    if (state.screenShakeAmount > 0) {
+      camX += (Math.random() - 0.5) * state.screenShakeAmount * 0.15;
+      camY += (Math.random() - 0.5) * state.screenShakeAmount * 0.15;
+      state.screenShakeAmount *= 0.85;
+      if (state.screenShakeAmount < 0.1) state.screenShakeAmount = 0;
+    }
+
     ctx.clearRect(0, 0, w, h);
 
-    // Apply ADS zoom
-    const effectiveScale = viewScale * (state.adsZoom || 1.0);
+    // Apply ADS zoom and death zoom
+    const effectiveScale = viewScale * (state.adsZoom || 1.0) * (state.deathZoom || 1.0);
 
     // Process events for effects
     processEvents();
@@ -239,6 +261,33 @@ export function createRenderer(canvas, state) {
     // ── Draw particles ──
     particles.draw(ctx, camX, camY, w, h, effectiveScale);
 
+    // ── Floating damage numbers ──
+    {
+      const nowMs = Date.now();
+      for (let i = state.damageNumbers.length - 1; i >= 0; i--) {
+        const dn = state.damageNumbers[i];
+        const elapsed = nowMs - dn.time;
+        if (elapsed > 1000) {
+          state.damageNumbers.splice(i, 1);
+          continue;
+        }
+        const t = elapsed / 1000;
+        const alpha = 1 - t;
+        const floatY = t * 30; // float upward 30px
+        const sx = (dn.x - camX) * effectiveScale / TILE_SIZE + w / 2;
+        const sy = (dn.y - camY) * effectiveScale / TILE_SIZE + h / 2 - floatY;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.font = 'bold 14px Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#000';
+        ctx.fillText(dn.text, sx + 1, sy + 1);
+        ctx.fillStyle = dn.color;
+        ctx.fillText(dn.text, sx, sy);
+        ctx.restore();
+      }
+    }
+
     // ── Night overlay + lighting ──
     ui.drawNightOverlay(ctx, w, h, light, sortedEntities, me, camX, camY, effectiveScale, animTime);
 
@@ -260,6 +309,30 @@ export function createRenderer(canvas, state) {
 
     // ── Damage red flash ──
     ui.drawDamageFlash(ctx, w, h);
+
+    // ── Death desaturation + YOU DIED overlay ──
+    if (state.deathDesaturation > 0.01) {
+      // Grey overlay for desaturation effect
+      ctx.fillStyle = `rgba(30, 30, 30, ${state.deathDesaturation * 0.5})`;
+      ctx.fillRect(0, 0, w, h);
+    }
+    if (state.isDead) {
+      const deathElapsed = Date.now() - (state.deathTime || 0);
+      const fadeIn = Math.min(1, deathElapsed / 800);
+      // "YOU DIED" text with slight shake
+      ctx.save();
+      ctx.globalAlpha = fadeIn;
+      const shakeX = deathElapsed < 500 ? (Math.random() - 0.5) * 4 * (1 - deathElapsed / 500) : 0;
+      const shakeY = deathElapsed < 500 ? (Math.random() - 0.5) * 4 * (1 - deathElapsed / 500) : 0;
+      ctx.font = 'bold 48px Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#000';
+      ctx.fillText('YOU DIED', w / 2 + shakeX + 2, h / 2 - 40 + shakeY + 2);
+      ctx.fillStyle = '#cc2222';
+      ctx.fillText('YOU DIED', w / 2 + shakeX, h / 2 - 40 + shakeY);
+      ctx.textAlign = 'left';
+      ctx.restore();
+    }
 
     // ── Craft progress bar ──
     ui.drawCraftProgress(ctx, w, h);

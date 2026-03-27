@@ -1,5 +1,5 @@
 import { KEY, MOUSE_ACTION, MSG, INV_ACTION } from '../shared/protocol.js';
-import { BIOME, TILE_SIZE } from '../shared/constants.js';
+import { BIOME, TILE_SIZE, ITEM_DEFS } from '../shared/constants.js';
 import { playInventoryOpen, playInventoryClose } from './audio.js';
 
 export function createInput(state, send) {
@@ -18,7 +18,8 @@ export function createInput(state, send) {
     // Dismiss controls overlay on any key
     if (state.showControls) {
       state.showControls = false;
-      state.tutorialExpiry = Date.now() + 15000; // show tutorial for 15s
+      state.tutorialStep = 1; // start tutorial: gather wood
+      state.tutorialStepTime = Date.now();
       state.firstConnect = false;
       e.preventDefault();
       return;
@@ -182,7 +183,15 @@ export function createInput(state, send) {
 
   canvas.addEventListener('mousedown', (e) => {
     if (state.showInventory) return; // UI handles it
-    if (e.button === 0) mouseAction = MOUSE_ACTION.PRIMARY;
+    if (e.button === 0) {
+      mouseAction = MOUSE_ACTION.PRIMARY;
+      // Trigger melee swing animation immediately on click
+      const heldId = state.inventory?.[state.selectedSlot]?.id || 0;
+      const def = ITEM_DEFS[heldId];
+      if (def && (def.cat === 'melee' || (def.cat === 'tool' && def.damage > 0))) {
+        state.meleeSwingTime = Date.now();
+      }
+    }
     else if (e.button === 2) mouseAction = MOUSE_ACTION.SECONDARY;
   });
 

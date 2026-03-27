@@ -159,12 +159,22 @@ export function createNetworkSyncSystem(gameState) {
           }
         }
 
-        // Check if changed from prev state
+        // Check if changed from prev state with movement/rotation thresholds
         const prev = prevState.get(eid);
         if (!isNew && prev) {
           let changed = false;
           for (const key of Object.keys(state)) {
             if (key === 'eid' || key === 't') continue;
+            // Position threshold: only count as changed if moved > 0.1 units
+            if (key === 'x' || key === 'y') {
+              if (Math.abs((state[key] || 0) - (prev[key] || 0)) > 0.1) { changed = true; break; }
+              continue;
+            }
+            // Rotation threshold: only count as changed if rotated > 0.05 radians
+            if (key === 'a') {
+              if (Math.abs((state[key] || 0) - (prev[key] || 0)) > 0.05) { changed = true; break; }
+              continue;
+            }
             if (state[key] !== prev[key]) { changed = true; break; }
           }
           if (!changed) continue;
@@ -189,15 +199,35 @@ export function createNetworkSyncSystem(gameState) {
       }
 
       if (delta.length > 0 || removals.length > 0) {
+        // Batch entity updates: send max 50 entities per message to reduce per-message overhead
+        const BATCH_SIZE = 50;
+        const timeVal = gameState.worldTime;
+        const lightVal = Math.round(gameState.lightLevel * 100) / 100;
         try {
-          client.ws.send(JSON.stringify({
-            type: MSG.DELTA,
-            tick,
-            entities: delta,
-            removed: removals,
-            time: gameState.worldTime,
-            light: Math.round(gameState.lightLevel * 100) / 100,
-          }));
+          for (let bi = 0; bi < delta.length; bi += BATCH_SIZE) {
+            const batch = delta.slice(bi, bi + BATCH_SIZE);
+            // Only include removals in the first batch
+            const rem = bi === 0 ? removals : [];
+            client.ws.send(JSON.stringify({
+              type: MSG.DELTA,
+              tick,
+              entities: batch,
+              removed: rem,
+              time: timeVal,
+              light: lightVal,
+            }));
+          }
+          // If delta was empty but there are removals, send removals alone
+          if (delta.length === 0 && removals.length > 0) {
+            client.ws.send(JSON.stringify({
+              type: MSG.DELTA,
+              tick,
+              entities: [],
+              removed: removals,
+              time: timeVal,
+              light: lightVal,
+            }));
+          }
         } catch (e) {
           // Client disconnected
         }

@@ -222,12 +222,24 @@ export function createEntityRenderer(state) {
     if (!def) return;
     const cat = def.cat;
     const dist = 13;
+
+    // Melee swing animation: rotate weapon 45 degrees over 200ms
+    let swingOffset = 0;
+    if (state.meleeSwingTime > 0 && (cat === 'melee' || cat === 'tool')) {
+      const elapsed = Date.now() - state.meleeSwingTime;
+      if (elapsed < 200) {
+        const t = elapsed / 200;
+        // Quick forward swing then return: sine curve
+        swingOffset = Math.sin(t * Math.PI) * (Math.PI / 4); // 45 degrees
+      }
+    }
+
     const tipX = sx + Math.cos(angle) * dist;
     const tipY = sy + Math.sin(angle) * dist;
 
     ctx.save();
     ctx.translate(tipX, tipY);
-    ctx.rotate(angle);
+    ctx.rotate(angle + swingOffset);
 
     if (itemId === ITEM.ROCK) {
       ctx.fillStyle = '#888';

@@ -1117,37 +1117,52 @@ export function createUIOverlays(state) {
   }
 
   function drawTutorialHint(ctx, w, h) {
-    if (!state.tutorialExpiry || Date.now() > state.tutorialExpiry) return;
-    const remaining = state.tutorialExpiry - Date.now();
-    const alpha = remaining < 2000 ? remaining / 2000 : 1;
+    if (state.tutorialStep <= 0) return;
+
+    const stepTexts = {
+      1: 'Hit a tree to gather wood',
+      2: 'Press TAB to open inventory, craft a Stone Hatchet',
+      3: "You're ready to survive!",
+    };
+
+    const text = stepTexts[state.tutorialStep];
+    if (!text) return;
+
+    // Fade in/out
+    const elapsed = Date.now() - state.tutorialStepTime;
+    let alpha = Math.min(1, elapsed / 500); // fade in over 500ms
+    if (state.tutorialStep === 3) {
+      // Final step fades out near the end of its 5s lifetime
+      const remaining = 5000 - elapsed;
+      if (remaining < 1000) alpha = Math.max(0, remaining / 1000);
+    }
 
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.font = '14px Consolas, monospace';
     ctx.textAlign = 'center';
 
-    const hints = [
-      'Left-click trees/rocks with your rock to gather materials',
-      'Press TAB to open inventory & crafting',
-      'Press B with a Building Plan to start building',
-    ];
-
-    const boxW = 420;
-    const boxH = hints.length * 22 + 20;
+    const boxW = 400;
+    const boxH = 36;
     const boxX = w / 2 - boxW / 2;
-    const boxY = h - 200;
+    const boxY = h - 180;
 
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.fillRect(boxX, boxY, boxW, boxH);
-    ctx.strokeStyle = 'rgba(255,200,60,0.5)';
+    ctx.strokeStyle = state.tutorialStep === 3 ? 'rgba(100,255,100,0.5)' : 'rgba(255,200,60,0.5)';
     ctx.strokeRect(boxX, boxY, boxW, boxH);
 
-    ctx.fillStyle = '#e8c030';
-    for (let i = 0; i < hints.length; i++) {
-      ctx.fillText(hints[i], w / 2, boxY + 20 + i * 22);
+    // Step indicator
+    ctx.fillStyle = '#888';
+    ctx.font = '10px Consolas, monospace';
+    if (state.tutorialStep < 3) {
+      ctx.fillText(`Step ${state.tutorialStep}/3`, w / 2, boxY + 30);
     }
 
-    ctx.globalAlpha = 1;
+    ctx.fillStyle = state.tutorialStep === 3 ? '#8f8' : '#e8c030';
+    ctx.font = '14px Consolas, monospace';
+    ctx.fillText(text, w / 2, boxY + 16);
+
     ctx.textAlign = 'left';
     ctx.restore();
   }

@@ -221,12 +221,12 @@ export function createEntityRenderer(state) {
     if (!def) return;
     const cat = def.cat;
     const dist = 13;
-    const tipX = sx + Math.cos((e.a || 0)) * dist;
-    const tipY = sy + Math.sin((e.a || 0)) * dist;
+    const tipX = sx + Math.cos(angle) * dist;
+    const tipY = sy + Math.sin(angle) * dist;
 
     ctx.save();
     ctx.translate(tipX, tipY);
-    ctx.rotate((e.a || 0));
+    ctx.rotate(angle);
 
     if (itemId === ITEM.ROCK) {
       ctx.fillStyle = '#888';

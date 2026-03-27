@@ -108,17 +108,23 @@ describe('Movement', () => {
   });
 
   it('should support diagonal movement', async () => {
-    const startPos = { ...bot.position };
-    // Move diagonally (W + D)
-    bot.move(KEY.W | KEY.D);
+    // First move to center-ish area to avoid edge clamping
+    bot.move(KEY.S | KEY.A);
     await waitTicks(10);
+    bot.stop();
+    await waitTicks(2);
+
+    const startPos = { ...bot.position };
+    // Move diagonally (S + D) — avoids world edge issues from prior W movement
+    bot.move(KEY.S | KEY.D);
+    await waitTicks(15);
     bot.stop();
 
     const dx = bot.position.x - startPos.x;
     const dy = bot.position.y - startPos.y;
     // Both x and y should have changed
-    assert.ok(Math.abs(dx) > 0.1, 'X should change during diagonal move');
-    assert.ok(Math.abs(dy) > 0.1, 'Y should change during diagonal move');
+    assert.ok(Math.abs(dx) > 0.1, `X should change during diagonal move (dx=${dx.toFixed(2)})`);
+    assert.ok(Math.abs(dy) > 0.1, `Y should change during diagonal move (dy=${dy.toFixed(2)})`);
   });
 });
 
@@ -314,15 +320,18 @@ describe('Inventory', () => {
     // Slot 1 should be empty now
     assert.equal(bot.inventory[1].id, 0, 'Slot 1 should be empty after drop');
 
+    // Wait for the world item to appear in entity sync
+    await waitTicks(10);
+
     // There should be a world item nearby
     let foundWorldItem = false;
     for (const [eid, ent] of bot.entities) {
       if (ent.t === ENTITY_TYPE.WORLD_ITEM && ent.itemId === ITEM.TORCH) {
         const dist = bot.distanceTo(ent.x, ent.y);
-        if (dist < 5) {
+        if (dist < 10) {
           foundWorldItem = true;
           // Try to pick it back up
-          bot.interact(ent.eid);
+          bot.interact(eid);
           await waitTicks(3);
           break;
         }

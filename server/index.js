@@ -284,6 +284,9 @@ wss.on('connection', (ws) => {
     gameState.removedEntities.add(eid);
     gameState.entityTypes.delete(eid);
     gameState.playerNames.delete(eid);
+    gameState.playerStats.delete(eid);
+    if (gameState.clipState) gameState.clipState.delete(eid);
+    if (gameState.craftQueue) gameState.craftQueue.delete(connId);
     removeEntity(world, eid);
   });
 
@@ -303,6 +306,7 @@ function handleClientMessage(connId, msg) {
   const client = gameState.clients.get(connId);
   if (!client) return;
 
+  try {
   switch (msg.type) {
     case MSG.INPUT: {
       const keys = typeof msg.keys === 'number' ? (msg.keys & 0x3F) : 0; // mask to valid bits
@@ -406,6 +410,9 @@ function handleClientMessage(connId, msg) {
       } catch (e) {}
       break;
   }
+  } catch (err) {
+    console.error(`Message handler error (connId=${connId}):`, err.message);
+  }
 }
 
 // ── Game Loop ──
@@ -434,7 +441,11 @@ function gameLoop() {
 
     // Run all systems
     for (const system of systems) {
-      system(world);
+      try {
+        system(world);
+      } catch (err) {
+        console.error(`System error in ${system.name || 'unknown'}:`, err.message);
+      }
     }
 
     lastTickDuration = performance.now() - tickStart;

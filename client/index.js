@@ -141,19 +141,8 @@ function handleServerMessage(msg) {
           if (existing) {
             existing.prevX = existing.x;
             existing.prevY = existing.y;
-            if (e.eid === state.myEid && e.x !== undefined && e.y !== undefined) {
-              // Store server position for idle correction
-              existing._serverX = e.x;
-              existing._serverY = e.y;
-              // Never directly overwrite position — let client prediction handle it
-              // Only force-snap on respawn (position changes massively, e.g. > 50 units)
-              const dx = e.x - existing.x;
-              const dy = e.y - existing.y;
-              const dist = Math.sqrt(dx * dx + dy * dy);
-              if (dist > 50) {
-                existing.x = e.x;
-                existing.y = e.y;
-              }
+            // Client-authoritative: ignore server position for local player
+            if (e.eid === state.myEid) {
               delete e.x;
               delete e.y;
             }
@@ -339,14 +328,14 @@ function clientLoop(timestamp) {
     if (now > bubble.expiry) state.chatBubbles.delete(eid);
   }
 
-  // Client-side movement prediction
+  // Client-authoritative movement — client computes position, server validates
   if (state.myEid && state.entities.has(state.myEid) && !state.isDead) {
     const me = state.entities.get(state.myEid);
     const keys = input.getKeys();
     const sprinting = input.isSprinting();
     let speed = 10.0 * (sprinting ? 2.0 : 1.0);
 
-    // Slow down in water (client prediction)
+    // Water slowdown
     if (state.biomeMap) {
       const tx = Math.floor(me.x / state.tileSize);
       const ty = Math.floor(me.y / state.tileSize);
@@ -368,9 +357,18 @@ function clientLoop(timestamp) {
       dy *= 0.7071;
     }
 
-    // Predict movement — apply directly for responsive feel
+    // Move locally — this IS the player's position, no prediction needed
     me.x += dx * speed * (dt / 1000);
     me.y += dy * speed * (dt / 1000);
+
+    // Clamp to world bounds
+    const maxCoord = state.worldSize * state.tileSize;
+    me.x = Math.max(0, Math.min(maxCoord, me.x));
+    me.y = Math.max(0, Math.min(maxCoord, me.y));
+
+    // Set render position directly (no interpolation for local player)
+    me.renderX = me.x;
+    me.renderY = me.y;
 
     // Footstep sounds
     const isMoving = dx !== 0 || dy !== 0;
@@ -390,30 +388,9 @@ function clientLoop(timestamp) {
         }
       }
     }
-
-    // When idle, snap to server position to correct accumulated error
-    if (dx === 0 && dy === 0 && me._serverX !== undefined) {
-      const corrX = me._serverX - me.x;
-      const corrY = me._serverY - me.y;
-      const corrDist = Math.sqrt(corrX * corrX + corrY * corrY);
-      if (corrDist > 0.5) {
-        // Smooth but fast correction
-        me.x += corrX * 0.3;
-        me.y += corrY * 0.3;
-      } else {
-        // Close enough — snap
-        me.x = me._serverX;
-        me.y = me._serverY;
-      }
-    }
-
-    // Clamp
-    const maxCoord = state.worldSize * state.tileSize;
-    me.x = Math.max(0, Math.min(maxCoord, me.x));
-    me.y = Math.max(0, Math.min(maxCoord, me.y));
   }
 
-  // Interpolate other entities
+  // Interpolate remote entities (local player sets renderX/Y directly above)
   for (const [eid, e] of state.entities) {
     if (eid === state.myEid) continue;
     if (e.prevX !== undefined) {
@@ -448,12 +425,15 @@ function clientLoop(timestamp) {
 setInterval(() => {
   if (!state.connected || !state.myEid) return;
 
+  const me = state.entities.get(state.myEid);
   send({
     type: MSG.INPUT,
     keys: input.getKeys(),
     mouseAngle: input.getMouseAngle(),
     mouseAction: input.getMouseAction(),
     selectedSlot: state.selectedSlot,
+    x: me ? me.x : undefined,
+    y: me ? me.y : undefined,
   });
 
   // Ping

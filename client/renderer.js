@@ -340,8 +340,8 @@ export function createRenderer(canvas, state) {
     let targetX = 0, targetY = 0;
     const me = state.myEid ? state.entities.get(state.myEid) : null;
     if (me) {
-      targetX = me.x;
-      targetY = me.y;
+      targetX = me.renderX !== undefined ? me.renderX : me.x;
+      targetY = me.renderY !== undefined ? me.renderY : me.y;
     }
 
     // Smooth camera

@@ -200,6 +200,7 @@ function handleServerMessage(msg) {
       }
       if (state.firstConnect) {
         state.showControls = true;
+        state.firstConnect = false;
       }
       break;
 
@@ -215,7 +216,8 @@ function handleServerMessage(msg) {
             existing.prevX = existing.x;
             existing.prevY = existing.y;
             // Client-authoritative: ignore server position for local player
-            if (e.eid === state.myEid) {
+            // (but only after we've received initial position)
+            if (e.eid === state.myEid && existing.x !== undefined) {
               delete e.x;
               delete e.y;
             }
@@ -237,12 +239,16 @@ function handleServerMessage(msg) {
           state.entities.delete(eid);
         }
       }
-      // Sync death state from own entity data
+      // Sync death/sleep state from own entity data
       if (state.myEid) {
         const me = state.entities.get(state.myEid);
         if (me) {
           const wasDead = state.isDead;
           state.isDead = !!me.dead;
+          // Clear sleeping flag for local player (we just woke up)
+          if (me.sleeping) {
+            delete me.sleeping;
+          }
           if (wasDead && !state.isDead) {
             state.deathInfo = null; // Clear on respawn
           }

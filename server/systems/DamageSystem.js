@@ -112,6 +112,9 @@ export function createDamageSystem(gameState) {
           if (killerEntityType === ENTITY_TYPE.PLAYER) {
             killerName = gameState.playerNames?.get(killerEid) || `Player ${Player.connectionId[killerEid] || killerEid}`;
             killerType = 'player';
+            // Track kill stat
+            const stats = gameState.playerStats?.get(killerEid);
+            if (stats) stats.kills++;
           } else if (killerEntityType === ENTITY_TYPE.ANIMAL && hasComponent(world, killerEid, Animal)) {
             const at = Animal.animalType[killerEid];
             const animalNames = { 1: 'Deer', 2: 'Boar', 3: 'Wolf', 4: 'Bear' };

@@ -769,6 +769,7 @@ export function createUIOverlays(state) {
       'Enter — Chat',
       'F3 — Performance Stats',
       'M — Map',
+      'L — Leaderboard',
     ];
     for (let i = 0; i < controls.length; i++) {
       ctx.fillText(controls[i], w / 2, h / 2 - 80 + i * 22);
@@ -960,6 +961,67 @@ export function createUIOverlays(state) {
     ctx.restore();
   }
 
+  function drawLeaderboard(ctx, w, h) {
+    if (!state.showLeaderboard) return;
+    const lb = state.leaderboard;
+    const panelW = 260;
+    const rowH = 20;
+    const headerH = 28;
+    const panelH = headerH + Math.max(lb.length, 1) * rowH + 10;
+    const px = w / 2 - panelW / 2;
+    const py = h / 2 - panelH / 2;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(px, py, panelW, panelH);
+    ctx.strokeStyle = '#e8c030';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px, py, panelW, panelH);
+
+    // Header
+    ctx.font = 'bold 14px Consolas, monospace';
+    ctx.fillStyle = '#e8c030';
+    ctx.textAlign = 'center';
+    ctx.fillText('LEADERBOARD', w / 2, py + 18);
+
+    // Column headers
+    ctx.font = '10px Consolas, monospace';
+    ctx.fillStyle = '#888';
+    ctx.textAlign = 'left';
+    ctx.fillText('Player', px + 10, py + headerH + 12);
+    ctx.textAlign = 'right';
+    ctx.fillText('Kills', px + panelW - 70, py + headerH + 12);
+    ctx.fillText('Res', px + panelW - 10, py + headerH + 12);
+
+    // Rows
+    ctx.font = '11px Consolas, monospace';
+    if (lb.length === 0) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#666';
+      ctx.fillText('No data yet', w / 2, py + headerH + 30);
+    } else {
+      for (let i = 0; i < lb.length; i++) {
+        const row = lb[i];
+        const ry = py + headerH + 14 + (i + 1) * rowH;
+        ctx.textAlign = 'left';
+        ctx.fillStyle = i === 0 ? '#e8c030' : '#ccc';
+        ctx.fillText(`${i + 1}. ${row.name}`, px + 10, ry);
+        ctx.textAlign = 'right';
+        ctx.fillText(`${row.kills}`, px + panelW - 70, ry);
+        ctx.fillStyle = i === 0 ? '#c8a020' : '#aaa';
+        ctx.fillText(`${row.resources}`, px + panelW - 10, ry);
+      }
+    }
+
+    ctx.font = '9px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#555';
+    ctx.fillText('[L] close', w / 2, py + panelH - 4);
+
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
   return {
     drawHealthBars,
     drawPlayerNames,
@@ -981,5 +1043,6 @@ export function createUIOverlays(state) {
     drawPerfDisplay,
     drawConnectionScreen,
     drawControlsOverlay,
+    drawLeaderboard,
   };
 }

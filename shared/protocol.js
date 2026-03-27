@@ -35,8 +35,10 @@ export const MSG = {
   RELOAD: 13,
   HAMMER_REPAIR: 14,
   CRAFT_CANCEL: 15,
+  LEADERBOARD_REQ: 16,
   CLIP_UPDATE: 65,
   CRAFT_PROGRESS: 66,
+  LEADERBOARD: 67,
 };
 
 // Input key bitmask

@@ -78,6 +78,10 @@ export function createGatherSystem(gameState) {
       const resourceItemId = resDef.resource;
       addToInventory(eid, resourceItemId, actual);
 
+      // Track resource stat
+      const stats = gameState.playerStats?.get(eid);
+      if (stats) stats.resources += actual;
+
       // Reduce tool durability
       reduceDurability(eid, slot);
 

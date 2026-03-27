@@ -76,6 +76,9 @@ const state = {
   myName: '',
   worldSeed: 0,
   loadingProgress: 0,
+  // Leaderboard
+  showLeaderboard: false,
+  leaderboard: [],
 };
 
 // Initialize inventory slots
@@ -325,6 +328,10 @@ function handleServerMessage(msg) {
       state.craftProgress = msg.progress;
       state.craftRecipeId = msg.recipeId;
       state.craftTotalTime = msg.totalTime;
+      break;
+
+    case MSG.LEADERBOARD:
+      state.leaderboard = msg.top || [];
       break;
   }
 }

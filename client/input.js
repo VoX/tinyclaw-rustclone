@@ -87,6 +87,12 @@ export function createInput(state, send) {
       case 'KeyM':
         state.showMap = !state.showMap;
         break;
+      case 'KeyL':
+        state.showLeaderboard = !state.showLeaderboard;
+        if (state.showLeaderboard) {
+          send({ type: MSG.LEADERBOARD_REQ });
+        }
+        break;
       case 'F3':
         e.preventDefault();
         state.showPerf = !state.showPerf;

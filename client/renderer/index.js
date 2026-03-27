@@ -122,7 +122,13 @@ export function createRenderer(canvas, state) {
 
       if (sx < -60 || sx > w + 60 || sy < -60 || sy > h + 60) continue;
 
-      entities.drawEntity(ctx, sx, sy, e, viewScale);
+      // Slight perspective scale: entities near screen edges render slightly smaller
+      const dxEdge = (sx - w / 2) / (w / 2);
+      const dyEdge = (sy - h / 2) / (h / 2);
+      const edgeDist = Math.sqrt(dxEdge * dxEdge + dyEdge * dyEdge);
+      const perspScale = 1.0 - Math.min(edgeDist, 1.0) * 0.05; // 0.95x at edges
+
+      entities.drawEntity(ctx, sx, sy, e, viewScale * perspScale);
     }
 
     // Health bars
@@ -182,6 +188,9 @@ export function createRenderer(canvas, state) {
 
     // ── Chat log ──
     ui.drawChatLog(ctx, w, h);
+
+    // ── Leaderboard ──
+    ui.drawLeaderboard(ctx, w, h);
 
     // ── Performance display ──
     ui.drawPerfDisplay(ctx, w, h);

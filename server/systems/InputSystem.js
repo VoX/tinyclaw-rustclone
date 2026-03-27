@@ -54,6 +54,31 @@ export function createInputSystem(gameState) {
           Position.y[eid] = prevY + dy * scale;
         }
 
+        // Collision validation against static colliders
+        if (gameState.spatialHash) {
+          const playerRadius = hasComponent(world, eid, Collider) ? Collider.radius[eid] : 0.4;
+          const nearby = gameState.spatialHash.query(Position.x[eid], Position.y[eid], playerRadius + 2);
+          for (let j = 0; j < nearby.length; j++) {
+            const other = nearby[j];
+            if (other === eid) continue;
+            if (!hasComponent(world, other, Collider) || !Collider.isStatic[other]) continue;
+
+            const cdx = Position.x[eid] - Position.x[other];
+            const cdy = Position.y[eid] - Position.y[other];
+            const distSq = cdx * cdx + cdy * cdy;
+            const minDist = playerRadius + Collider.radius[other];
+
+            if (distSq < minDist * minDist && distSq > 0) {
+              const d = Math.sqrt(distSq);
+              const overlap = minDist - d;
+              const nx = cdx / d;
+              const ny = cdy / d;
+              Position.x[eid] += nx * overlap;
+              Position.y[eid] += ny * overlap;
+            }
+          }
+        }
+
         // Zero velocity since client handles movement
         Velocity.vx[eid] = 0;
         Velocity.vy[eid] = 0;

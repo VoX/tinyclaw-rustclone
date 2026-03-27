@@ -60,6 +60,7 @@ const gameState = {
   containerInv: new Map(),     // eid -> [{id, n}, ...] for storage boxes
   animalSpawns: [],            // {x, y, animalType, respawnAt} for respawning
   playerNames: new Map(),      // eid -> name string
+  playerStats: new Map(),      // eid -> { kills, resources, name }
   biomeMap: null,
   getBiomeAt: null,
   nextConnId: 1,
@@ -219,6 +220,7 @@ wss.on('connection', (ws) => {
   const playerName = randomPlayerName();
   gameState.entityTypes.set(eid, ENTITY_TYPE.PLAYER);
   gameState.playerNames.set(eid, playerName);
+  gameState.playerStats.set(eid, { kills: 0, resources: 0, name: playerName });
   gameState.newEntities.add(eid);
   const client = {
     ws,
@@ -388,6 +390,15 @@ function handleClientMessage(connId, msg) {
     case MSG.CRAFT_CANCEL:
       client.craftCancel = true;
       break;
+
+    case MSG.LEADERBOARD_REQ: {
+      // Gather top 5 by kills, top 5 by resources
+      const all = [...gameState.playerStats.values()];
+      const byKills = all.sort((a, b) => b.kills - a.kills).slice(0, 5)
+        .map(s => ({ name: s.name, kills: s.kills, resources: s.resources }));
+      ws.send(JSON.stringify({ type: MSG.LEADERBOARD, top: byKills }));
+      break;
+    }
 
     case MSG.PING:
       try {

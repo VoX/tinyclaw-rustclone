@@ -326,7 +326,7 @@ export function createEntityRenderer(state) {
     ctx.restore();
 
     // Draw "Zzz" above sleeping players
-    if (sleeping && !dead) {
+    if (e.sleeping && !e.dead) {
       ctx.save();
       ctx.font = 'bold 10px Consolas, monospace';
       ctx.textAlign = 'center';

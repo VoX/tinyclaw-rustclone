@@ -17,7 +17,8 @@ function loadItemIcon(itemId) {
   img.onerror = () => {
     itemIconLoading.delete(itemId);
   };
-  img.src = `/icons/icon_${itemId}.png`;
+  const basePath = window.location.pathname.replace(/\/+$/, '');
+  img.src = `${basePath}/icons/icon_${itemId}.png`;
 }
 
 // Preload all item icons

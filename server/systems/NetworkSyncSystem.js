@@ -30,7 +30,10 @@ export function createNetworkSyncSystem(gameState) {
       if (!client.ws || !client.playerEid) continue;
 
       const playerEid = client.playerEid;
-      if (!hasComponent(world, playerEid, Position)) continue;
+      if (!hasComponent(world, playerEid, Position)) {
+        if (tick % 20 === 0) console.log(`[SYNC] Player ${playerEid} has no Position component!`);
+        continue;
+      }
 
       // Get or create per-client prev state
       if (!clientPrevState.has(connId)) {
@@ -175,6 +178,14 @@ export function createNetworkSyncSystem(gameState) {
       for (const eid of gameState.removedEntities) {
         removals.push(eid);
         prevState.delete(eid);
+      }
+
+      // Log first few syncs for debugging
+      if (!client._syncCount) client._syncCount = 0;
+      if (client._syncCount < 3) {
+        const ownEntity = delta.find(e => e.eid === playerEid);
+        console.log(`[SYNC] connId=${connId} tick=${tick} delta=${delta.length} removals=${removals.length} ownEntity=${ownEntity ? `(${ownEntity.x?.toFixed(1)},${ownEntity.y?.toFixed(1)})` : 'NOT IN DELTA'} playerPos=(${px?.toFixed(1)},${py?.toFixed(1)})`);
+        client._syncCount++;
       }
 
       if (delta.length > 0 || removals.length > 0) {

@@ -442,9 +442,9 @@ export function createRenderer(canvas, state) {
         }
       }
 
-      // Campfire lights
+      // Campfire lights (only when lit)
       for (const e of sortedEntities) {
-        if (e.t === ENTITY_TYPE.CAMPFIRE) {
+        if (e.t === ENTITY_TYPE.CAMPFIRE && e.lit) {
           const ex2 = e.renderX || e.x;
           const ey2 = e.renderY || e.y;
           const sx2 = (ex2 - camX) * viewScale / TILE_SIZE + w / 2;
@@ -474,9 +474,9 @@ export function createRenderer(canvas, state) {
         }
       }
 
-      // Campfire warm glow overlay
+      // Campfire warm glow overlay (only when lit)
       for (const e of sortedEntities) {
-        if (e.t === ENTITY_TYPE.CAMPFIRE) {
+        if (e.t === ENTITY_TYPE.CAMPFIRE && e.lit) {
           const ex2 = e.renderX || e.x;
           const ey2 = e.renderY || e.y;
           const sx2 = (ex2 - camX) * viewScale / TILE_SIZE + w / 2;

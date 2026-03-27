@@ -1,5 +1,5 @@
 import { writeFileSync, readFileSync, existsSync } from 'fs';
-import { query, addEntity, addComponent } from 'bitecs';
+import { query, addEntity, addComponent, hasComponent } from 'bitecs';
 import { Position, Structure, Door, ToolCupboard, SleepingBag,
          Campfire, Furnace, Workbench, Health, ResourceNode, Collider,
          Sprite, NetworkSync, StorageBox } from '../shared/components.js';
@@ -129,14 +129,19 @@ export function saveWorld(world, gameState) {
     });
   }
 
-  // Save TC auth (keyed by position since eids change across restarts)
+  // NOTE: TC auth and door auth reference player EIDs which are ephemeral.
+  // After restart, these EIDs won't match any player. We save them anyway
+  // so they persist if the server is restarted mid-session, but they will
+  // be stale for players who reconnect. A persistent player identity system
+  // would be needed to fully fix this.
   for (const [eid, authSet] of gameState.tcAuth) {
+    if (!hasComponent(world, eid, Position)) continue;
     const key = `${Math.round(Position.x[eid])},${Math.round(Position.y[eid])}`;
     data.tcAuth[key] = [...authSet];
   }
 
-  // Save door auth
   for (const [eid, authSet] of gameState.doorAuth) {
+    if (!hasComponent(world, eid, Position)) continue;
     const key = `${Math.round(Position.x[eid])},${Math.round(Position.y[eid])}`;
     data.doorAuth[key] = [...authSet];
   }

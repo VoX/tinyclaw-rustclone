@@ -93,6 +93,10 @@ export function createDamageSystem(gameState) {
         // Non-player entity died: remove it
         gameState.removedEntities.add(eid);
         gameState.entityTypes.delete(eid);
+        // Clean up associated data (storage box inventory, TC auth, door auth)
+        if (gameState.containerInv) gameState.containerInv.delete(eid);
+        if (gameState.tcAuth) gameState.tcAuth.delete(eid);
+        if (gameState.doorAuth) gameState.doorAuth.delete(eid);
         removeEntity(world, eid);
       }
     }

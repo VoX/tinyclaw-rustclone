@@ -140,12 +140,21 @@ export function createInteractSystem(gameState) {
       const authSet = gameState.tcAuth.get(tcEid) || new Set();
 
       if (action.action === 'authorize') {
-        authSet.add(eid);
-        gameState.tcAuth.set(tcEid, authSet);
+        // Only allow self-auth if TC has no one authorized yet (first claim)
+        // or if the player is already authorized (re-auth is a no-op)
+        if (authSet.size === 0 || authSet.has(eid)) {
+          authSet.add(eid);
+          gameState.tcAuth.set(tcEid, authSet);
+        }
       } else if (action.action === 'deauthorize') {
-        authSet.delete(eid);
+        if (authSet.has(eid)) {
+          authSet.delete(eid);
+        }
       } else if (action.action === 'clearall') {
-        authSet.clear();
+        // Only authorized players can clear
+        if (authSet.has(eid)) {
+          authSet.clear();
+        }
       }
 
       // Send updated auth list

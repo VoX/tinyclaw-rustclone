@@ -1,7 +1,7 @@
 import { query, hasComponent } from 'bitecs';
 import { Position, Velocity, Rotation, Health, Player, Sprite, ResourceNode,
          WorldItem, Projectile, Structure, Animal, Campfire, Furnace, Workbench,
-         ToolCupboard, SleepingBag, Door, Dead, Inventory, Hotbar,
+         ToolCupboard, SleepingBag, StorageBox, Door, Dead, Inventory, Hotbar,
          Hunger, Thirst, Temperature, NetworkSync } from '../../shared/components.js';
 import { MSG, ENTITY_TYPE } from '../../shared/protocol.js';
 import { INTEREST_RADIUS, TILE_SIZE, ITEM } from '../../shared/constants.js';
@@ -89,6 +89,12 @@ export function createNetworkSyncSystem(gameState) {
           state.tier = Structure.tier[eid];
         } else if (entityType === ENTITY_TYPE.ANIMAL) {
           state.at = Animal.animalType[eid];
+        } else if (entityType === ENTITY_TYPE.CAMPFIRE) {
+          state.lit = Campfire.fuelRemaining[eid] > 0 ? 1 : 0;
+        } else if (entityType === ENTITY_TYPE.DOOR) {
+          state.st = Structure.structureType[eid];
+          state.tier = Structure.tier[eid];
+          state.open = Door.isOpen[eid];
         } else if (entityType === ENTITY_TYPE.PLAYER) {
           state.sprite = Sprite.spriteId[eid];
           if (hasComponent(world, eid, Hotbar)) {

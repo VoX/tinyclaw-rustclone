@@ -186,9 +186,11 @@ export function playPlaceStructure() {
 
 let ambientInterval = null;
 let ambientGain = null;
+let currentLightLevel = 1.0;
 
 export function startAmbient(lightLevel) {
   if (!ctx || !initialized) return;
+  currentLightLevel = lightLevel;
   if (ambientInterval) return;
 
   ambientGain = ctx.createGain();
@@ -222,7 +224,7 @@ export function startAmbient(lightLevel) {
     }
 
     // Night crickets
-    if (lightLevel < 0.5 && Math.random() < 0.4) {
+    if (currentLightLevel < 0.5 && Math.random() < 0.4) {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
       osc.type = 'sine';

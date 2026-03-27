@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "bitecs": "^0.3.40",
-    "ws": "^8.16.0",
-    "simplex-noise": "^4.0.1"
+    "simplex-noise": "^4.0.1",
+    "ws": "^8.16.0"
   },
   "devDependencies": {
     "esbuild": "^0.20.0"

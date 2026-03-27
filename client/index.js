@@ -57,6 +57,8 @@ const state = {
   entityCount: 0,
   // Chat bubbles (above player heads)
   chatBubbles: new Map(),  // eid -> { text, expiry }
+  // Tutorial hint
+  tutorialExpiry: 0,       // timestamp when tutorial hint disappears
 };
 
 // Initialize inventory slots

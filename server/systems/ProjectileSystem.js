@@ -1,6 +1,7 @@
 import { query, removeEntity, hasComponent } from 'bitecs';
-import { Projectile, Position, Collider, Health, Dead, Damageable, Player, ResourceNode, Armor } from '../../shared/components.js';
+import { Projectile, Position, Velocity, Collider, Health, Dead, Damageable, Player, ResourceNode, Armor } from '../../shared/components.js';
 import { getArmorReduction } from '../../shared/constants.js';
+import { ENTITY_TYPE } from '../../shared/protocol.js';
 
 export function createProjectileSystem(gameState) {
   return function ProjectileSystem(world) {
@@ -39,6 +40,13 @@ export function createProjectileSystem(gameState) {
         const hitDist = projRadius + (Collider.radius[target] || 0.4);
 
         if (dist < hitDist) {
+          // Skip if target player has spawn protection (from player projectiles only)
+          if (hasComponent(world, target, Player) && gameState.entityTypes.get(sourceEid) === ENTITY_TYPE.PLAYER) {
+            const targetConnId = Player.connectionId[target];
+            const targetClient = gameState.clients.get(targetConnId);
+            if (targetClient && gameState.tick < targetClient.spawnProtectionUntil) continue;
+          }
+
           // Hit! Apply armor reduction
           let dmg = Projectile.damage[eid];
           if (hasComponent(world, target, Armor)) {
@@ -49,6 +57,13 @@ export function createProjectileSystem(gameState) {
           if (hasComponent(world, target, Damageable)) {
             Damageable.lastHitTime[target] = gameState.tick;
             Damageable.lastHitBy[target] = sourceEid;
+          }
+
+          // Knockback from projectile
+          if (hasComponent(world, target, Velocity) && dist > 0) {
+            const knockStr = 4.0;
+            Velocity.vx[target] += (-dx / dist) * knockStr;
+            Velocity.vy[target] += (-dy / dist) * knockStr;
           }
 
           gameState.events.push({

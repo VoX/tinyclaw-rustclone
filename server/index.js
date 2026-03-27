@@ -104,6 +104,21 @@ const httpServer = createServer((req, res) => {
     filePath = join(__dirname, '..', 'client', 'dist', 'index.html');
   } else if (url === '/bundle.js') {
     filePath = join(__dirname, '..', 'client', 'dist', 'bundle.js');
+  } else if (url === '/stats') {
+    const allEnts = query(world, [Position]);
+    const stats = {
+      players: gameState.clients.size,
+      entities: allEnts.length,
+      tick: gameState.tick,
+      tickDurationMs: Math.round(lastTickDuration * 100) / 100,
+      avgTickDurationMs: Math.round(avgTickDuration * 100) / 100,
+      uptimeSeconds: Math.floor((Date.now() - serverStartTime) / 1000),
+      worldTime: Math.round(gameState.worldTime * 100) / 100,
+      dayNightPhase: gameState.dayNightPhase,
+    };
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(stats));
+    return;
   } else {
     res.writeHead(404);
     res.end('Not found');
@@ -209,6 +224,10 @@ wss.on('connection', (ws) => {
     hammerUpgradeRequest: null,
     drinkWaterRequest: null,
     spawnTick: gameState.tick,
+    spawnProtectionUntil: gameState.tick + 10 * SERVER_TPS, // 10s spawn protection
+    isFirstSpawn: true,
+    // Rate limiting
+    actionTimestamps: [], // recent action timestamps for rate limiting
   };
   gameState.clients.set(connId, client);
 
@@ -250,30 +269,42 @@ wss.on('connection', (ws) => {
   ws.on('error', () => {});
 });
 
+// Rate limit check: max 5 actions per second for craft/build/interact
+function checkRateLimit(client) {
+  const now = Date.now();
+  client.actionTimestamps = client.actionTimestamps.filter(t => now - t < 1000);
+  if (client.actionTimestamps.length >= 5) return false;
+  client.actionTimestamps.push(now);
+  return true;
+}
+
 function handleClientMessage(connId, msg) {
   const client = gameState.clients.get(connId);
   if (!client) return;
 
   switch (msg.type) {
-    case MSG.INPUT:
-      client.input = {
-        keys: msg.keys || 0,
-        mouseAngle: msg.mouseAngle || 0,
-        mouseAction: msg.mouseAction || MOUSE_ACTION.NONE,
-        x: msg.x,
-        y: msg.y,
-      };
-      // Handle hotbar selection
-      if (msg.selectedSlot !== undefined && msg.selectedSlot >= 0 && msg.selectedSlot < 6) {
+    case MSG.INPUT: {
+      const keys = typeof msg.keys === 'number' ? (msg.keys & 0x3F) : 0; // mask to valid bits
+      const mouseAngle = typeof msg.mouseAngle === 'number' && isFinite(msg.mouseAngle) ? msg.mouseAngle : 0;
+      const mouseAction = [MOUSE_ACTION.NONE, MOUSE_ACTION.PRIMARY, MOUSE_ACTION.SECONDARY].includes(msg.mouseAction) ? msg.mouseAction : MOUSE_ACTION.NONE;
+      // Validate x/y bounds
+      const maxCoord = WORLD_SIZE * TILE_SIZE;
+      const x = typeof msg.x === 'number' && isFinite(msg.x) ? Math.max(0, Math.min(maxCoord, msg.x)) : undefined;
+      const y = typeof msg.y === 'number' && isFinite(msg.y) ? Math.max(0, Math.min(maxCoord, msg.y)) : undefined;
+      client.input = { keys, mouseAngle, mouseAction, x, y };
+      if (msg.selectedSlot !== undefined && typeof msg.selectedSlot === 'number' && msg.selectedSlot >= 0 && msg.selectedSlot < 6) {
         Hotbar.selectedSlot[client.playerEid] = msg.selectedSlot;
       }
       break;
+    }
 
     case MSG.CRAFT:
+      if (!checkRateLimit(client)) break;
       client.craftRequest = msg.recipeId;
       break;
 
     case MSG.BUILD:
+      if (!checkRateLimit(client)) break;
       client.buildRequest = {
         pieceType: msg.pieceType,
         x: msg.x,
@@ -282,6 +313,7 @@ function handleClientMessage(connId, msg) {
       break;
 
     case MSG.INTERACT:
+      if (!checkRateLimit(client)) break;
       client.interactRequest = { targetEid: msg.targetEid };
       break;
 
@@ -336,6 +368,9 @@ function handleClientMessage(connId, msg) {
 
 // ── Game Loop ──
 let lastTick = performance.now();
+const serverStartTime = Date.now();
+let lastTickDuration = 0;
+let avgTickDuration = 0;
 
 function gameLoop() {
   const now = performance.now();
@@ -344,6 +379,7 @@ function gameLoop() {
   if (elapsed >= SERVER_TICK_MS) {
     lastTick = now - (elapsed % SERVER_TICK_MS);
     gameState.tick++;
+    const tickStart = performance.now();
 
     // Rebuild spatial hash
     const sh = gameState.spatialHash;
@@ -358,6 +394,9 @@ function gameLoop() {
     for (const system of systems) {
       system(world);
     }
+
+    lastTickDuration = performance.now() - tickStart;
+    avgTickDuration = avgTickDuration * 0.95 + lastTickDuration * 0.05;
   }
 }
 

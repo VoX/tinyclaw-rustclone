@@ -1,7 +1,7 @@
 import { query, hasComponent, removeComponent, addComponent, removeEntity } from 'bitecs';
 import { Player, Dead, Position, Health, Hunger, Thirst, Temperature, Inventory,
          Hotbar, Velocity, SleepingBag, ActiveTool, initInventory } from '../../shared/components.js';
-import { PLAYER_MAX_HP, PLAYER_MAX_HUNGER, PLAYER_MAX_THIRST, ITEM, WORLD_SIZE, TILE_SIZE } from '../../shared/constants.js';
+import { PLAYER_MAX_HP, PLAYER_MAX_HUNGER, PLAYER_MAX_THIRST, ITEM, WORLD_SIZE, TILE_SIZE, SERVER_TPS } from '../../shared/constants.js';
 
 export function createRespawnSystem(gameState) {
   return function RespawnSystem(world) {
@@ -70,8 +70,11 @@ export function createRespawnSystem(gameState) {
       Hotbar.selectedSlot[eid] = 0;
       gameState.dirtyInventories.add(eid);
 
-      // Reset spawn tick for survival timer
-      if (client) client.spawnTick = gameState.tick;
+      // Reset spawn tick for survival timer and spawn protection
+      if (client) {
+        client.spawnTick = gameState.tick;
+        client.spawnProtectionUntil = gameState.tick + 10 * SERVER_TPS;
+      }
     }
     return world;
   };

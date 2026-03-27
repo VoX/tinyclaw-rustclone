@@ -139,6 +139,12 @@ export function createRenderer(canvas, state) {
     // ── Damage red flash ──
     ui.drawDamageFlash(ctx, w, h);
 
+    // ── Temperature visual effects ──
+    ui.drawTemperatureEffects(ctx, w, h, sortedEntities, camX, camY, viewScale);
+
+    // ── Tutorial hint for new players ──
+    ui.drawTutorialHint(ctx, w, h);
+
     // ── Chat bubbles above players ──
     ui.drawChatBubbles(ctx, sortedEntities, camX, camY, w, h, viewScale);
 

@@ -18,6 +18,7 @@ export function createInput(state, send) {
     // Dismiss controls overlay on any key
     if (state.showControls) {
       state.showControls = false;
+      state.tutorialExpiry = Date.now() + 15000; // show tutorial for 15s
       state.firstConnect = false;
       e.preventDefault();
       return;

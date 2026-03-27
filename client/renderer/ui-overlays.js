@@ -185,6 +185,65 @@ export function createUIOverlays(state) {
     ctx.fillRect(0, 0, w, h);
   }
 
+  function drawTemperatureEffects(ctx, w, h, sortedEntities, camX, camY, viewScale) {
+    const temp = state.temp;
+    if (temp === undefined) return;
+
+    // Screen tint for extreme temperatures
+    if (temp < 10) {
+      const intensity = Math.min(0.15, (10 - temp) * 0.015);
+      ctx.fillStyle = `rgba(100, 150, 255, ${intensity})`;
+      ctx.fillRect(0, 0, w, h);
+    } else if (temp > 35) {
+      const intensity = Math.min(0.12, (temp - 35) * 0.012);
+      ctx.fillStyle = `rgba(255, 150, 50, ${intensity})`;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    // Temperature indicator icon (near bottom-left, above hotbar area)
+    const iconX = 90;
+    const iconY = h - 56;
+    ctx.font = '12px Consolas, monospace';
+    ctx.textAlign = 'left';
+
+    if (temp < 15) {
+      // Cold: snowflake
+      ctx.fillStyle = temp < 5 ? '#88bbff' : '#aaccee';
+      ctx.font = '14px Consolas, monospace';
+      ctx.fillText('*', iconX, iconY);
+      ctx.font = '10px Consolas, monospace';
+      ctx.fillText(`${Math.round(temp)}°`, iconX + 14, iconY);
+    } else if (temp > 35) {
+      // Hot: sun
+      ctx.fillStyle = temp > 45 ? '#ff8844' : '#eebb44';
+      ctx.font = '14px Consolas, monospace';
+      ctx.fillText('☀', iconX, iconY);
+      ctx.font = '10px Consolas, monospace';
+      ctx.fillText(`${Math.round(temp)}°`, iconX + 14, iconY);
+    }
+
+    // Campfire warmth radius (visible subtle glow)
+    for (const e of sortedEntities) {
+      if (e.t !== 7) continue; // ENTITY_TYPE.CAMPFIRE
+      if (!e.lit) continue;
+      const ex = e.renderX || e.x;
+      const ey = e.renderY || e.y;
+      const sx = (ex - camX) * viewScale / 2 + w / 2;
+      const sy = (ey - camY) * viewScale / 2 + h / 2;
+      const warmRadius = 5 * viewScale; // 5 tile warmth radius
+      ctx.save();
+      ctx.globalAlpha = 0.06;
+      ctx.strokeStyle = '#ff9944';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.arc(sx, sy, warmRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+
   function drawChatBubbles(ctx, sortedEntities, camX, camY, w, h, viewScale) {
     const nowMs = Date.now();
     for (const e of sortedEntities) {
@@ -581,6 +640,42 @@ export function createUIOverlays(state) {
     ctx.textAlign = 'left';
   }
 
+  function drawTutorialHint(ctx, w, h) {
+    if (!state.tutorialExpiry || Date.now() > state.tutorialExpiry) return;
+    const remaining = state.tutorialExpiry - Date.now();
+    const alpha = remaining < 2000 ? remaining / 2000 : 1;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = '14px Consolas, monospace';
+    ctx.textAlign = 'center';
+
+    const hints = [
+      'Left-click trees/rocks with your rock to gather materials',
+      'Press TAB to open inventory & crafting',
+      'Press B with a Building Plan to start building',
+    ];
+
+    const boxW = 420;
+    const boxH = hints.length * 22 + 20;
+    const boxX = w / 2 - boxW / 2;
+    const boxY = h - 120;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.strokeStyle = 'rgba(255,200,60,0.5)';
+    ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+    ctx.fillStyle = '#e8c030';
+    for (let i = 0; i < hints.length; i++) {
+      ctx.fillText(hints[i], w / 2, boxY + 20 + i * 22);
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
   return {
     drawHealthBars,
     drawHammerPreview,
@@ -588,6 +683,8 @@ export function createUIOverlays(state) {
     drawGoldenHour,
     drawEdgeVignette,
     drawDamageFlash,
+    drawTemperatureEffects,
+    drawTutorialHint,
     drawChatBubbles,
     drawMinimap,
     drawFullMap,

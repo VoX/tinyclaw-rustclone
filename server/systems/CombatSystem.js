@@ -1,6 +1,6 @@
 import { query, hasComponent, addEntity, addComponent } from 'bitecs';
 import { Player, Position, Rotation, Health, ActiveTool, Inventory, Hotbar, Dead,
-         Projectile, Velocity, Collider, NetworkSync, Sprite, Damageable, ResourceNode, Armor } from '../../shared/components.js';
+         Projectile, Velocity, Collider, NetworkSync, Sprite, Damageable, ResourceNode, Armor, Animal } from '../../shared/components.js';
 import { MOUSE_ACTION } from '../../shared/protocol.js';
 import { ITEM_DEFS, SERVER_TPS, getArmorReduction } from '../../shared/constants.js';
 import { reduceDurability } from '../../shared/inventory.js';
@@ -108,6 +108,13 @@ export function createCombatSystem(gameState) {
           while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
           if (Math.abs(angleDiff) > arc / 2) continue;
 
+          // Skip damage if target has spawn protection (player-vs-player only)
+          if (hasComponent(world, targetEid, Player)) {
+            const targetConnId = Player.connectionId[targetEid];
+            const targetClient = gameState.clients.get(targetConnId);
+            if (targetClient && gameState.tick < targetClient.spawnProtectionUntil) continue;
+          }
+
           // Apply damage (reduced by target armor)
           let dmg = def.damage;
           if (hasComponent(world, targetEid, Armor)) {
@@ -118,6 +125,13 @@ export function createCombatSystem(gameState) {
           if (hasComponent(world, targetEid, Damageable)) {
             Damageable.lastHitTime[targetEid] = now;
             Damageable.lastHitBy[targetEid] = eid;
+          }
+
+          // Knockback: push target away from attacker
+          if (dist > 0 && hasComponent(world, targetEid, Velocity)) {
+            const knockStr = 3.0; // tiles/sec impulse
+            Velocity.vx[targetEid] += (dx / dist) * knockStr;
+            Velocity.vy[targetEid] += (dy / dist) * knockStr;
           }
 
           // Send hit event

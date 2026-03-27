@@ -93,9 +93,27 @@ function handleServerMessage(msg) {
         for (const e of msg.entities) {
           const existing = state.entities.get(e.eid);
           if (existing) {
-            // Interpolation: store previous position
             existing.prevX = existing.x;
             existing.prevY = existing.y;
+            if (e.eid === state.myEid && e.x !== undefined && e.y !== undefined) {
+              // For local player: blend toward server position to avoid snapping
+              const serverX = e.x;
+              const serverY = e.y;
+              const dx = serverX - existing.x;
+              const dy = serverY - existing.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist > 10) {
+                // Too far off — snap to server
+                existing.x = serverX;
+                existing.y = serverY;
+              } else {
+                // Gently correct toward server position
+                existing.x += dx * 0.15;
+                existing.y += dy * 0.15;
+              }
+              delete e.x;
+              delete e.y;
+            }
             Object.assign(existing, e);
           } else {
             e.prevX = e.x;

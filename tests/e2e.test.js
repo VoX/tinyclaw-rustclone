@@ -50,7 +50,11 @@ describe('Connection', () => {
   it('should receive position in delta updates', async () => {
     const bot = new Bot(SERVER_URL);
     await bot.connect();
-    await bot.waitForDelta(3000);
+    // Wait for a few ticks to receive delta with our position
+    await bot.waitForCondition(
+      () => bot.position.x !== 0 || bot.position.y !== 0,
+      5000, 50
+    );
     assert.ok(bot.position.x !== 0 || bot.position.y !== 0, 'Should have a non-zero position');
     bot.disconnect();
   });

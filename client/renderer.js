@@ -528,106 +528,83 @@ export function createRenderer(canvas, state) {
   // ── Player drawing ──
   function drawPlayer(ctx, sx, sy, e, isLocal) {
     const angle = e.a || 0;
-    ctx.save();
-    ctx.translate(sx, sy);
-    ctx.rotate(angle);
-
     const dead = e.dead;
 
-    // Shadow
+    // Shadow (drawn without rotation)
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, sx, sy + 5);
     ctx.fillStyle = 'rgba(0,0,0,0.2)';
     ctx.beginPath();
-    ctx.ellipse(0, 0, 10, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(sx, sy + 5, 10, 4, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+
+    // Draw rotated body
     ctx.save();
     ctx.translate(sx, sy);
-    ctx.rotate(angle);
+    ctx.rotate(angle + Math.PI / 2); // +90deg so "up" in local space points toward mouse
 
-    // Colors
     const skinColor = dead ? '#777' : '#d4a574';
     const shirtColor = dead ? '#555' : (isLocal ? '#3a8fd6' : '#d6553a');
     const pantsColor = dead ? '#444' : (isLocal ? '#2a5f8f' : '#8f3a2a');
     const outlineColor = dead ? '#333' : '#222';
 
-    // Legs (two small rectangles behind body)
+    // Legs
     ctx.fillStyle = pantsColor;
-    ctx.fillRect(-3, -7, 4, 8);
-    ctx.fillRect(1, -7, 4, 8);
+    ctx.fillRect(-3, 0, 3, 6);
+    ctx.fillRect(1, 0, 3, 6);
     ctx.strokeStyle = outlineColor;
     ctx.lineWidth = 0.5;
-    ctx.strokeRect(-3, -7, 4, 8);
-    ctx.strokeRect(1, -7, 4, 8);
+    ctx.strokeRect(-3, 0, 3, 6);
+    ctx.strokeRect(1, 0, 3, 6);
 
-    // Body (torso — rounded rectangle)
+    // Torso
     ctx.fillStyle = shirtColor;
+    ctx.fillRect(-6, -5, 12, 8);
+    ctx.strokeStyle = outlineColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-6, -5, 12, 8);
+
+    // Arms
+    ctx.fillStyle = skinColor;
     ctx.beginPath();
-    ctx.roundRect(-7, -6, 14, 10, 2);
+    ctx.arc(-7, -1, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(7, -1, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Head
+    ctx.fillStyle = skinColor;
+    ctx.beginPath();
+    ctx.arc(0, -9, 5, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = outlineColor;
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Shirt detail line
-    if (!dead) {
-      ctx.strokeStyle = isLocal ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.1)';
-      ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.moveTo(0, -5);
-      ctx.lineTo(0, 3);
-      ctx.stroke();
-    }
-
-    // Arms (two small circles on sides)
-    ctx.fillStyle = skinColor;
-    ctx.beginPath();
-    ctx.arc(-8, -1, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(8, -1, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = outlineColor;
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.arc(-8, -1, 3, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(8, -1, 3, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Head (circle, slightly in front of body)
-    ctx.fillStyle = skinColor;
-    ctx.beginPath();
-    ctx.arc(0, -10, 6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = outlineColor;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Eyes (two dots facing forward)
+    // Eyes
     if (!dead) {
       ctx.fillStyle = '#222';
       ctx.beginPath();
-      ctx.arc(-2, -12, 1, 0, Math.PI * 2);
-      ctx.arc(2, -12, 1, 0, Math.PI * 2);
+      ctx.arc(-1.5, -10.5, 0.8, 0, Math.PI * 2);
+      ctx.arc(1.5, -10.5, 0.8, 0, Math.PI * 2);
       ctx.fill();
     } else {
-      // X eyes for dead
       ctx.strokeStyle = '#222';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 0.8;
       ctx.beginPath();
-      ctx.moveTo(-3, -12); ctx.lineTo(-1, -10);
-      ctx.moveTo(-1, -12); ctx.lineTo(-3, -10);
-      ctx.moveTo(1, -12); ctx.lineTo(3, -10);
-      ctx.moveTo(1, -10); ctx.lineTo(3, -12);
+      ctx.moveTo(-2.5, -10.5); ctx.lineTo(-0.5, -9);
+      ctx.moveTo(-0.5, -10.5); ctx.lineTo(-2.5, -9);
+      ctx.moveTo(0.5, -10.5); ctx.lineTo(2.5, -9);
+      ctx.moveTo(2.5, -10.5); ctx.lineTo(0.5, -9);
       ctx.stroke();
     }
 
     ctx.restore();
 
-    // Held weapon (drawn in world space, not rotated with body)
+    // Held weapon (world space)
     if (e.held && e.held !== ITEM.NONE && !dead) {
       drawHeldWeapon(ctx, sx, sy, angle, e.held);
     }

@@ -73,6 +73,9 @@ export function createBuildSystem(gameState) {
       } else if (heldItem === ITEM.STORAGE_BOX) {
         cost = null;
         entityType = ENTITY_TYPE.STORAGE_BOX;
+      } else if (heldItem === ITEM.BED) {
+        cost = null;
+        entityType = ENTITY_TYPE.BED;
       } else {
         continue; // Not a valid build action
       }
@@ -187,6 +190,12 @@ export function createBuildSystem(gameState) {
         const slots = [];
         for (let i = 0; i < 12; i++) slots.push({ id: 0, n: 0 });
         gameState.containerInv.set(newEid, slots);
+      } else if (entityType === ENTITY_TYPE.BED) {
+        addComponent(world, newEid, SleepingBag);
+        SleepingBag.ownerPlayerId[newEid] = eid;
+        SleepingBag.cooldown[newEid] = 0;
+        Collider.radius[newEid] = 0.5;
+        Sprite.spriteId[newEid] = 216; // bed sprite (different from sleeping bag 210)
       }
 
       gameState.entityTypes.set(newEid, entityType);
@@ -273,6 +282,83 @@ export function createBuildSystem(gameState) {
         type: 'upgrade',
         x: Position.x[targetEid],
         y: Position.y[targetEid],
+      });
+    }
+
+    // ── Hammer Repair ──
+    for (const [connId, client] of gameState.clients) {
+      if (!client.hammerRepairRequest) continue;
+      const req = client.hammerRepairRequest;
+      client.hammerRepairRequest = null;
+
+      const eid = client.playerEid;
+      if (!eid || hasComponent(world, eid, Dead)) continue;
+
+      const slot = Hotbar.selectedSlot[eid];
+      const heldItem = Inventory.items[eid]?.[slot] || 0;
+      if (heldItem !== ITEM.HAMMER) continue;
+
+      const targetEid = req.targetEid;
+      if (!hasComponent(world, targetEid, Structure)) continue;
+
+      // Already at full HP?
+      if (Health.current[targetEid] >= Health.max[targetEid]) continue;
+
+      // Distance check
+      const dx = Position.x[targetEid] - Position.x[eid];
+      const dy = Position.y[targetEid] - Position.y[eid];
+      if (dx * dx + dy * dy > 6 * 6) continue;
+
+      // TC auth check
+      const tcs2 = query(world, [ToolCupboard, Position]);
+      let auth2 = true;
+      for (let i = 0; i < tcs2.length; i++) {
+        const tc = tcs2[i];
+        const tdx = Position.x[targetEid] - Position.x[tc];
+        const tdy = Position.y[targetEid] - Position.y[tc];
+        if (tdx * tdx + tdy * tdy < 32 * 32) {
+          const authList = gameState.tcAuth.get(tc);
+          if (authList && !authList.has(eid)) { auth2 = false; break; }
+        }
+      }
+      if (!auth2) continue;
+
+      // Repair cost: 50% of upgrade cost for current tier (min tier 1 = wood cost)
+      const tier = Structure.tier[targetEid];
+      const costDef = UPGRADE_COSTS[Math.max(tier, 1)];
+      if (!costDef) continue;
+      const [costItem, costAmount] = costDef;
+      const repairCost = Math.ceil(costAmount * 0.5);
+
+      // Check materials
+      let totalMat = 0;
+      for (let s = 0; s < INVENTORY_SLOTS; s++) {
+        if (Inventory.items[eid][s] === costItem) totalMat += Inventory.counts[eid][s];
+      }
+      if (totalMat < repairCost) continue;
+
+      // Consume materials
+      let rem = repairCost;
+      for (let s = 0; s < INVENTORY_SLOTS && rem > 0; s++) {
+        if (Inventory.items[eid][s] === costItem) {
+          const take = Math.min(Inventory.counts[eid][s], rem);
+          Inventory.counts[eid][s] -= take;
+          rem -= take;
+          if (Inventory.counts[eid][s] === 0) Inventory.items[eid][s] = 0;
+        }
+      }
+
+      // Repair to full
+      const healed = Health.max[targetEid] - Health.current[targetEid];
+      Health.current[targetEid] = Health.max[targetEid];
+      Structure.hp[targetEid] = Structure.maxHp[targetEid];
+      gameState.dirtyInventories.add(eid);
+
+      gameState.events.push({
+        type: 'repair',
+        x: Position.x[targetEid],
+        y: Position.y[targetEid],
+        amount: healed,
       });
     }
 

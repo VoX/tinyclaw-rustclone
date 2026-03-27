@@ -50,6 +50,8 @@ export function createEntityRenderer(state) {
       drawToolCupboard(ctx, sx, sy, e);
     } else if (type === ENTITY_TYPE.SLEEPING_BAG) {
       drawSleepingBag(ctx, sx, sy, e);
+    } else if (type === ENTITY_TYPE.BED) {
+      drawBed(ctx, sx, sy, e);
     } else if (type === ENTITY_TYPE.STORAGE_BOX) {
       drawStorageBox(ctx, sx, sy, e);
     } else if (type === ENTITY_TYPE.LOOT_BAG) {
@@ -1063,6 +1065,26 @@ export function createEntityRenderer(state) {
     ctx.moveTo(sx - 7, sy);
     ctx.lineTo(sx + 3, sy);
     ctx.stroke();
+  }
+
+  function drawBed(ctx, sx, sy, e) {
+    // Wooden frame
+    ctx.fillStyle = '#6a4a2a';
+    ctx.fillRect(sx - 11, sy - 5, 22, 10);
+    ctx.strokeStyle = '#4a3218';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx - 11, sy - 5, 22, 10);
+    // Mattress (white/cream)
+    ctx.fillStyle = '#d4c8a8';
+    ctx.fillRect(sx - 9, sy - 4, 18, 8);
+    // Pillow
+    ctx.fillStyle = '#eee';
+    ctx.beginPath();
+    ctx.ellipse(sx + 6, sy, 3, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Blanket
+    ctx.fillStyle = '#3a6a8a';
+    ctx.fillRect(sx - 9, sy - 2, 12, 6);
   }
 
   function drawStorageBox(ctx, sx, sy, e) {

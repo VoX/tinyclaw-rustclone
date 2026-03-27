@@ -34,6 +34,7 @@ export const MSG = {
   DRINK_WATER: 12,
   RELOAD: 13,
   HAMMER_REPAIR: 14,
+  CRAFT_CANCEL: 15,
   CLIP_UPDATE: 65,
   CRAFT_PROGRESS: 66,
 };
@@ -90,4 +91,5 @@ export const ENTITY_TYPE = {
   STORAGE_BOX: 13,
   LOOT_BAG: 14,
   BARREL: 15,
+  BED: 16,
 };

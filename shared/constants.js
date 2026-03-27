@@ -77,6 +77,7 @@ export const ITEM = {
   WORKBENCH_T1_ITEM: 64,
   WORKBENCH_T2_ITEM: 65,
   WORKBENCH_T3_ITEM: 66,
+  BED: 67,
   // Building
   KEY_LOCK: 70,
   CODE_LOCK: 71,
@@ -153,6 +154,7 @@ export const ITEM_DEFS = {
   [ITEM.WORKBENCH_T1_ITEM]: { name: 'Workbench T1', maxStack: 1, cat: 'deployable' },
   [ITEM.WORKBENCH_T2_ITEM]: { name: 'Workbench T2', maxStack: 1, cat: 'deployable' },
   [ITEM.WORKBENCH_T3_ITEM]: { name: 'Workbench T3', maxStack: 1, cat: 'deployable' },
+  [ITEM.BED]: { name: 'Bed', maxStack: 1, cat: 'deployable' },
   // Building
   [ITEM.KEY_LOCK]: { name: 'Key Lock', maxStack: 1, cat: 'building' },
   [ITEM.CODE_LOCK]: { name: 'Code Lock', maxStack: 1, cat: 'building' },
@@ -336,7 +338,17 @@ export const RECIPES = [
   { id: 45, result: ITEM.METAL_PIPE, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.SCRAP, 20]] },
   { id: 46, result: ITEM.SPRING, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.SCRAP, 25]] },
   { id: 47, result: ITEM.ROPE, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.SCRAP, 15], [ITEM.CLOTH, 5]] },
+  // Bed
+  { id: 48, result: ITEM.BED, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.WOOD, 100], [ITEM.CLOTH, 15], [ITEM.METAL_FRAGS, 20]] },
 ];
+
+// Craft time in seconds based on tier (default if recipe has no `time` field)
+export function getCraftTime(recipe) {
+  if (recipe.time !== undefined) return recipe.time;
+  if (recipe.tier >= CRAFT_TIER.WORKBENCH_T2) return 3;
+  if (recipe.tier >= CRAFT_TIER.WORKBENCH_T1) return 2;
+  return 1;
+}
 
 // Inventory size
 export const INVENTORY_SLOTS = 24;

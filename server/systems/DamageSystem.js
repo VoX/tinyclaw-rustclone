@@ -89,10 +89,12 @@ export function createDamageSystem(gameState) {
         for (let b = 0; b < allBags.length; b++) {
           const bagEid = allBags[b];
           if (SleepingBag.ownerPlayerId[bagEid] === eid && SleepingBag.cooldown[bagEid] <= 0) {
+            const isBed = gameState.entityTypes.get(bagEid) === 16; // ENTITY_TYPE.BED
             bags.push({
               eid: bagEid,
               x: Math.round(Position.x[bagEid]),
               y: Math.round(Position.y[bagEid]),
+              isBed,
             });
           }
         }

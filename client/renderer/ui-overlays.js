@@ -614,18 +614,127 @@ export function createUIOverlays(state) {
 
   function drawConnectionScreen(ctx, w, h) {
     if (state.worldReady) return;
-    ctx.fillStyle = 'rgba(0,0,0,0.9)';
+    // Full black background
+    ctx.fillStyle = '#111';
     ctx.fillRect(0, 0, w, h);
-    ctx.font = '24px Consolas, monospace';
-    ctx.fillStyle = '#aaa';
-    ctx.textAlign = 'center';
-    if (state.connecting) {
-      ctx.fillText('Connecting...', w / 2, h / 2);
-    } else if (state.loadingWorld) {
-      ctx.fillText('Loading world...', w / 2, h / 2);
-    } else {
-      ctx.fillText('Reconnecting...', w / 2, h / 2);
+
+    // Subtle noise texture
+    ctx.save();
+    ctx.globalAlpha = 0.03;
+    for (let i = 0; i < 80; i++) {
+      const nx = Math.random() * w;
+      const ny = Math.random() * h;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(nx, ny, 1, 1);
     }
+    ctx.restore();
+
+    const cx = w / 2;
+    const cy = h / 2;
+    ctx.textAlign = 'center';
+
+    // Player silhouette with rock
+    ctx.save();
+    ctx.fillStyle = '#222';
+    // Body
+    ctx.beginPath();
+    ctx.ellipse(cx, cy - 80, 14, 20, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Head
+    ctx.beginPath();
+    ctx.arc(cx, cy - 110, 10, 0, Math.PI * 2);
+    ctx.fill();
+    // Left arm (holding rock)
+    ctx.beginPath();
+    ctx.moveTo(cx - 12, cy - 90);
+    ctx.lineTo(cx - 26, cy - 70);
+    ctx.lineTo(cx - 22, cy - 66);
+    ctx.lineTo(cx - 8, cy - 86);
+    ctx.closePath();
+    ctx.fill();
+    // Rock in hand
+    ctx.fillStyle = '#333';
+    ctx.beginPath();
+    ctx.moveTo(cx - 30, cy - 72);
+    ctx.lineTo(cx - 22, cy - 78);
+    ctx.lineTo(cx - 18, cy - 68);
+    ctx.lineTo(cx - 26, cy - 64);
+    ctx.closePath();
+    ctx.fill();
+    // Right arm
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    ctx.moveTo(cx + 12, cy - 90);
+    ctx.lineTo(cx + 20, cy - 72);
+    ctx.lineTo(cx + 16, cy - 68);
+    ctx.lineTo(cx + 8, cy - 86);
+    ctx.closePath();
+    ctx.fill();
+    // Legs
+    ctx.beginPath();
+    ctx.moveTo(cx - 8, cy - 60);
+    ctx.lineTo(cx - 12, cy - 38);
+    ctx.lineTo(cx - 4, cy - 38);
+    ctx.lineTo(cx, cy - 58);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx + 8, cy - 60);
+    ctx.lineTo(cx + 12, cy - 38);
+    ctx.lineTo(cx + 4, cy - 38);
+    ctx.lineTo(cx, cy - 58);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Title
+    ctx.font = 'bold 32px Consolas, monospace';
+    ctx.fillStyle = '#e8c030';
+    ctx.fillText('RUST CLONE', cx, cy + 10);
+
+    // Status text
+    ctx.font = '14px Consolas, monospace';
+    ctx.fillStyle = '#888';
+    let statusText = 'Reconnecting...';
+    if (state.connecting) statusText = 'Connecting to server...';
+    else if (state.loadingWorld) statusText = 'Loading world data...';
+    ctx.fillText(statusText, cx, cy + 36);
+
+    // World seed
+    if (state.worldSeed) {
+      ctx.font = '11px Consolas, monospace';
+      ctx.fillStyle = '#555';
+      ctx.fillText(`seed: ${state.worldSeed}`, cx, cy + 54);
+    }
+
+    // Loading bar
+    const barW = 240;
+    const barH = 6;
+    const barX = cx - barW / 2;
+    const barY = cy + 68;
+    const progress = state.loadingProgress || 0;
+
+    // Bar background
+    ctx.fillStyle = '#222';
+    ctx.fillRect(barX, barY, barW, barH);
+    // Bar border
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barW, barH);
+    // Bar fill
+    if (progress > 0) {
+      const grad = ctx.createLinearGradient(barX, barY, barX + barW * progress, barY);
+      grad.addColorStop(0, '#c08020');
+      grad.addColorStop(1, '#e8c030');
+      ctx.fillStyle = grad;
+      ctx.fillRect(barX + 1, barY + 1, (barW - 2) * progress, barH - 2);
+    }
+
+    // Progress percentage
+    ctx.font = '10px Consolas, monospace';
+    ctx.fillStyle = '#666';
+    ctx.fillText(`${Math.floor(progress * 100)}%`, cx, barY + 20);
+
     ctx.textAlign = 'left';
   }
 
@@ -636,7 +745,14 @@ export function createUIOverlays(state) {
     ctx.textAlign = 'center';
     ctx.font = 'bold 28px Consolas, monospace';
     ctx.fillStyle = '#e8c030';
-    ctx.fillText('RUST CLONE', w / 2, h / 2 - 130);
+    ctx.fillText('RUST CLONE', w / 2, h / 2 - 150);
+
+    // Show player name
+    if (state.myName) {
+      ctx.font = '16px Consolas, monospace';
+      ctx.fillStyle = '#aaa';
+      ctx.fillText(`You are: ${state.myName}`, w / 2, h / 2 - 120);
+    }
 
     ctx.font = '14px Consolas, monospace';
     ctx.fillStyle = '#ccc';
@@ -646,6 +762,7 @@ export function createUIOverlays(state) {
       'Mouse — Aim / LMB Attack / RMB Alt',
       'TAB — Inventory & Crafting',
       'E — Interact',
+      'R — Reload',
       'B — Build Menu (hold Building Plan)',
       'Q — Drop Item',
       '1-6 — Hotbar Slots',
@@ -654,7 +771,7 @@ export function createUIOverlays(state) {
       'M — Map',
     ];
     for (let i = 0; i < controls.length; i++) {
-      ctx.fillText(controls[i], w / 2, h / 2 - 70 + i * 22);
+      ctx.fillText(controls[i], w / 2, h / 2 - 80 + i * 22);
     }
     ctx.font = '12px Consolas, monospace';
     ctx.fillStyle = '#888';
@@ -671,7 +788,7 @@ export function createUIOverlays(state) {
     const isBuildPlan = itemId === ITEM.BUILDING_PLAN;
     const isDeployable = [ITEM.SLEEPING_BAG, ITEM.CAMPFIRE_ITEM, ITEM.FURNACE_ITEM,
       ITEM.TOOL_CUPBOARD_ITEM, ITEM.WORKBENCH_T1_ITEM, ITEM.WORKBENCH_T2_ITEM,
-      ITEM.WORKBENCH_T3_ITEM, ITEM.STORAGE_BOX].includes(itemId);
+      ITEM.WORKBENCH_T3_ITEM, ITEM.STORAGE_BOX, ITEM.BED].includes(itemId);
     if (!isBuildPlan && !isDeployable) return;
 
     const me = state.myEid ? state.entities.get(state.myEid) : null;
@@ -741,6 +858,38 @@ export function createUIOverlays(state) {
       ctx.stroke();
     }
 
+    ctx.restore();
+  }
+
+  function drawCraftProgress(ctx, w, h) {
+    if (!state.craftRecipeId || state.craftProgress < 0) return;
+    const progress = Math.max(0, Math.min(1, state.craftProgress));
+    const barW = 200;
+    const barH = 14;
+    const x = w / 2 - barW / 2;
+    const y = h - 140;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(x - 4, y - 4, barW + 8, barH + 18);
+
+    // Bar background
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x, y, barW, barH);
+    // Bar fill
+    ctx.fillStyle = '#e8c030';
+    ctx.fillRect(x, y, barW * progress, barH);
+    // Border
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, barW, barH);
+
+    // Label
+    ctx.font = '10px Consolas, monospace';
+    ctx.fillStyle = '#aaa';
+    ctx.textAlign = 'center';
+    ctx.fillText('Crafting... [ESC] cancel', w / 2, y + barH + 12);
+    ctx.textAlign = 'left';
     ctx.restore();
   }
 
@@ -821,6 +970,7 @@ export function createUIOverlays(state) {
     drawDamageFlash,
     drawTemperatureEffects,
     drawBuildPreview,
+    drawCraftProgress,
     drawAmmoHUD,
     drawTutorialHint,
     drawChatBubbles,

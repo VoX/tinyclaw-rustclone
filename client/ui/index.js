@@ -462,7 +462,7 @@ export function createUI(state, send) {
         held === ITEM.CAMPFIRE_ITEM || held === ITEM.FURNACE_ITEM ||
         held === ITEM.TOOL_CUPBOARD_ITEM || held === ITEM.WORKBENCH_T1_ITEM ||
         held === ITEM.WORKBENCH_T2_ITEM || held === ITEM.WORKBENCH_T3_ITEM ||
-        held === ITEM.STORAGE_BOX) {
+        held === ITEM.STORAGE_BOX || held === ITEM.BED) {
 
       const pieceType = held === ITEM.BUILDING_PLAN ? buildPiece : 1;
 
@@ -472,6 +472,38 @@ export function createUI(state, send) {
         x: worldX,
         y: worldY,
       });
+    }
+  });
+
+  // Right-click with hammer to repair
+  document.getElementById('game-canvas').addEventListener('contextmenu', (e) => {
+    const held = state.inventory[state.selectedSlot]?.id;
+    if (held !== ITEM.HAMMER) return;
+    const me = state.entities.get(state.myEid);
+    if (!me) return;
+    const canvas = e.target;
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const viewScale = 24;
+    const tileSize = state.tileSize;
+    const worldX = me.x + (e.clientX - cx) * tileSize / viewScale;
+    const worldY = me.y + (e.clientY - cy) * tileSize / viewScale;
+    let nearestEid = null;
+    let nearestDist = 4;
+    for (const [eid, ent] of state.entities) {
+      if (ent.t !== ENTITY_TYPE.STRUCTURE) continue;
+      const ex = ent.renderX || ent.x;
+      const ey = ent.renderY || ent.y;
+      const dx = ex - worldX;
+      const dy = ey - worldY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestEid = eid;
+      }
+    }
+    if (nearestEid !== null) {
+      send({ type: MSG.HAMMER_REPAIR, targetEid: nearestEid });
     }
   });
 
@@ -747,7 +779,7 @@ export function createUI(state, send) {
           for (const bag of bags) {
             const btn = document.createElement('button');
             btn.className = 'bag-spawn-btn';
-            btn.textContent = `Sleeping Bag (${bag.x}, ${bag.y})`;
+            btn.textContent = `${bag.isBed ? 'Bed' : 'Sleeping Bag'} (${bag.x}, ${bag.y})`;
             btn.style.cssText = 'padding:10px 24px;font-size:13px;background:rgba(40,40,40,0.9);color:#ddd;border:2px solid #555;border-radius:6px;cursor:pointer;z-index:1;text-transform:uppercase;letter-spacing:1px;margin:4px;';
             btn.addEventListener('click', () => {
               if (Date.now() - (state.deathTime || 0) < state.respawnTime) return;

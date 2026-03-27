@@ -12,6 +12,13 @@ export function createRespawnSystem(gameState) {
       Dead.timer[eid]--;
     }
 
+    // Tick down bed/sleeping bag cooldowns
+    const allBags = query(world, [SleepingBag]);
+    for (let i = 0; i < allBags.length; i++) {
+      const eid = allBags[i];
+      if (SleepingBag.cooldown[eid] > 0) SleepingBag.cooldown[eid]--;
+    }
+
     // Process respawn requests
     for (const [connId, client] of gameState.clients) {
       if (!client.respawnRequest) continue;
@@ -25,15 +32,21 @@ export function createRespawnSystem(gameState) {
       let spawnX, spawnY;
 
       if (req.bagEid) {
-        // Try to spawn at sleeping bag
+        // Try to spawn at sleeping bag or bed
         const bagEid = req.bagEid;
         if (hasComponent(world, bagEid, SleepingBag) && SleepingBag.ownerPlayerId[bagEid] === eid) {
           spawnX = Position.x[bagEid];
           spawnY = Position.y[bagEid];
-          // Sleeping bag is one-time use — destroy it
-          gameState.removedEntities.add(bagEid);
-          gameState.entityTypes.delete(bagEid);
-          removeEntity(world, bagEid);
+          const isBed = gameState.entityTypes.get(bagEid) === 16; // ENTITY_TYPE.BED
+          if (isBed) {
+            // Bed: reusable with 5 min cooldown
+            SleepingBag.cooldown[bagEid] = 5 * 60 * SERVER_TPS;
+          } else {
+            // Sleeping bag: one-time use — destroy it
+            gameState.removedEntities.add(bagEid);
+            gameState.entityTypes.delete(bagEid);
+            removeEntity(world, bagEid);
+          }
         } else {
           continue; // Invalid bag
         }

@@ -50,6 +50,14 @@ export function createInput(state, send) {
     }
 
     if (e.repeat) return;
+    // Cancel craft on Escape
+    if (e.code === 'Escape' && state.craftRecipeId) {
+      send({ type: MSG.CRAFT_CANCEL });
+      state.craftRecipeId = 0;
+      state.craftProgress = 0;
+      e.preventDefault();
+      return;
+    }
     switch (e.code) {
       case 'KeyW': keys |= KEY.W; break;
       case 'KeyA': keys |= KEY.A; break;

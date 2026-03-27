@@ -36,6 +36,7 @@ import { createNetworkSyncSystem } from './systems/NetworkSyncSystem.js';
 import { createGatherSystem } from './systems/GatherSystem.js';
 import { createInventorySystem } from './systems/InventorySystem.js';
 import { createInteractSystem } from './systems/InteractSystem.js';
+import { createDecaySystem } from './systems/DecaySystem.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = 8780;
@@ -92,6 +93,7 @@ const systems = [
   createDoorSystem(gameState),
   createInventorySystem(gameState),
   createRespawnSystem(gameState),
+  createDecaySystem(gameState),
   createDayNightSystem(gameState),
   createNetworkSyncSystem(gameState),
 ];
@@ -258,6 +260,7 @@ wss.on('connection', (ws) => {
     worldSize: WORLD_SIZE,
     tileSize: TILE_SIZE,
     biomes: serializeBiomeMap(gameState.biomeMap),
+    seed: 12345,
   }));
 
   // Send initial inventory
@@ -376,6 +379,14 @@ function handleClientMessage(connId, msg) {
 
     case MSG.RELOAD:
       client.reloadRequest = true;
+      break;
+
+    case MSG.HAMMER_REPAIR:
+      client.hammerRepairRequest = { targetEid: msg.targetEid };
+      break;
+
+    case MSG.CRAFT_CANCEL:
+      client.craftCancel = true;
       break;
 
     case MSG.PING:

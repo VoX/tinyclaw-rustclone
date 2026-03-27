@@ -68,6 +68,14 @@ const state = {
   buildPiece: 0,       // currently selected build piece type (set by UI)
   mouseScreenX: 0,
   mouseScreenY: 0,
+  // Craft progress
+  craftProgress: 0,
+  craftRecipeId: 0,
+  craftTotalTime: 0,
+  // Connection screen
+  myName: '',
+  worldSeed: 0,
+  loadingProgress: 0,
 };
 
 // Initialize inventory slots
@@ -89,6 +97,7 @@ function connect() {
     state.connected = true;
     state.connecting = false;
     state.loadingWorld = true;
+    state.loadingProgress = 0.1;
     console.log('Connected to server');
   };
 
@@ -118,6 +127,8 @@ function handleServerMessage(msg) {
     case MSG.WORLD_INFO:
       state.worldSize = msg.worldSize;
       state.tileSize = msg.tileSize;
+      state.worldSeed = msg.seed || 0;
+      state.loadingProgress = 0.3; // got world info
       // Decode RLE biome map
       if (msg.biomes) {
         const total = msg.worldSize * msg.worldSize;
@@ -129,8 +140,10 @@ function handleServerMessage(msg) {
           for (let j = 0; j < count && idx < total; j++) {
             state.biomeMap[idx++] = biome;
           }
+          state.loadingProgress = 0.3 + 0.6 * (idx / total);
         }
       }
+      state.loadingProgress = 1.0;
       state.loadingWorld = false;
       state.worldReady = true;
       // Initialize fog of war explored tiles
@@ -306,6 +319,12 @@ function handleServerMessage(msg) {
     case MSG.CLIP_UPDATE:
       state.clipAmmo = msg.ammo;
       state.clipMax = msg.max;
+      break;
+
+    case MSG.CRAFT_PROGRESS:
+      state.craftProgress = msg.progress;
+      state.craftRecipeId = msg.recipeId;
+      state.craftTotalTime = msg.totalTime;
       break;
   }
 }

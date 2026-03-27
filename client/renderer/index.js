@@ -66,6 +66,13 @@ export function createRenderer(canvas, state) {
           time: Date.now(),
           color: '#aad',
         });
+      } else if (evt.type === 'repair') {
+        particles.emit(evt.x, evt.y, '#4a4', 4, 20, 300);
+        state.notifications.push({
+          text: `Repaired +${evt.amount} HP`,
+          time: Date.now(),
+          color: '#4a4',
+        });
       } else if (evt.type === 'day_night') {
         const text = evt.phase === 'night' ? 'Night is falling...' : 'A new day begins';
         const color = evt.phase === 'night' ? '#88a' : '#ee8';
@@ -144,6 +151,9 @@ export function createRenderer(canvas, state) {
 
     // ── Damage red flash ──
     ui.drawDamageFlash(ctx, w, h);
+
+    // ── Craft progress bar ──
+    ui.drawCraftProgress(ctx, w, h);
 
     // ── Temperature visual effects ──
     ui.drawTemperatureEffects(ctx, w, h, sortedEntities, camX, camY, viewScale);

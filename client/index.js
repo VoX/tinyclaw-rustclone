@@ -625,15 +625,10 @@ function clientLoop(timestamp) {
       dy *= 0.7071;
     }
 
-    // Melee lunge: small forward movement toward cursor on swing
+    // Clear melee swing timer (lunge movement removed)
     if (state.meleeSwingTime > 0) {
       const swingElapsed = now - state.meleeSwingTime;
-      if (swingElapsed < 150) {
-        const lungeAngle = input.getMouseAngle();
-        const lungeSpeed = 0.5 * (1 - swingElapsed / 150); // 0.5 units over 150ms
-        me.x += Math.cos(lungeAngle) * lungeSpeed * (dt / 1000) * 40;
-        me.y += Math.sin(lungeAngle) * lungeSpeed * (dt / 1000) * 40;
-      } else {
+      if (swingElapsed >= 150) {
         state.meleeSwingTime = 0;
       }
     }
@@ -646,6 +641,24 @@ function clientLoop(timestamp) {
     const maxCoord = state.worldSize * state.tileSize;
     me.x = Math.max(0, Math.min(maxCoord, me.x));
     me.y = Math.max(0, Math.min(maxCoord, me.y));
+
+    // Client-side collision against static entities (resources, structures, etc.)
+    const playerRadius = 0.4;
+    for (const [eeid, e] of state.entities) {
+      if (eeid === state.myEid) continue;
+      if (!e.isStatic) continue;
+      const eRadius = e.colliderRadius || 0.5;
+      const cdx = me.x - (e.x || 0);
+      const cdy = me.y - (e.y || 0);
+      const distSq = cdx * cdx + cdy * cdy;
+      const minDist = playerRadius + eRadius;
+      if (distSq < minDist * minDist && distSq > 0) {
+        const d = Math.sqrt(distSq);
+        const overlap = minDist - d;
+        me.x += (cdx / d) * overlap;
+        me.y += (cdy / d) * overlap;
+      }
+    }
 
     // Set render position directly (no interpolation for local player)
     me.renderX = me.x;

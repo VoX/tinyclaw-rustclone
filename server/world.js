@@ -431,7 +431,7 @@ function spawnMonument(world, gameState, biomeMap, tileX, tileY, rng) {
     Structure.placedBy[wallEid] = 0;
     Health.current[wallEid] = 500;
     Health.max[wallEid] = 500;
-    Collider.radius[wallEid] = 0.9;
+    Collider.radius[wallEid] = 2.0;
     Collider.isStatic[wallEid] = 1;
     Sprite.spriteId[wallEid] = 202;
     NetworkSync.lastTick[wallEid] = 0;
@@ -729,7 +729,7 @@ function spawnMonumentWall(world, gameState, wx, wy) {
   Structure.placedBy[wallEid] = 0;
   Health.current[wallEid] = 500;
   Health.max[wallEid] = 500;
-  Collider.radius[wallEid] = 0.9;
+  Collider.radius[wallEid] = 2.0;
   Collider.isStatic[wallEid] = 1;
   Sprite.spriteId[wallEid] = 202;
   NetworkSync.lastTick[wallEid] = 0;

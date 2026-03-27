@@ -275,20 +275,18 @@ export function createUI(state, send) {
   tooltip.style.cssText = 'position:fixed;display:none;background:#111;border:1px solid #555;color:#ccc;padding:6px 10px;font:11px Consolas,monospace;pointer-events:none;z-index:9999;max-width:240px;white-space:pre-line;';
   document.body.appendChild(tooltip);
 
-  function showTooltip(slotIdx, mx, my) {
-    const item = state.inventory[slotIdx];
-    if (!item?.id || item.id === 0) { tooltip.style.display = 'none'; return; }
-    const def = ITEM_DEFS[item.id];
+  function showItemTooltip(itemId, count, mx, my) {
+    if (!itemId || itemId === 0) { tooltip.style.display = 'none'; return; }
+    const def = ITEM_DEFS[itemId];
     if (!def) { tooltip.style.display = 'none'; return; }
     let text = `<b style="color:#e8c030">${def.name}</b>`;
     if (def.damage) text += `\nDamage: ${def.damage}`;
     if (def.fireRate) text += `\nFire Rate: ${def.fireRate}/s`;
     if (def.range) text += `\nRange: ${def.range}`;
     if (def.gatherMult) text += `\nGather: ${def.gatherMult}x`;
-    if (def.maxStack > 1) text += `\nStack: ${item.n}/${def.maxStack}`;
+    if (def.maxStack > 1) text += `\nStack: ${count}/${def.maxStack}`;
     if (def.cat) text += `\nType: ${def.cat}`;
-    // Find recipe
-    const recipe = RECIPES.find(r => r.result === item.id);
+    const recipe = RECIPES.find(r => r.result === itemId);
     if (recipe) {
       text += '\n\n<span style="color:#888">Recipe:</span>';
       for (const [ingId, ingN] of recipe.ing) {
@@ -300,6 +298,36 @@ export function createUI(state, send) {
     tooltip.style.display = 'block';
     tooltip.style.left = (mx + 14) + 'px';
     tooltip.style.top = (my + 14) + 'px';
+  }
+
+  function showTooltip(slotIdx, mx, my) {
+    const item = state.inventory[slotIdx];
+    if (!item?.id) { tooltip.style.display = 'none'; return; }
+    showItemTooltip(item.id, item.n, mx, my);
+  }
+
+  // Reusable icon slot for container UIs
+  function createItemSlot(itemId, count, onClick) {
+    const slotDiv = document.createElement('div');
+    slotDiv.className = 'container-slot';
+    slotDiv.style.cssText = 'width:48px;height:48px;position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+    if (itemId && count > 0) {
+      const iconCanvas = document.createElement('canvas');
+      iconCanvas.width = 36;
+      iconCanvas.height = 36;
+      iconCanvas.style.cssText = 'position:absolute;top:2px;left:6px;';
+      drawItemIcon(iconCanvas.getContext('2d'), 0, 0, 36, itemId);
+      slotDiv.appendChild(iconCanvas);
+      const qtyEl = document.createElement('div');
+      qtyEl.style.cssText = 'position:absolute;bottom:1px;right:3px;font-size:9px;color:#ddd;text-shadow:0 0 2px #000;';
+      qtyEl.textContent = count > 1 ? count : '';
+      slotDiv.appendChild(qtyEl);
+      slotDiv.addEventListener('mouseenter', (e) => showItemTooltip(itemId, count, e.clientX, e.clientY));
+      slotDiv.addEventListener('mousemove', (e) => showItemTooltip(itemId, count, e.clientX, e.clientY));
+      slotDiv.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+      if (onClick) slotDiv.addEventListener('click', onClick);
+    }
+    return slotDiv;
   }
 
   // Smoothed bar values for animation
@@ -367,6 +395,23 @@ export function createUI(state, send) {
 
   // Build craft panel with item icons — dynamic, updates on inventory changes
   let lastCraftHash = '';
+  let selectedCraftCategory = 'All';
+  const CRAFT_CATEGORIES = ['All', 'Tools', 'Weapons', 'Building', 'Armor', 'Resources', 'Other'];
+  const CRAFT_CAT_MAP = {
+    'Tools': ['tool'],
+    'Weapons': ['melee', 'ranged', 'ammo', 'explosive'],
+    'Building': ['building', 'deployable'],
+    'Armor': ['armor'],
+    'Resources': ['resource', 'food', 'medical'],
+  };
+  function getRecipeCategory(recipe) {
+    const def = ITEM_DEFS[recipe.result];
+    if (!def) return 'Other';
+    for (const [tab, cats] of Object.entries(CRAFT_CAT_MAP)) {
+      if (cats.includes(def.cat)) return tab;
+    }
+    return 'Other';
+  }
   function buildCraftPanel() {
     // Compute inventory resource counts
     const invCounts = {};
@@ -378,7 +423,7 @@ export function createUI(state, send) {
     }
 
     // Simple hash to avoid rebuilding every frame
-    const hash = JSON.stringify(invCounts) + ':' + state.workbenchTier;
+    const hash = JSON.stringify(invCounts) + ':' + state.workbenchTier + ':' + selectedCraftCategory;
     if (hash === lastCraftHash) return;
     lastCraftHash = hash;
 
@@ -393,7 +438,29 @@ export function createUI(state, send) {
     });
 
     craftPanel.innerHTML = '<h3>Crafting</h3>';
-    for (const recipe of sorted) {
+
+    // Category tabs
+    const tabBar = document.createElement('div');
+    tabBar.style.cssText = 'display:flex;flex-wrap:wrap;gap:2px;margin-bottom:6px;';
+    for (const cat of CRAFT_CATEGORIES) {
+      const tab = document.createElement('button');
+      tab.textContent = cat;
+      tab.style.cssText = 'padding:3px 8px;border:1px solid #555;background:' +
+        (cat === selectedCraftCategory ? '#555' : '#2a2a2a') +
+        ';color:#ccc;cursor:pointer;font-size:11px;border-radius:3px;';
+      tab.addEventListener('click', () => {
+        selectedCraftCategory = cat;
+        lastCraftHash = '';
+        buildCraftPanel();
+      });
+      tabBar.appendChild(tab);
+    }
+    craftPanel.appendChild(tabBar);
+
+    // Filter recipes by selected category
+    const filtered = selectedCraftCategory === 'All' ? sorted : sorted.filter(r => getRecipeCategory(r) === selectedCraftCategory);
+
+    for (const recipe of filtered) {
       const btn = document.createElement('div');
       btn.className = 'craft-recipe';
 
@@ -978,12 +1045,27 @@ export function createUI(state, send) {
 
     for (const trade of state.npcTradeOpen.trades) {
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 8px;margin-bottom:4px;background:rgba(40,40,40,0.8);border:1px solid rgba(80,80,80,0.4);border-radius:4px;';
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;background:rgba(40,40,40,0.8);border:1px solid rgba(80,80,80,0.4);border-radius:4px;';
+
+      // Item icon
+      const iconCanvas = document.createElement('canvas');
+      iconCanvas.width = 32;
+      iconCanvas.height = 32;
+      iconCanvas.style.flexShrink = '0';
+      drawItemIcon(iconCanvas.getContext('2d'), 0, 0, 32, trade.itemId || 0);
+      row.appendChild(iconCanvas);
 
       const info = document.createElement('span');
-      info.style.cssText = 'font-size:11px;color:#ccc;';
+      info.style.cssText = 'font-size:11px;color:#ccc;flex:1;';
       info.textContent = `${trade.itemName} x${trade.count}`;
       row.appendChild(info);
+
+      // Tooltip on row
+      if (trade.itemId) {
+        row.addEventListener('mouseenter', (e) => showItemTooltip(trade.itemId, trade.count, e.clientX, e.clientY));
+        row.addEventListener('mousemove', (e) => showItemTooltip(trade.itemId, trade.count, e.clientX, e.clientY));
+        row.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+      }
 
       const btn = document.createElement('button');
       btn.style.cssText = 'padding:4px 12px;font-size:10px;background:rgba(60,60,60,0.8);color:#eee;border:1px solid #555;border-radius:4px;cursor:pointer;';
@@ -995,7 +1077,7 @@ export function createUI(state, send) {
       }
       btn.addEventListener('click', () => {
         send({ type: MSG.NPC_TRADE_BUY, npcEid: state.npcTradeOpen.npcEid, tradeIdx: trade.idx });
-        state.npcTradeOpen = null; // close after buying
+        state.npcTradeOpen = null;
       });
       row.appendChild(btn);
       panel.appendChild(row);
@@ -1056,12 +1138,27 @@ export function createUI(state, send) {
 
     for (const item of state.recyclerOpen.items) {
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 8px;margin-bottom:4px;background:rgba(40,40,40,0.8);border:1px solid rgba(80,80,80,0.4);border-radius:4px;';
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;background:rgba(40,40,40,0.8);border:1px solid rgba(80,80,80,0.4);border-radius:4px;';
+
+      // Item icon
+      const iconCanvas = document.createElement('canvas');
+      iconCanvas.width = 32;
+      iconCanvas.height = 32;
+      iconCanvas.style.flexShrink = '0';
+      drawItemIcon(iconCanvas.getContext('2d'), 0, 0, 32, item.itemId || 0);
+      row.appendChild(iconCanvas);
 
       const left = document.createElement('div');
-      left.style.cssText = 'font-size:11px;color:#ccc;';
+      left.style.cssText = 'font-size:11px;color:#ccc;flex:1;';
       left.innerHTML = `<b>${item.itemName}</b> x${item.count}<br><span style="font-size:9px;color:#8a8">→ ${item.yields.map(y => `${y.count}x ${y.itemName}`).join(', ')}</span>`;
       row.appendChild(left);
+
+      // Tooltip on row
+      if (item.itemId) {
+        row.addEventListener('mouseenter', (e) => showItemTooltip(item.itemId, item.count, e.clientX, e.clientY));
+        row.addEventListener('mousemove', (e) => showItemTooltip(item.itemId, item.count, e.clientX, e.clientY));
+        row.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+      }
 
       const btn = document.createElement('button');
       btn.style.cssText = 'padding:4px 12px;font-size:10px;background:rgba(60,80,60,0.8);color:#eee;border:1px solid #585;border-radius:4px;cursor:pointer;';
@@ -1139,12 +1236,27 @@ export function createUI(state, send) {
 
     for (const item of state.researchOpen.items) {
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 8px;margin-bottom:4px;background:rgba(40,40,40,0.8);border:1px solid rgba(80,80,80,0.4);border-radius:4px;';
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;background:rgba(40,40,40,0.8);border:1px solid rgba(80,80,80,0.4);border-radius:4px;';
+
+      // Item icon
+      const iconCanvas = document.createElement('canvas');
+      iconCanvas.width = 32;
+      iconCanvas.height = 32;
+      iconCanvas.style.flexShrink = '0';
+      drawItemIcon(iconCanvas.getContext('2d'), 0, 0, 32, item.itemId || 0);
+      row.appendChild(iconCanvas);
 
       const left = document.createElement('span');
-      left.style.cssText = 'font-size:11px;color:#ccc;';
+      left.style.cssText = 'font-size:11px;color:#ccc;flex:1;';
       left.textContent = item.itemName;
       row.appendChild(left);
+
+      // Tooltip on row
+      if (item.itemId) {
+        row.addEventListener('mouseenter', (e) => showItemTooltip(item.itemId, 1, e.clientX, e.clientY));
+        row.addEventListener('mousemove', (e) => showItemTooltip(item.itemId, 1, e.clientX, e.clientY));
+        row.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+      }
 
       const btn = document.createElement('button');
       btn.style.cssText = 'padding:4px 12px;font-size:10px;background:rgba(60,60,80,0.8);color:#eee;border:1px solid #558;border-radius:4px;cursor:pointer;';
@@ -1188,20 +1300,14 @@ export function createUI(state, send) {
       fuelInfo.textContent = `Fuel: ${container.fuel > 0 ? 'Burning' : 'No fuel'}`;
       containerPanel.appendChild(fuelInfo);
 
-      // Cook slots
+      // Cook slots as icon grid
+      const cookGrid = document.createElement('div');
+      cookGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin:6px 0;';
       for (let i = 0; i < 2; i++) {
         const slot = container.slots?.[i];
-        const slotDiv = document.createElement('div');
-        slotDiv.className = 'container-slot';
-        if (slot?.id) {
-          const def = ITEM_DEFS[slot.id];
-          slotDiv.textContent = def?.name || '?';
-          slotDiv.style.color = slot.id === ITEM.COOKED_MEAT ? '#c4913a' : '#cc4444';
-        } else {
-          slotDiv.textContent = 'Empty';
-        }
-        containerPanel.appendChild(slotDiv);
+        cookGrid.appendChild(createItemSlot(slot?.id || 0, slot?.n || 0));
       }
+      containerPanel.appendChild(cookGrid);
 
       const btnRow = document.createElement('div');
       btnRow.style.marginTop = '10px';
@@ -1241,19 +1347,31 @@ export function createUI(state, send) {
       fuelInfo.textContent = `Fuel: ${container.fuel > 0 ? 'Burning' : 'No fuel'}`;
       containerPanel.appendChild(fuelInfo);
 
-      if (container.input?.id) {
-        const inputInfo = document.createElement('div');
-        inputInfo.className = 'container-info';
-        inputInfo.textContent = `Input: ${ITEM_DEFS[container.input.id]?.name || '?'} x${container.input.n}`;
-        containerPanel.appendChild(inputInfo);
-      }
+      const furnaceGrid = document.createElement('div');
+      furnaceGrid.style.cssText = 'display:flex;gap:8px;align-items:center;margin:6px 0;';
+      const inputLabel = document.createElement('div');
+      inputLabel.style.cssText = 'font-size:9px;color:#888;text-align:center;';
+      inputLabel.innerHTML = 'Input';
+      const inputSlotWrap = document.createElement('div');
+      inputSlotWrap.style.textAlign = 'center';
+      inputSlotWrap.appendChild(createItemSlot(container.input?.id || 0, container.input?.n || 0));
+      inputSlotWrap.appendChild(inputLabel);
+      furnaceGrid.appendChild(inputSlotWrap);
 
-      if (container.output?.id && container.output.n > 0) {
-        const outputInfo = document.createElement('div');
-        outputInfo.className = 'container-info';
-        outputInfo.textContent = `Output: ${ITEM_DEFS[container.output.id]?.name || '?'} x${container.output.n}`;
-        containerPanel.appendChild(outputInfo);
-      }
+      const arrow = document.createElement('div');
+      arrow.style.cssText = 'font-size:16px;color:#666;';
+      arrow.textContent = '→';
+      furnaceGrid.appendChild(arrow);
+
+      const outputLabel = document.createElement('div');
+      outputLabel.style.cssText = 'font-size:9px;color:#888;text-align:center;';
+      outputLabel.innerHTML = 'Output';
+      const outputSlotWrap = document.createElement('div');
+      outputSlotWrap.style.textAlign = 'center';
+      outputSlotWrap.appendChild(createItemSlot(container.output?.id || 0, container.output?.n || 0));
+      outputSlotWrap.appendChild(outputLabel);
+      furnaceGrid.appendChild(outputSlotWrap);
+      containerPanel.appendChild(furnaceGrid);
 
       if (container.progress > 0) {
         const progressBar = document.createElement('div');
@@ -1307,50 +1425,32 @@ export function createUI(state, send) {
       containerPanel.appendChild(closeBtn);
 
       const slotsDiv = document.createElement('div');
-      slotsDiv.style.display = 'flex';
-      slotsDiv.style.flexWrap = 'wrap';
-      slotsDiv.style.gap = '3px';
+      slotsDiv.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin:6px 0;';
 
       for (let i = 0; i < (container.slots?.length || 12); i++) {
         const slot = container.slots?.[i] || { id: 0, n: 0 };
-        const slotDiv = document.createElement('div');
-        slotDiv.className = 'container-slot';
-        if (slot.id && slot.n > 0) {
-          const def = ITEM_DEFS[slot.id];
-          slotDiv.textContent = `${def?.name?.substring(0, 6) || '?'}\n${slot.n}`;
-          slotDiv.style.lineHeight = '14px';
-          slotDiv.style.paddingTop = '10px';
-          slotDiv.style.fontSize = '8px';
-          slotDiv.addEventListener('click', () => {
-            send({ type: MSG.CONTAINER_ACTION, action: 'withdraw', fromSlot: i });
-          });
-        } else {
-          slotDiv.textContent = '';
-        }
-        slotsDiv.appendChild(slotDiv);
+        const slotIdx = i;
+        slotsDiv.appendChild(createItemSlot(slot.id, slot.n, (slot.id && slot.n > 0) ? () => {
+          send({ type: MSG.CONTAINER_ACTION, action: 'withdraw', fromSlot: slotIdx });
+        } : null));
       }
       containerPanel.appendChild(slotsDiv);
 
       const depositInfo = document.createElement('div');
       depositInfo.className = 'container-info';
-      depositInfo.textContent = 'Click your inventory slot # to deposit (1-24):';
+      depositInfo.textContent = 'Click inventory items below to deposit:';
       containerPanel.appendChild(depositInfo);
 
-      // Quick deposit buttons for first 6 inventory slots
+      // Deposit buttons as icon slots
       const depRow = document.createElement('div');
-      depRow.style.marginTop = '6px';
+      depRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin-top:6px;';
       for (let i = 0; i < INVENTORY_SLOTS; i++) {
         const item = state.inventory[i];
         if (!item?.id || item.id === 0) continue;
-        const btn = document.createElement('button');
-        btn.className = 'container-btn';
-        btn.textContent = `${ITEM_DEFS[item.id]?.name?.substring(0, 8) || '?'} x${item.n}`;
-        btn.style.fontSize = '9px';
         const slotIdx = i;
-        btn.addEventListener('click', () => {
+        depRow.appendChild(createItemSlot(item.id, item.n, () => {
           send({ type: MSG.CONTAINER_ACTION, action: 'deposit', fromSlot: slotIdx });
-        });
-        depRow.appendChild(btn);
+        }));
       }
       containerPanel.appendChild(depRow);
     }

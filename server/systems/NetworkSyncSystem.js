@@ -2,7 +2,7 @@ import { query, hasComponent } from 'bitecs';
 import { Position, Velocity, Rotation, Health, Player, Sprite, ResourceNode,
          WorldItem, Projectile, Structure, Animal, Campfire, Furnace, Workbench,
          ToolCupboard, SleepingBag, StorageBox, Door, Dead, Sleeper, Inventory, Hotbar,
-         Hunger, Thirst, Temperature, NetworkSync, Armor, Helicopter, HeliCrate } from '../../shared/components.js';
+         Hunger, Thirst, Temperature, NetworkSync, Armor, Helicopter, HeliCrate, Collider } from '../../shared/components.js';
 import { MSG, ENTITY_TYPE } from '../../shared/protocol.js';
 import { INTEREST_RADIUS, TILE_SIZE, ITEM } from '../../shared/constants.js';
 
@@ -97,6 +97,11 @@ export function createNetworkSyncSystem(gameState) {
 
         if (hasComponent(world, eid, Dead)) {
           state.dead = 1;
+        }
+
+        if (hasComponent(world, eid, Collider) && Collider.isStatic[eid]) {
+          state.isStatic = 1;
+          state.colliderRadius = Math.round(Collider.radius[eid] * 100) / 100;
         }
 
         // Type-specific data

@@ -1053,7 +1053,7 @@ export function createEntityRenderer(state) {
   const doorAnims = new Map();
 
   function drawStructure(ctx, sx, sy, e, viewScale) {
-    const size = viewScale * 0.9;
+    const size = viewScale * 2; // all building pieces fill the 2x2 snap grid cell
     const tier = e.tier || 0;
     const st = e.st;
 

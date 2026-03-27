@@ -1,5 +1,5 @@
 import { ENTITY_TYPE } from '../../shared/protocol.js';
-import { TILE_SIZE, ITEM, ITEM_DEFS, STRUCT_TIER } from '../../shared/constants.js';
+import { TILE_SIZE, ITEM, ITEM_DEFS, STRUCT_TIER, STRUCT_TYPE } from '../../shared/constants.js';
 
 export function createUIOverlays(state) {
   let minimapCanvas = null;
@@ -73,7 +73,7 @@ export function createUIOverlays(state) {
       if (dx * dx + dy * dy > 6 * 6) continue;
       const esx = (ex - camX) * viewScale / TILE_SIZE + w / 2;
       const esy = (ey - camY) * viewScale / TILE_SIZE + h / 2;
-      const size = viewScale * 0.9;
+      const size = viewScale * 2;
       const alpha = 0.3 + Math.sin(animTime * 0.005) * 0.15;
       ctx.fillStyle = nextTierColors[tier] || 'rgba(100,100,100,0.3)';
       ctx.globalAlpha = alpha;
@@ -515,7 +515,7 @@ export function createUIOverlays(state) {
     const cy = mapY + mapSize / 2;
     const compassR = mapSize / 2 + 2;
 
-    // Compass cardinal directions (rotate with player facing)
+    // Compass cardinal directions (static — N always points up)
     ctx.font = 'bold 10px Consolas, monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -526,7 +526,7 @@ export function createUIOverlays(state) {
       { label: 'W', angle: Math.PI, color: '#aaa' },
     ];
     for (const c of cardinals) {
-      const a = c.angle - playerAngle;
+      const a = c.angle;
       const lx = cx + Math.cos(a) * (compassR + 8);
       const ly = cy + Math.sin(a) * (compassR + 8);
       // Only show if label position is within reasonable bounds
@@ -540,10 +540,9 @@ export function createUIOverlays(state) {
       }
     }
 
-    // Compass rose (small triangle pointing north)
+    // Compass rose (small triangle pointing north — static)
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(-playerAngle);
     ctx.fillStyle = 'rgba(220,60,60,0.5)';
     ctx.beginPath();
     ctx.moveTo(0, -compassR + 4);
@@ -566,8 +565,8 @@ export function createUIOverlays(state) {
           nearestAngle = Math.atan2(zDy, zDx);
         }
       }
-      // Show bearing pip on compass edge
-      const bAngle = nearestAngle - playerAngle;
+      // Show bearing pip on compass edge (static compass, no rotation offset)
+      const bAngle = nearestAngle;
       const bx = cx + Math.cos(bAngle) * (compassR - 2);
       const by = cy + Math.sin(bAngle) * (compassR - 2);
       ctx.fillStyle = '#f84';
@@ -1158,7 +1157,7 @@ export function createUIOverlays(state) {
     // Draw ghost
     const sx = (snappedX - camX) * viewScale / TILE_SIZE + w / 2;
     const sy = (snappedY - camY) * viewScale / TILE_SIZE + h / 2;
-    const ghostSize = viewScale * 0.9; // match drawStructure size
+    const ghostSize = viewScale * 2; // all building pieces fill the 2x2 snap grid cell
 
     ctx.save();
     ctx.globalAlpha = 0.4;

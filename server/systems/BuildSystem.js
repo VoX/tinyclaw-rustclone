@@ -22,9 +22,10 @@ export function createBuildSystem(gameState) {
 
       const { pieceType, x, y } = req;
 
-      // Snap to grid
-      const snapX = Math.round(x / TILE_SIZE) * TILE_SIZE;
-      const snapY = Math.round(y / TILE_SIZE) * TILE_SIZE;
+      // Snap to 2x2 tile grid (matching client grid)
+      const gridSize = TILE_SIZE * 2;
+      const snapX = Math.round(x / gridSize) * gridSize;
+      const snapY = Math.round(y / gridSize) * gridSize;
 
       // Check distance from player
       const dx = snapX - Position.x[eid];
@@ -133,7 +134,7 @@ export function createBuildSystem(gameState) {
         Structure.placedBy[newEid] = eid;
         Health.current[newEid] = hp;
         Health.max[newEid] = hp;
-        Collider.radius[newEid] = 0.9;
+        Collider.radius[newEid] = 2.0; // match 2x2 tile snap grid
         Collider.isStatic[newEid] = 1;
         Sprite.spriteId[newEid] = 200 + pieceType;
 

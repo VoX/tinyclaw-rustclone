@@ -7,9 +7,12 @@ import { ITEM_DEFS, RESOURCE_NODE_DEFS, GATHER_AMOUNTS, RESOURCE_TYPE,
 export function createGatherSystem(gameState) {
   const gatherCooldowns = new Map(); // eid -> tick
 
+  let debugTick = 0;
+
   return function GatherSystem(world) {
     const players = query(world, [Player, Position]);
     const nodes = query(world, [ResourceNode, Position]);
+    const shouldLog = (debugTick++ % 20 === 0); // log once per second
 
     for (let i = 0; i < players.length; i++) {
       const eid = players[i];
@@ -17,6 +20,14 @@ export function createGatherSystem(gameState) {
 
       const connId = Player.connectionId[eid];
       const client = gameState.clients.get(connId);
+
+      if (shouldLog) {
+        console.log(`[GATHER DEBUG] eid=${eid} connId=${connId} client=${!!client} mouseAction=${client?.mouseAction} (PRIMARY=${MOUSE_ACTION.PRIMARY}) nodes=${nodes.length}`);
+        const slot = Hotbar.selectedSlot[eid];
+        const itemId = Inventory.items[eid]?.[slot] || 0;
+        console.log(`[GATHER DEBUG]   slot=${slot} itemId=${itemId} def=${JSON.stringify(ITEM_DEFS[itemId]?.cat)} pos=(${Position.x[eid]?.toFixed?.(1)}, ${Position.y[eid]?.toFixed?.(1)}) angle=${Rotation.angle[eid]?.toFixed?.(2)}`);
+      }
+
       if (!client || client.mouseAction !== MOUSE_ACTION.PRIMARY) continue;
 
       // Check cooldown
@@ -35,20 +46,25 @@ export function createGatherSystem(gameState) {
       const py = Position.y[eid];
       const angle = Rotation.angle[eid];
 
+      console.log(`[GATHER DEBUG] ATTEMPTING GATHER: pos=(${px?.toFixed?.(1)}, ${py?.toFixed?.(1)}) angle=${angle?.toFixed?.(2)} item=${def.name}`);
+
       // Find nearest resource node in range + arc
       let bestNode = -1;
       let bestDist = Infinity;
+      let checkedNodes = 0;
+      let skipReasons = { depleted: 0, cantGather: 0, tooFar: 0, wrongAngle: 0 };
       for (let j = 0; j < nodes.length; j++) {
         const nodeEid = nodes[j];
-        if (ResourceNode.remaining[nodeEid] <= 0) continue;
+        if (ResourceNode.remaining[nodeEid] <= 0) { skipReasons.depleted++; continue; }
 
         const resType = ResourceNode.resourceType[nodeEid];
-        if (!canGather(itemId, resType)) continue;
+        if (!canGather(itemId, resType)) { skipReasons.cantGather++; continue; }
 
         const dx = Position.x[nodeEid] - px;
         const dy = Position.y[nodeEid] - py;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 3.5) continue;
+        checkedNodes++;
+        if (dist > 3.5) { skipReasons.tooFar++; if (dist < 10) console.log(`[GATHER DEBUG]   node ${nodeEid} dist=${dist.toFixed(2)} (too far, but close)`); continue; }
 
         // Check arc
         const targetAngle = Math.atan2(dy, dx);
@@ -63,6 +79,7 @@ export function createGatherSystem(gameState) {
         }
       }
 
+      console.log(`[GATHER DEBUG]   checked=${checkedNodes} skipReasons=${JSON.stringify(skipReasons)} bestNode=${bestNode} bestDist=${bestDist.toFixed?.(2)}`);
       if (bestNode < 0) continue;
 
       const resType = ResourceNode.resourceType[bestNode];

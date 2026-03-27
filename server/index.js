@@ -255,6 +255,8 @@ function handleClientMessage(connId, msg) {
         keys: msg.keys || 0,
         mouseAngle: msg.mouseAngle || 0,
         mouseAction: msg.mouseAction || MOUSE_ACTION.NONE,
+        x: msg.x,
+        y: msg.y,
       };
       // Handle hotbar selection
       if (msg.selectedSlot !== undefined && msg.selectedSlot >= 0 && msg.selectedSlot < 6) {

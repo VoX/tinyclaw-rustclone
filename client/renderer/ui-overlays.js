@@ -1321,13 +1321,30 @@ export function createUIOverlays(state) {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(x - 70, y - 16, 74, 24);
 
-    ctx.fillStyle = ammo === 0 ? '#e44' : '#fff';
-    ctx.fillText(`${ammo} / ${max}`, x, y);
-
-    if (ammo === 0) {
+    if (state.reloading) {
+      // Reload progress bar
+      const elapsed = performance.now() - state.reloadStart;
+      const pct = Math.min(elapsed / (state.reloadDuration || 1500), 1);
+      const barW = 70;
+      const barH = 6;
+      const barX = x - barW;
+      const barY = y + 6;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(barX - 2, barY - 1, barW + 4, barH + 2);
+      ctx.fillStyle = '#e8a020';
+      ctx.fillRect(barX, barY, barW * pct, barH);
       ctx.font = '10px Consolas, monospace';
-      ctx.fillStyle = '#aaa';
-      ctx.fillText('[R] Reload', x, y + 14);
+      ctx.fillStyle = '#ee0';
+      ctx.fillText('Reloading...', x, y);
+    } else {
+      ctx.fillStyle = ammo === 0 ? '#e44' : '#fff';
+      ctx.fillText(`${ammo} / ${max}`, x, y);
+
+      if (ammo === 0) {
+        ctx.font = '10px Consolas, monospace';
+        ctx.fillStyle = '#aaa';
+        ctx.fillText('[R] Reload', x, y + 14);
+      }
     }
     ctx.restore();
   }

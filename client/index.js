@@ -67,6 +67,9 @@ const state = {
   // Clip/ammo HUD
   clipAmmo: 0,
   clipMax: 0,
+  reloading: false,
+  reloadStart: 0,
+  reloadDuration: 0,
   // Build preview
   buildPiece: 0,       // currently selected build piece type (set by UI)
   mouseScreenX: 0,
@@ -176,6 +179,7 @@ function connect() {
     state.events.length = 0;
     state.clipAmmo = 0;
     state.clipMax = 0;
+    state.reloading = false;
     state.craftProgress = 0;
     state.craftRecipeId = 0;
     state.heliActive = null;
@@ -411,6 +415,13 @@ function handleServerMessage(msg) {
     case MSG.CLIP_UPDATE:
       state.clipAmmo = msg.ammo;
       state.clipMax = msg.max;
+      if (msg.reloading) {
+        state.reloading = true;
+        state.reloadStart = performance.now();
+        state.reloadDuration = (msg.reloadDuration || 1.5) * 1000; // convert to ms
+      } else {
+        state.reloading = false;
+      }
       break;
 
     case MSG.CRAFT_PROGRESS:

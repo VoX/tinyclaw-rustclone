@@ -11,18 +11,23 @@ export function createCombatSystem(gameState) {
   const attackCooldowns = new Map(); // eid -> ticks remaining
   // Clip state: eid -> { itemId, ammo }  (tracks loaded rounds per player)
   if (!gameState.clipState) gameState.clipState = new Map();
+  // Reload state: eid -> { startTick, finishTick, itemId }
+  const reloadState = new Map();
 
   return function CombatSystem(world) {
     const players = query(world, [Player, Position, Health]);
     const now = gameState.tick;
 
-    // Process reload requests
+    // Process reload requests — start a timed reload
     for (const [connId, client] of gameState.clients) {
       if (!client.reloadRequest) continue;
       client.reloadRequest = false;
 
       const eid = client.playerEid;
       if (!eid || hasComponent(world, eid, Dead)) continue;
+
+      // Already reloading — ignore
+      if (reloadState.has(eid)) continue;
 
       const slot = Hotbar.selectedSlot[eid];
       const itemId = Inventory.items[eid]?.[slot] || 0;
@@ -37,7 +42,72 @@ export function createCombatSystem(gameState) {
       const needed = clipSize - clip.ammo;
       if (needed <= 0) continue; // already full
 
-      // Find ammo in inventory
+      // Check player has ammo to load
+      let hasAmmo = false;
+      for (let s = 0; s < 24; s++) {
+        if (Inventory.items[eid][s] === def.ammoType && Inventory.counts[eid][s] > 0) {
+          hasAmmo = true;
+          break;
+        }
+      }
+      if (!hasAmmo) continue;
+
+      // Start timed reload
+      const reloadTicks = Math.ceil((def.reloadTime || 1.5) * SERVER_TPS);
+      reloadState.set(eid, { startTick: now, finishTick: now + reloadTicks, itemId });
+
+      // Notify client that reload started
+      if (client.ws) {
+        try {
+          client.ws.send(JSON.stringify({
+            type: MSG.CLIP_UPDATE,
+            ammo: clip.ammo,
+            max: clipSize,
+            reloading: true,
+            reloadDuration: def.reloadTime || 1.5,
+          }));
+        } catch (e) {}
+      }
+    }
+
+    // Process active reloads — complete when timer expires
+    for (const [eid, rs] of reloadState) {
+      // Cancel reload if player switched weapons, died, or disconnected
+      const slot = Hotbar.selectedSlot[eid];
+      const currentItem = Inventory.items[eid]?.[slot] || 0;
+      if (currentItem !== rs.itemId || hasComponent(world, eid, Dead)) {
+        reloadState.delete(eid);
+        // Notify client reload cancelled
+        const connId2 = Player.connectionId[eid];
+        const client2 = gameState.clients.get(connId2);
+        if (client2?.ws) {
+          const clip2 = gameState.clipState.get(eid);
+          const def2 = ITEM_DEFS[rs.itemId];
+          try {
+            client2.ws.send(JSON.stringify({
+              type: MSG.CLIP_UPDATE,
+              ammo: clip2?.ammo || 0,
+              max: def2?.clipSize || 1,
+              reloading: false,
+            }));
+          } catch (e) {}
+        }
+        continue;
+      }
+
+      if (now < rs.finishTick) continue; // still reloading
+
+      // Reload complete — load ammo
+      reloadState.delete(eid);
+      const def = ITEM_DEFS[rs.itemId];
+      if (!def) continue;
+
+      const clipSize = def.clipSize || 1;
+      let clip = gameState.clipState.get(eid);
+      if (clip && clip.itemId !== rs.itemId) clip = null;
+      if (!clip) clip = { itemId: rs.itemId, ammo: 0 };
+
+      const needed = clipSize - clip.ammo;
       let totalLoaded = 0;
       for (let s = 0; s < 24 && totalLoaded < needed; s++) {
         if (Inventory.items[eid][s] === def.ammoType && Inventory.counts[eid][s] > 0) {
@@ -50,14 +120,23 @@ export function createCombatSystem(gameState) {
 
       if (totalLoaded > 0) {
         clip.ammo += totalLoaded;
-        clip.itemId = itemId;
+        clip.itemId = rs.itemId;
         gameState.clipState.set(eid, clip);
         gameState.dirtyInventories.add(eid);
+      }
 
-        // Send clip update
-        if (client.ws) {
-          try { client.ws.send(JSON.stringify({ type: MSG.CLIP_UPDATE, ammo: clip.ammo, max: clipSize })); } catch (e) {}
-        }
+      // Send clip update — reload complete
+      const connId3 = Player.connectionId[eid];
+      const client3 = gameState.clients.get(connId3);
+      if (client3?.ws) {
+        try {
+          client3.ws.send(JSON.stringify({
+            type: MSG.CLIP_UPDATE,
+            ammo: clip.ammo,
+            max: clipSize,
+            reloading: false,
+          }));
+        } catch (e) {}
       }
     }
 
@@ -84,6 +163,9 @@ export function createCombatSystem(gameState) {
       const py = Position.y[eid];
 
       if (def.cat === 'ranged') {
+        // Can't fire while reloading
+        if (reloadState.has(eid)) continue;
+
         // Clip-based ammo system
         const clipSize = def.clipSize || 1;
         let clip = gameState.clipState.get(eid);
@@ -120,7 +202,7 @@ export function createCombatSystem(gameState) {
         const finalAngle = angle + (Math.random() - 0.5) * 2 * spreadAngle;
 
         const isArrow = def.ammoType === 40; // ITEM.WOODEN_ARROW = 40
-        const projSpeed = isArrow ? 14 : 30; // arrows slower, bullets faster
+        const projSpeed = isArrow ? 22 : 30; // arrows fast, bullets faster
         Position.x[projEid] = px + Math.cos(finalAngle) * 0.8;
         Position.y[projEid] = py + Math.sin(finalAngle) * 0.8;
         Velocity.vx[projEid] = Math.cos(finalAngle) * projSpeed;

@@ -133,12 +133,12 @@ export const ITEM_DEFS = {
   [ITEM.HAMMER]: { name: 'Hammer', maxStack: 1, cat: 'tool', damage: 5, swingRate: 1.0, durability: 300 },
   [ITEM.BUILDING_PLAN]: { name: 'Building Plan', maxStack: 1, cat: 'tool' },
   // Ranged
-  [ITEM.HUNTING_BOW]: { name: 'Hunting Bow', maxStack: 1, cat: 'ranged', damage: 30, fireRate: 0.8, range: 60, ammoType: ITEM.WOODEN_ARROW, clipSize: 1, spread: 0.08, adsSpread: 0.02 },
-  [ITEM.CROSSBOW]: { name: 'Crossbow', maxStack: 1, cat: 'ranged', damage: 50, fireRate: 0.4, range: 80, ammoType: ITEM.WOODEN_ARROW, clipSize: 1, spread: 0.06, adsSpread: 0.01 },
-  [ITEM.REVOLVER]: { name: 'Revolver', maxStack: 1, cat: 'ranged', damage: 35, fireRate: 1.5, range: 50, ammoType: ITEM.PISTOL_AMMO, clipSize: 6, spread: 0.1, adsSpread: 0.03 },
-  [ITEM.SEMI_AUTO_PISTOL]: { name: 'Semi-Auto Pistol', maxStack: 1, cat: 'ranged', damage: 30, fireRate: 2.0, range: 60, ammoType: ITEM.PISTOL_AMMO, clipSize: 12, spread: 0.08, adsSpread: 0.025 },
-  [ITEM.SHOTGUN]: { name: 'Shotgun', maxStack: 1, cat: 'ranged', damage: 70, fireRate: 0.5, range: 20, ammoType: ITEM.SHOTGUN_AMMO, clipSize: 2, spread: 0.15, adsSpread: 0.08 },
-  [ITEM.ASSAULT_RIFLE]: { name: 'Assault Rifle', maxStack: 1, cat: 'ranged', damage: 28, fireRate: 4.0, range: 80, ammoType: ITEM.RIFLE_AMMO, clipSize: 30, spread: 0.07, adsSpread: 0.02 },
+  [ITEM.HUNTING_BOW]: { name: 'Hunting Bow', maxStack: 1, cat: 'ranged', damage: 30, fireRate: 0.8, range: 60, ammoType: ITEM.WOODEN_ARROW, clipSize: 1, spread: 0.08, adsSpread: 0.02, reloadTime: 1.0 },
+  [ITEM.CROSSBOW]: { name: 'Crossbow', maxStack: 1, cat: 'ranged', damage: 50, fireRate: 0.4, range: 80, ammoType: ITEM.WOODEN_ARROW, clipSize: 1, spread: 0.06, adsSpread: 0.01, reloadTime: 1.5 },
+  [ITEM.REVOLVER]: { name: 'Revolver', maxStack: 1, cat: 'ranged', damage: 35, fireRate: 1.5, range: 50, ammoType: ITEM.PISTOL_AMMO, clipSize: 6, spread: 0.1, adsSpread: 0.03, reloadTime: 1.5 },
+  [ITEM.SEMI_AUTO_PISTOL]: { name: 'Semi-Auto Pistol', maxStack: 1, cat: 'ranged', damage: 30, fireRate: 2.0, range: 60, ammoType: ITEM.PISTOL_AMMO, clipSize: 12, spread: 0.08, adsSpread: 0.025, reloadTime: 1.5 },
+  [ITEM.SHOTGUN]: { name: 'Shotgun', maxStack: 1, cat: 'ranged', damage: 70, fireRate: 0.5, range: 20, ammoType: ITEM.SHOTGUN_AMMO, clipSize: 2, spread: 0.15, adsSpread: 0.08, reloadTime: 2.0 },
+  [ITEM.ASSAULT_RIFLE]: { name: 'Assault Rifle', maxStack: 1, cat: 'ranged', damage: 28, fireRate: 4.0, range: 80, ammoType: ITEM.RIFLE_AMMO, clipSize: 30, spread: 0.07, adsSpread: 0.02, reloadTime: 2.0 },
   // Ammo
   [ITEM.WOODEN_ARROW]: { name: 'Wooden Arrow', maxStack: 64, cat: 'ammo' },
   [ITEM.BONE_ARROW]: { name: 'Bone Arrow', maxStack: 64, cat: 'ammo' },

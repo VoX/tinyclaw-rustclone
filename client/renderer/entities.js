@@ -986,7 +986,10 @@ export function createEntityRenderer(state) {
 
   // ── Projectiles ──
   function drawProjectile(ctx, sx, sy, e) {
-    const angle = e.a || 0;
+    // Compute angle from velocity direction (more reliable than server rotation)
+    const angle = (e.vx !== undefined && e.vy !== undefined && (e.vx !== 0 || e.vy !== 0))
+      ? Math.atan2(e.vy, e.vx)
+      : (e.a || 0);
     const isArrow = e.sprite === 101;
     ctx.save();
     ctx.translate(sx, sy);

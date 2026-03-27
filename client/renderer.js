@@ -269,14 +269,13 @@ export function createRenderer(canvas, state) {
     return chunkCanvas;
   }
 
-  // ── Process events for particle effects ──
+  // ── Process events for particle effects and notifications ──
   function processEvents(camX, camY, w, h) {
     while (lastEventIdx < state.events.length) {
       const evt = state.events[lastEventIdx++];
       if (!evt) continue;
 
       if (evt.type === 'hit') {
-        // Gather/attack hit particles
         const colors = {
           wood: '#c4913a',
           stone: '#aaa',
@@ -292,6 +291,24 @@ export function createRenderer(canvas, state) {
       } else if (evt.type === 'blood') {
         particles.emit(evt.x, evt.y, '#a02020', 5, 25, 500);
         particles.emit(evt.x, evt.y, '#cc3030', 3, 15, 350);
+      } else if (evt.type === 'death' && evt.victimName) {
+        // Kill feed notification
+        const text = evt.killerType === 'player'
+          ? `${evt.victimName} was killed by ${evt.killerName}`
+          : evt.killerType === 'animal'
+            ? `${evt.victimName} was killed by a ${evt.killerName}`
+            : `${evt.victimName} died`;
+        state.notifications.push({ text, time: Date.now(), color: '#e44' });
+      } else if (evt.type === 'sleeping_bag') {
+        state.notifications.push({
+          text: `${evt.playerName} placed a sleeping bag`,
+          time: Date.now(),
+          color: '#aad',
+        });
+      } else if (evt.type === 'day_night') {
+        const text = evt.phase === 'night' ? 'Night is falling...' : 'A new day begins';
+        const color = evt.phase === 'night' ? '#88a' : '#ee8';
+        state.notifications.push({ text, time: Date.now(), color });
       }
     }
   }
@@ -525,25 +542,352 @@ export function createRenderer(canvas, state) {
     edgeGradientB.addColorStop(1, 'rgba(0,0,0,0.4)');
     ctx.fillStyle = edgeGradientB;
     ctx.fillRect(0, h - edgeSize, w, edgeSize);
+
+    // ── Damage red flash ──
+    if (state.damageFlashAlpha > 0) {
+      ctx.fillStyle = `rgba(200, 0, 0, ${state.damageFlashAlpha})`;
+      ctx.fillRect(0, 0, w, h);
+      // Red vignette
+      const vigGrad = ctx.createRadialGradient(w / 2, h / 2, w * 0.2, w / 2, h / 2, w * 0.7);
+      vigGrad.addColorStop(0, 'rgba(200, 0, 0, 0)');
+      vigGrad.addColorStop(1, `rgba(150, 0, 0, ${state.damageFlashAlpha * 0.8})`);
+      ctx.fillStyle = vigGrad;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    // ── Chat bubbles above players ──
+    const nowMs = Date.now();
+    for (const e of sortedEntities) {
+      if (e.t !== ENTITY_TYPE.PLAYER) continue;
+      const bubble = state.chatBubbles.get(e.eid);
+      if (!bubble) continue;
+      const remaining = bubble.expiry - nowMs;
+      if (remaining <= 0) continue;
+      const ex = e.eid === state.myEid ? e.x : (e.renderX || e.x);
+      const ey = e.eid === state.myEid ? e.y : (e.renderY || e.y);
+      const bsx = (ex - camX) * viewScale / TILE_SIZE + w / 2;
+      const bsy = (ey - camY) * viewScale / TILE_SIZE + h / 2;
+      const fadeAlpha = remaining < 1000 ? remaining / 1000 : 1;
+      ctx.save();
+      ctx.globalAlpha = fadeAlpha;
+      ctx.font = '11px Consolas, monospace';
+      const textW = ctx.measureText(bubble.text).width;
+      const bx = bsx - textW / 2 - 6;
+      const by = bsy - 35;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.beginPath();
+      ctx.roundRect(bx, by - 10, textW + 12, 18, 4);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillText(bubble.text, bx + 6, by + 3);
+      ctx.restore();
+    }
+
+    // ── Minimap ──
+    drawMinimap(ctx, w, h, camX, camY, sortedEntities);
+
+    // ── Kill feed / notifications ──
+    drawNotifications(ctx, w, h);
+
+    // ── Chat log ──
+    drawChatLog(ctx, w, h);
+
+    // ── Performance display ──
+    if (state.showPerf) {
+      ctx.save();
+      ctx.font = '12px Consolas, monospace';
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(8, 8, 160, 52);
+      ctx.fillStyle = '#0f0';
+      ctx.fillText(`FPS: ${state.fps}`, 14, 24);
+      ctx.fillStyle = '#ff0';
+      ctx.fillText(`Ping: ${state.ping}ms`, 14, 38);
+      ctx.fillStyle = '#0ff';
+      ctx.fillText(`Entities: ${state.entityCount}`, 14, 52);
+      ctx.restore();
+    }
+
+    // ── Connection / loading screen ──
+    if (!state.worldReady) {
+      ctx.fillStyle = 'rgba(0,0,0,0.9)';
+      ctx.fillRect(0, 0, w, h);
+      ctx.font = '24px Consolas, monospace';
+      ctx.fillStyle = '#aaa';
+      ctx.textAlign = 'center';
+      if (state.connecting) {
+        ctx.fillText('Connecting...', w / 2, h / 2);
+      } else if (state.loadingWorld) {
+        ctx.fillText('Loading world...', w / 2, h / 2);
+      } else {
+        ctx.fillText('Reconnecting...', w / 2, h / 2);
+      }
+      ctx.textAlign = 'left';
+    }
+
+    // ── Controls overlay ──
+    if (state.showControls) {
+      ctx.fillStyle = 'rgba(0,0,0,0.85)';
+      ctx.fillRect(0, 0, w, h);
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 28px Consolas, monospace';
+      ctx.fillStyle = '#e8c030';
+      ctx.fillText('RUST CLONE', w / 2, h / 2 - 130);
+
+      ctx.font = '14px Consolas, monospace';
+      ctx.fillStyle = '#ccc';
+      const controls = [
+        'WASD — Move',
+        'Shift — Sprint',
+        'Mouse — Aim / LMB Attack / RMB Alt',
+        'TAB — Inventory & Crafting',
+        'E — Interact',
+        'B — Build Menu (hold Building Plan)',
+        'Q — Drop Item',
+        '1-6 — Hotbar Slots',
+        'Enter — Chat',
+        'F3 — Performance Stats',
+        'M — Map',
+      ];
+      for (let i = 0; i < controls.length; i++) {
+        ctx.fillText(controls[i], w / 2, h / 2 - 70 + i * 22);
+      }
+      ctx.font = '12px Consolas, monospace';
+      ctx.fillStyle = '#888';
+      ctx.fillText('Press any key to start', w / 2, h / 2 + controls.length * 22 - 50);
+      ctx.textAlign = 'left';
+    }
+  }
+
+  // ── Minimap drawing ──
+  let minimapCanvas = null;
+  let minimapDirty = true;
+  let minimapLastUpdate = 0;
+
+  function drawMinimap(ctx, w, h, camX, camY, entities) {
+    const me = state.myEid ? state.entities.get(state.myEid) : null;
+    if (!me || !state.biomeMap) return;
+
+    const mapSize = 180;
+    const mapX = w - mapSize - 12;
+    const mapY = 12;
+    const tileRadius = 200;
+    const px = me.x / TILE_SIZE;
+    const py = me.y / TILE_SIZE;
+
+    // Background
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.beginPath();
+    ctx.roundRect(mapX - 4, mapY - 4, mapSize + 8, mapSize + 8, 6);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(100,100,100,0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Render terrain to offscreen canvas (throttled)
+    const now = Date.now();
+    if (!minimapCanvas || now - minimapLastUpdate > 500) {
+      minimapLastUpdate = now;
+      if (!minimapCanvas) {
+        minimapCanvas = document.createElement('canvas');
+        minimapCanvas.width = mapSize;
+        minimapCanvas.height = mapSize;
+      }
+      const mctx = minimapCanvas.getContext('2d');
+      const imgData = mctx.createImageData(mapSize, mapSize);
+      const data = imgData.data;
+      const ws = state.worldSize;
+
+      const BIOME_RGB = {
+        0: [232, 214, 142], // beach
+        1: [90, 143, 60],   // grassland
+        2: [45, 90, 30],    // forest
+        3: [196, 163, 90],  // desert
+        4: [221, 232, 240], // snow
+        5: [122, 122, 122], // mountain
+      };
+
+      for (let my = 0; my < mapSize; my++) {
+        for (let mx = 0; mx < mapSize; mx++) {
+          const tx = Math.floor(px + (mx - mapSize / 2) * (tileRadius * 2 / mapSize));
+          const ty = Math.floor(py + (my - mapSize / 2) * (tileRadius * 2 / mapSize));
+          const idx = (my * mapSize + mx) * 4;
+          if (tx < 0 || tx >= ws || ty < 0 || ty >= ws) {
+            data[idx] = 20; data[idx + 1] = 30; data[idx + 2] = 50; data[idx + 3] = 255;
+          } else {
+            const biome = state.biomeMap[ty * ws + tx];
+            const rgb = BIOME_RGB[biome] || [50, 50, 50];
+            data[idx] = rgb[0]; data[idx + 1] = rgb[1]; data[idx + 2] = rgb[2]; data[idx + 3] = 255;
+          }
+        }
+      }
+      mctx.putImageData(imgData, 0, 0);
+    }
+
+    ctx.drawImage(minimapCanvas, mapX, mapY);
+
+    // Entity dots
+    const scale = mapSize / (tileRadius * 2);
+    for (const e of entities) {
+      const ex = (e.eid === state.myEid ? e.x : (e.renderX || e.x)) / TILE_SIZE;
+      const ey = (e.eid === state.myEid ? e.y : (e.renderY || e.y)) / TILE_SIZE;
+      const dx = ex - px;
+      const dy = ey - py;
+      if (Math.abs(dx) > tileRadius || Math.abs(dy) > tileRadius) continue;
+
+      const dotX = mapX + mapSize / 2 + dx * scale;
+      const dotY = mapY + mapSize / 2 + dy * scale;
+
+      let color = null;
+      let radius = 1.5;
+
+      if (e.t === ENTITY_TYPE.PLAYER) {
+        if (e.eid === state.myEid) {
+          color = '#0f0';
+          radius = 3;
+        } else {
+          color = '#fff';
+          radius = 2;
+        }
+      } else if (e.t === ENTITY_TYPE.ANIMAL) {
+        color = '#f44';
+        radius = 1.5;
+      } else if (e.t === ENTITY_TYPE.RESOURCE_NODE) {
+        const rtColors = { 1: '#1a5a0a', 2: '#888', 3: '#b87333', 4: '#d4c84a', 5: '#4a8a2a' };
+        color = rtColors[e.rt] || '#555';
+        radius = 1;
+      } else if (e.t === ENTITY_TYPE.STRUCTURE || e.t === ENTITY_TYPE.DOOR) {
+        color = 'rgba(180,180,150,0.6)';
+        radius = 1.5;
+      }
+
+      if (color) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Compass label
+    ctx.font = '9px Consolas, monospace';
+    ctx.fillStyle = '#888';
+    ctx.textAlign = 'center';
+    ctx.fillText('N', mapX + mapSize / 2, mapY + 10);
+    ctx.textAlign = 'left';
+  }
+
+  // ── Notifications / Kill Feed ──
+  function drawNotifications(ctx, w, h) {
+    const now = Date.now();
+
+    // Clean expired notifications
+    state.notifications = state.notifications.filter(n => now - n.time < 5000);
+
+    const notifX = w - 300;
+    const notifY = mapSize > 0 ? 210 : 20;
+
+    for (let i = 0; i < Math.min(state.notifications.length, 8); i++) {
+      const n = state.notifications[state.notifications.length - 1 - i];
+      const age = now - n.time;
+      const alpha = age > 4000 ? 1 - (age - 4000) / 1000 : 1;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.font = '11px Consolas, monospace';
+      const tw = ctx.measureText(n.text).width;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(w - tw - 24, notifY + i * 20 - 2, tw + 16, 18);
+      ctx.fillStyle = n.color || '#ddd';
+      ctx.textAlign = 'right';
+      ctx.fillText(n.text, w - 16, notifY + i * 20 + 11);
+      ctx.textAlign = 'left';
+      ctx.restore();
+    }
+  }
+
+  // ── Chat Log ──
+  function drawChatLog(ctx, w, h) {
+    const messages = state.chatMessages;
+    if (messages.length === 0 && !state.chatOpen) return;
+
+    const logX = 14;
+    const logY = h - 140;
+    const now = Date.now();
+
+    // Show last 10 messages
+    const recent = messages.slice(-10);
+    for (let i = 0; i < recent.length; i++) {
+      const msg = recent[i];
+      const age = now - msg.time;
+      // Always show if chat is open, otherwise fade after 10s
+      let alpha = 1;
+      if (!state.chatOpen) {
+        if (age > 10000) continue;
+        if (age > 8000) alpha = 1 - (age - 8000) / 2000;
+      }
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.font = '11px Consolas, monospace';
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      const text = `${msg.senderName}: ${msg.text}`;
+      const tw = ctx.measureText(text).width;
+      ctx.fillRect(logX - 4, logY + i * 16 - 2, tw + 8, 16);
+      ctx.fillStyle = '#ddd';
+      ctx.fillText(text, logX, logY + i * 16 + 10);
+      ctx.restore();
+    }
+
+    // Chat input indicator
+    if (state.chatOpen) {
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(logX - 4, logY + recent.length * 16 + 4, 300, 20);
+      ctx.font = '11px Consolas, monospace';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(`> ${state.chatInput}_`, logX, logY + recent.length * 16 + 18);
+    }
   }
 
   // ── Player drawing ──
+  // Track death animation state per entity
+  const deathAnims = new Map(); // eid -> { startTime, tilt }
+
   function drawPlayer(ctx, sx, sy, e, isLocal) {
     const angle = e.a || 0;
     const dead = e.dead;
+
+    // Death animation tracking
+    if (dead && !deathAnims.has(e.eid)) {
+      deathAnims.set(e.eid, { startTime: animTime, tilt: (Math.random() - 0.5) * 0.4 });
+    } else if (!dead && deathAnims.has(e.eid)) {
+      deathAnims.delete(e.eid);
+    }
+
+    const deathAnim = deathAnims.get(e.eid);
+    let deathProgress = 0; // 0 = alive, 1 = fully dead
+    if (deathAnim) {
+      deathProgress = Math.min(1, (animTime - deathAnim.startTime) / 600);
+    }
 
     // Shadow (drawn without rotation)
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.2)';
     ctx.beginPath();
-    ctx.ellipse(sx, sy + 5, 10, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(sx, sy + 5, 10 + deathProgress * 4, 4 + deathProgress * 6, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
     // Draw rotated body
     ctx.save();
+    if (dead) {
+      ctx.globalAlpha = 1 - deathProgress * 0.4; // Fade to 60% opacity
+    }
     ctx.translate(sx, sy);
-    ctx.rotate(angle + Math.PI / 2); // +90deg so "up" in local space points toward mouse
+    // Death: player falls over (tilts 90 degrees + slight random offset)
+    const deathTilt = deathAnim ? deathProgress * (Math.PI / 2 + deathAnim.tilt) : 0;
+    ctx.rotate(angle + Math.PI / 2 + deathTilt); // +90deg so "up" in local space points toward mouse
+    // Scale down slightly when dead (foreshortening)
+    if (dead) {
+      ctx.scale(1, 1 - deathProgress * 0.3);
+    }
 
     const skinColor = dead ? '#777' : '#d4a574';
     const shirtColor = dead ? '#555' : (isLocal ? '#3a8fd6' : '#d6553a');

@@ -199,6 +199,8 @@ wss.on('connection', (ws) => {
     respawnRequest: null,
     containerAction: null,
     tcAuthAction: null,
+    chatMessage: null,
+    spawnTick: gameState.tick,
   };
   gameState.clients.set(connId, client);
 
@@ -298,6 +300,12 @@ function handleClientMessage(connId, msg) {
         tcEid: msg.tcEid,
         action: msg.action,
       };
+      break;
+
+    case MSG.CHAT_SEND:
+      if (msg.text && typeof msg.text === 'string') {
+        client.chatMessage = msg.text.substring(0, 100); // limit length
+      }
       break;
 
     case MSG.PING:

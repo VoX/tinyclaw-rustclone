@@ -539,6 +539,15 @@ export function createUI(state, send) {
     // Death screen
     if (deathScreen) {
       deathScreen.style.display = state.isDead ? 'flex' : 'none';
+      // Show death stats
+      const deathStats = document.getElementById('death-stats');
+      if (deathStats && state.isDead && state.deathInfo) {
+        const info = state.deathInfo;
+        const mins = Math.floor(info.survived / 60);
+        const secs = info.survived % 60;
+        const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+        deathStats.innerHTML = `Killed by <span style="color:#e44">${info.killerName}</span><br>Survived: ${timeStr}`;
+      }
       // Update spawn bag buttons
       const bagContainer = document.getElementById('spawn-bags');
       if (bagContainer && state.isDead) {

@@ -67,6 +67,9 @@ export function createRespawnSystem(gameState) {
       Inventory.counts[eid][1] = 1;
       Hotbar.selectedSlot[eid] = 0;
       gameState.dirtyInventories.add(eid);
+
+      // Reset spawn tick for survival timer
+      if (client) client.spawnTick = gameState.tick;
     }
     return world;
   };

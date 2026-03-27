@@ -9,8 +9,44 @@ export function createInput(state, send) {
   let mouseAction = MOUSE_ACTION.NONE;
   let sprinting = false;
 
+  // Chat input element (created dynamically)
+  const chatInputEl = document.getElementById('chat-input');
+
   // Keyboard
   document.addEventListener('keydown', (e) => {
+    // Dismiss controls overlay on any key
+    if (state.showControls) {
+      state.showControls = false;
+      state.firstConnect = false;
+      e.preventDefault();
+      return;
+    }
+
+    // Chat input handling
+    if (state.chatOpen) {
+      if (e.code === 'Escape') {
+        state.chatOpen = false;
+        state.chatInput = '';
+        if (chatInputEl) chatInputEl.style.display = 'none';
+        e.preventDefault();
+        return;
+      }
+      if (e.code === 'Enter') {
+        if (state.chatInput.trim()) {
+          send({ type: MSG.CHAT_SEND, text: state.chatInput.trim() });
+        }
+        state.chatOpen = false;
+        state.chatInput = '';
+        if (chatInputEl) {
+          chatInputEl.value = '';
+          chatInputEl.style.display = 'none';
+        }
+        e.preventDefault();
+        return;
+      }
+      return; // Let chat input handle all other keys
+    }
+
     if (e.repeat) return;
     switch (e.code) {
       case 'KeyW': keys |= KEY.W; break;
@@ -19,6 +55,19 @@ export function createInput(state, send) {
       case 'KeyD': keys |= KEY.D; break;
       case 'ShiftLeft': case 'ShiftRight': keys |= KEY.SHIFT; sprinting = true; break;
       case 'Space': keys |= KEY.SPACE; break;
+      case 'Enter':
+        // Open chat
+        if (!state.isDead && !state.showInventory) {
+          state.chatOpen = true;
+          state.chatInput = '';
+          if (chatInputEl) {
+            chatInputEl.value = '';
+            chatInputEl.style.display = 'block';
+            chatInputEl.focus();
+          }
+          e.preventDefault();
+        }
+        break;
       case 'Tab':
         e.preventDefault();
         state.showInventory = !state.showInventory;
@@ -27,6 +76,10 @@ export function createInput(state, send) {
         break;
       case 'KeyM':
         state.showMap = !state.showMap;
+        break;
+      case 'F3':
+        e.preventDefault();
+        state.showPerf = !state.showPerf;
         break;
       case 'KeyE':
         // Interact with nearest entity
@@ -62,7 +115,15 @@ export function createInput(state, send) {
     }
   });
 
+  // Chat input text tracking
+  if (chatInputEl) {
+    chatInputEl.addEventListener('input', (e) => {
+      state.chatInput = e.target.value;
+    });
+  }
+
   document.addEventListener('keyup', (e) => {
+    if (state.chatOpen) return;
     switch (e.code) {
       case 'KeyW': keys &= ~KEY.W; break;
       case 'KeyA': keys &= ~KEY.A; break;

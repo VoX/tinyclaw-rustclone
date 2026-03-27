@@ -26,6 +26,10 @@ export const MSG = {
   TC_AUTH_UPDATE: 62,
   TC_AUTH_ACTION: 9,
   SPAWN_BAGS: 63,
+  CHAT: 64,
+
+  // Client → Server
+  CHAT_SEND: 10,
 };
 
 // Input key bitmask

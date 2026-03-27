@@ -12,14 +12,22 @@ import { updateFootsteps, playHitGather, playHitAttack, playDeath,
 // ── Game State ──
 const state = {
   connected: false,
+  connecting: true,
+  loadingWorld: false,
+  worldReady: false,
+  firstConnect: true,
+  showControls: false,
   myEid: null,
   myConnId: null,
   entities: new Map(),  // eid -> entity data
   inventory: [],        // 24 slots: { id, n }
   selectedSlot: 0,
   hp: 100, maxHp: 100,
+  prevHp: 100,
   hunger: 100, thirst: 100, temp: 20,
   isDead: false,
+  deathInfo: null,       // { killerName, killerType, survived }
+  damageFlashAlpha: 0,
   worldSize: 2000,
   tileSize: 2,
   biomeMap: null,
@@ -31,6 +39,18 @@ const state = {
   containerOpen: null,     // { type, eid, data }
   tcAuthOpen: null,        // { tcEid, authorized, authList }
   workbenchTier: 0,        // highest tier workbench nearby (from interact)
+  // Chat
+  chatMessages: [],        // { senderName, senderEid, text, time }
+  chatInput: '',
+  chatOpen: false,
+  // Kill feed / notifications
+  notifications: [],       // { text, time, color }
+  // Performance
+  showPerf: false,
+  fps: 0,
+  entityCount: 0,
+  // Chat bubbles (above player heads)
+  chatBubbles: new Map(),  // eid -> { text, expiry }
 };
 
 // Initialize inventory slots
@@ -46,9 +66,12 @@ const wsUrl = window.location.port === '8780' || window.location.port === ''
 let ws;
 
 function connect() {
+  state.connecting = true;
   ws = new WebSocket(wsUrl);
   ws.onopen = () => {
     state.connected = true;
+    state.connecting = false;
+    state.loadingWorld = true;
     console.log('Connected to server');
   };
 
@@ -59,6 +82,7 @@ function connect() {
 
   ws.onclose = () => {
     state.connected = false;
+    state.worldReady = false;
     console.log('Disconnected. Reconnecting in 2s...');
     setTimeout(connect, 2000);
   };
@@ -88,6 +112,11 @@ function handleServerMessage(msg) {
             state.biomeMap[idx++] = biome;
           }
         }
+      }
+      state.loadingWorld = false;
+      state.worldReady = true;
+      if (state.firstConnect) {
+        state.showControls = true;
       }
       break;
 
@@ -137,7 +166,11 @@ function handleServerMessage(msg) {
       if (state.myEid) {
         const me = state.entities.get(state.myEid);
         if (me) {
+          const wasDead = state.isDead;
           state.isDead = !!me.dead;
+          if (wasDead && !state.isDead) {
+            state.deathInfo = null; // Clear on respawn
+          }
         }
       }
       break;
@@ -147,6 +180,11 @@ function handleServerMessage(msg) {
         state.inventory[i] = msg.items[i] || { id: 0, n: 0 };
       }
       state.selectedSlot = msg.selected;
+      // Detect damage for red flash
+      if (msg.hp < state.hp && state.hp > 0) {
+        state.damageFlashAlpha = Math.min(0.6, (state.hp - msg.hp) / 30);
+      }
+      state.prevHp = state.hp;
       state.hp = msg.hp;
       state.maxHp = msg.maxHp;
       state.hunger = msg.hunger;
@@ -157,6 +195,12 @@ function handleServerMessage(msg) {
     case MSG.DEATH:
       state.isDead = true;
       state.spawnBags = msg.bags || [];
+      state.deathInfo = {
+        killerName: msg.killerName || 'unknown',
+        killerType: msg.killerType || 'environment',
+        survived: msg.survived || 0,
+      };
+      state.damageFlashAlpha = 0; // clear flash on death screen
       playDeath();
       break;
 
@@ -216,6 +260,23 @@ function handleServerMessage(msg) {
       };
       break;
 
+    case MSG.CHAT:
+      // Add to chat log
+      state.chatMessages.push({
+        senderName: msg.senderName,
+        senderEid: msg.senderEid,
+        text: msg.text,
+        time: Date.now(),
+      });
+      // Keep last 50 messages
+      if (state.chatMessages.length > 50) state.chatMessages.shift();
+      // Set chat bubble on sender entity
+      state.chatBubbles.set(msg.senderEid, {
+        text: msg.text,
+        expiry: Date.now() + 5000,
+      });
+      break;
+
     case MSG.SPAWN_BAGS:
       state.spawnBags = msg.bags || [];
       break;
@@ -241,10 +302,32 @@ const ui = createUI(state, send);
 // ── Game Loop (Client) ──
 let lastFrame = 0;
 const INTERP_FACTOR = 0.15;
+let fpsFrames = 0;
+let fpsLastTime = 0;
 
 function clientLoop(timestamp) {
   const dt = timestamp - lastFrame;
   lastFrame = timestamp;
+
+  // FPS counter
+  fpsFrames++;
+  if (timestamp - fpsLastTime >= 1000) {
+    state.fps = fpsFrames;
+    fpsFrames = 0;
+    fpsLastTime = timestamp;
+  }
+  state.entityCount = state.entities.size;
+
+  // Decay damage flash
+  if (state.damageFlashAlpha > 0) {
+    state.damageFlashAlpha = Math.max(0, state.damageFlashAlpha - dt * 0.003);
+  }
+
+  // Clean expired chat bubbles
+  const now = Date.now();
+  for (const [eid, bubble] of state.chatBubbles) {
+    if (now > bubble.expiry) state.chatBubbles.delete(eid);
+  }
 
   // Client-side movement prediction
   if (state.myEid && state.entities.has(state.myEid) && !state.isDead) {

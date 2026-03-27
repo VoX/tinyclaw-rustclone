@@ -1,7 +1,7 @@
 import { query, hasComponent, addComponent, addEntity, removeEntity } from 'bitecs';
 import { Health, Dead, Player, Position, Inventory, WorldItem, Collider, Sprite, NetworkSync,
-         Animal, ResourceNode, SleepingBag, initInventory } from '../../shared/components.js';
-import { ITEM_DESPAWN_TICKS, SERVER_TPS, PLAYER_MAX_HP, RESPAWN_WAIT_TICKS } from '../../shared/constants.js';
+         Animal, ResourceNode, SleepingBag, Damageable, initInventory } from '../../shared/components.js';
+import { ITEM_DESPAWN_TICKS, SERVER_TPS, PLAYER_MAX_HP, RESPAWN_WAIT_TICKS, ANIMAL_DEFS } from '../../shared/constants.js';
 import { ENTITY_TYPE, MSG } from '../../shared/protocol.js';
 
 export function createDamageSystem(gameState) {
@@ -78,16 +78,48 @@ export function createDamageSystem(gameState) {
         // Notify client of death with spawn options
         const connId = Player.connectionId[eid];
         const client = gameState.clients.get(connId);
-        if (client && client.ws) {
-          client.ws.send(JSON.stringify({ type: MSG.DEATH, bags }));
+
+        // Determine killer info
+        let killerName = 'the environment';
+        let killerType = 'environment';
+        const killerEid = hasComponent(world, eid, Damageable) ? Damageable.lastHitBy[eid] : 0;
+        if (killerEid && killerEid !== eid) {
+          const killerEntityType = gameState.entityTypes.get(killerEid);
+          if (killerEntityType === ENTITY_TYPE.PLAYER) {
+            killerName = `Player ${Player.connectionId[killerEid] || killerEid}`;
+            killerType = 'player';
+          } else if (killerEntityType === ENTITY_TYPE.ANIMAL && hasComponent(world, killerEid, Animal)) {
+            const at = Animal.animalType[killerEid];
+            const animalNames = { 1: 'Deer', 2: 'Boar', 3: 'Wolf', 4: 'Bear' };
+            killerName = animalNames[at] || 'Animal';
+            killerType = 'animal';
+          }
         }
 
-        // Broadcast death event
+        // Calculate survival time
+        const spawnTick = client?.spawnTick || 0;
+        const survivedTicks = gameState.tick - spawnTick;
+        const survivedSeconds = Math.floor(survivedTicks / SERVER_TPS);
+        if (client && client.ws) {
+          client.ws.send(JSON.stringify({
+            type: MSG.DEATH,
+            bags,
+            killerName,
+            killerType,
+            survived: survivedSeconds,
+          }));
+        }
+
+        // Broadcast death event (for kill feed)
+        const victimName = `Player ${connId}`;
         gameState.events.push({
           type: 'death',
           eid,
           x: px,
           y: py,
+          victimName,
+          killerName,
+          killerType,
         });
       } else {
         // Non-player entity died: remove it

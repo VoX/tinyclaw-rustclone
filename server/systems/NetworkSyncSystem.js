@@ -14,6 +14,7 @@ export function createNetworkSyncSystem(gameState) {
   return function NetworkSyncSystem(world) {
     const tick = gameState.tick;
     const entities = query(world, [Position, NetworkSync]);
+    const interestDist = INTEREST_RADIUS * TILE_SIZE;
 
     // Build per-client delta updates
     for (const [connId, client] of gameState.clients) {
@@ -30,7 +31,6 @@ export function createNetworkSyncSystem(gameState) {
 
       const px = Position.x[playerEid];
       const py = Position.y[playerEid];
-      const interestDist = INTEREST_RADIUS * TILE_SIZE;
 
       const delta = [];
       const removals = [];
@@ -160,6 +160,38 @@ export function createNetworkSyncSystem(gameState) {
             temp: Math.round(Temperature.current[playerEid]),
           }));
         } catch (e) {}
+      }
+    }
+
+    // Process chat messages
+    for (const [connId, client] of gameState.clients) {
+      if (!client.chatMessage) continue;
+      const text = client.chatMessage;
+      client.chatMessage = null;
+
+      const eid = client.playerEid;
+      if (!eid || !hasComponent(world, eid, Position)) continue;
+      if (hasComponent(world, eid, Dead)) continue;
+
+      const cx = Position.x[eid];
+      const cy = Position.y[eid];
+      const senderName = `Player ${connId}`;
+
+      // Broadcast to players within interest radius
+      const chatMsg = JSON.stringify({
+        type: MSG.CHAT,
+        senderEid: eid,
+        senderName,
+        text,
+      });
+      for (const [cid, c] of gameState.clients) {
+        if (!c.ws || !c.playerEid) continue;
+        if (!hasComponent(world, c.playerEid, Position)) continue;
+        const dx = Position.x[c.playerEid] - cx;
+        const dy = Position.y[c.playerEid] - cy;
+        if (dx * dx + dy * dy < interestDist * interestDist) {
+          try { c.ws.send(chatMsg); } catch (e) {}
+        }
       }
     }
 

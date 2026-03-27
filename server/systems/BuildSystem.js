@@ -144,6 +144,11 @@ export function createBuildSystem(gameState) {
         SleepingBag.cooldown[newEid] = 0;
         Collider.radius[newEid] = 0.4;
         Sprite.spriteId[newEid] = 210;
+        // Broadcast event
+        gameState.events.push({
+          type: 'sleeping_bag',
+          playerName: `Player ${Player.connectionId[eid] || eid}`,
+        });
       } else if (entityType === ENTITY_TYPE.CAMPFIRE) {
         addComponent(world, newEid, Campfire);
         Campfire.fuelRemaining[newEid] = 0;

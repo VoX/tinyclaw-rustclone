@@ -1,6 +1,8 @@
 import { DAY_NIGHT_CYCLE_TICKS, DAY_PORTION } from '../../shared/constants.js';
 
 export function createDayNightSystem(gameState) {
+  let prevPhase = 'day';
+
   return function DayNightSystem(world) {
     gameState.worldTime = (gameState.worldTime + 1) % DAY_NIGHT_CYCLE_TICKS;
     const progress = gameState.worldTime / DAY_NIGHT_CYCLE_TICKS;
@@ -19,6 +21,16 @@ export function createDayNightSystem(gameState) {
         gameState.lightLevel = 0.2;
       }
     }
+
+    // Broadcast day/night transition events
+    if (gameState.dayNightPhase !== prevPhase) {
+      gameState.events.push({
+        type: 'day_night',
+        phase: gameState.dayNightPhase,
+      });
+      prevPhase = gameState.dayNightPhase;
+    }
+
     return world;
   };
 }

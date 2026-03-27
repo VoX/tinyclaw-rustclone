@@ -5,7 +5,7 @@ import { Position, Structure, Door, ToolCupboard, SleepingBag,
          Campfire, Furnace, Workbench, Health, ResourceNode, Collider,
          Sprite, NetworkSync, StorageBox, Player, Inventory, Hotbar,
          Hunger, Thirst, Temperature, Velocity, Rotation, ActiveTool,
-         Damageable, Armor, initInventory } from '../shared/components.js';
+         Damageable, Armor, Sleeper, initInventory } from '../shared/components.js';
 import { STRUCT_TYPE, STRUCT_HP, RESOURCE_NODE_DEFS, PLAYER_MAX_HP,
          PLAYER_MAX_HUNGER, PLAYER_MAX_THIRST, PLAYER_COLLIDER_RADIUS,
          ITEM, WORLD_SIZE, TILE_SIZE } from '../shared/constants.js';
@@ -34,6 +34,7 @@ export function saveWorld(world, gameState) {
     containerInv: {},
     resourceDepletion: [],
     players: {},  // UUID -> player data
+    sleepers: [],  // offline player bodies in the world
   };
 
   // ── Save player data keyed by UUID ──
@@ -233,13 +234,52 @@ export function saveWorld(world, gameState) {
     }
   }
 
+  // Save sleeper (offline player) bodies
+  const sleepers = query(world, [Sleeper, Player, Position]);
+  for (let i = 0; i < sleepers.length; i++) {
+    const eid = sleepers[i];
+    const uuid = gameState.eidToUuid?.get(eid);
+    if (!uuid) continue;
+
+    const invItems = [];
+    const invCounts = [];
+    const invDurability = [];
+    if (Inventory.items[eid]) {
+      for (let s = 0; s < 24; s++) {
+        invItems.push(Inventory.items[eid][s] || 0);
+        invCounts.push(Inventory.counts[eid][s] || 0);
+        invDurability.push(Inventory.durability[eid]?.[s] || 0);
+      }
+    }
+
+    data.sleepers.push({
+      uuid,
+      x: Position.x[eid],
+      y: Position.y[eid],
+      hp: Health.current[eid],
+      maxHp: Health.max[eid],
+      hunger: Hunger.current[eid],
+      thirst: Thirst.current[eid],
+      invItems,
+      invCounts,
+      invDurability,
+      selectedSlot: Hotbar.selectedSlot[eid],
+      armor: {
+        head: Armor.headSlot[eid] || 0,
+        chest: Armor.chestSlot[eid] || 0,
+        legs: Armor.legsSlot[eid] || 0,
+      },
+      name: gameState.playerNames.get(eid) || 'Sleeper',
+    });
+  }
+
   try {
     writeFileSync(SAVE_FILE, JSON.stringify(data));
     const total = data.structures.length + data.campfires.length + data.furnaces.length +
                   data.workbenches.length + data.toolCupboards.length + data.sleepingBags.length +
                   data.storageBoxes.length;
     const playerCount = Object.keys(data.players).length;
-    console.log(`World saved: ${total} placed objects, ${data.resourceDepletion.length} depleted nodes, ${playerCount} players`);
+    console.log(`World saved: ${total} placed objects, ${data.resourceDepletion.length} depleted nodes, ${playerCount} players, ${data.sleepers.length} sleepers`);
   } catch (e) {
     console.error('Failed to save world:', e.message);
   }
@@ -498,7 +538,82 @@ export function loadWorld(world, gameState) {
       console.log(`Restored ${depletedCount} depleted resource nodes`);
     }
 
-    console.log(`World loaded: ${loaded} placed objects, ${playerCount} saved players`);
+    // Recreate sleeper (offline player) bodies
+    let sleeperCount = 0;
+    for (const s of (data.sleepers || [])) {
+      if (!s.uuid) continue;
+
+      const eid = addEntity(world);
+      addComponent(world, eid, Position);
+      addComponent(world, eid, Velocity);
+      addComponent(world, eid, Rotation);
+      addComponent(world, eid, Player);
+      addComponent(world, eid, Health);
+      addComponent(world, eid, Hunger);
+      addComponent(world, eid, Thirst);
+      addComponent(world, eid, Temperature);
+      addComponent(world, eid, Inventory);
+      initInventory(eid);
+      addComponent(world, eid, Hotbar);
+      addComponent(world, eid, Collider);
+      addComponent(world, eid, Sprite);
+      addComponent(world, eid, NetworkSync);
+      addComponent(world, eid, ActiveTool);
+      addComponent(world, eid, Damageable);
+      addComponent(world, eid, Armor);
+      addComponent(world, eid, Sleeper);
+
+      Position.x[eid] = s.x;
+      Position.y[eid] = s.y;
+      Velocity.vx[eid] = 0;
+      Velocity.vy[eid] = 0;
+      Player.connectionId[eid] = 0;
+      Health.current[eid] = s.hp || PLAYER_MAX_HP;
+      Health.max[eid] = s.maxHp || PLAYER_MAX_HP;
+      Hunger.current[eid] = s.hunger ?? PLAYER_MAX_HUNGER;
+      Hunger.max[eid] = PLAYER_MAX_HUNGER;
+      Hunger.decayRate[eid] = 1;
+      Thirst.current[eid] = s.thirst ?? PLAYER_MAX_THIRST;
+      Thirst.max[eid] = PLAYER_MAX_THIRST;
+      Thirst.decayRate[eid] = 1;
+      Temperature.current[eid] = 20;
+      Temperature.comfort[eid] = 1;
+      Collider.radius[eid] = PLAYER_COLLIDER_RADIUS;
+      Sprite.spriteId[eid] = 1;
+      NetworkSync.lastTick[eid] = 0;
+      Hotbar.selectedSlot[eid] = s.selectedSlot || 0;
+
+      // Restore inventory
+      if (s.invItems) {
+        for (let i = 0; i < 24; i++) {
+          Inventory.items[eid][i] = s.invItems[i] || 0;
+          Inventory.counts[eid][i] = s.invCounts[i] || 0;
+          Inventory.durability[eid][i] = s.invDurability?.[i] || 0;
+        }
+      }
+
+      // Restore armor
+      if (s.armor) {
+        Armor.headSlot[eid] = s.armor.head || 0;
+        Armor.chestSlot[eid] = s.armor.chest || 0;
+        Armor.legsSlot[eid] = s.armor.legs || 0;
+      }
+
+      gameState.entityTypes.set(eid, ENTITY_TYPE.PLAYER);
+      gameState.playerNames.set(eid, s.name || 'Sleeper');
+      gameState.playerStats.set(eid, { kills: 0, resources: 0, name: s.name || 'Sleeper' });
+
+      // Track UUID mappings
+      if (!gameState.eidToUuid) gameState.eidToUuid = new Map();
+      if (!gameState.uuidToEid) gameState.uuidToEid = new Map();
+      if (!gameState.sleepersByUuid) gameState.sleepersByUuid = new Map();
+      gameState.eidToUuid.set(eid, s.uuid);
+      gameState.uuidToEid.set(s.uuid, eid);
+      gameState.sleepersByUuid.set(s.uuid, eid);
+      sleeperCount++;
+    }
+
+    console.log(`World loaded: ${loaded} placed objects, ${playerCount} saved players, ${sleeperCount} sleepers`);
     return true;
   } catch (e) {
     console.error('Failed to load world:', e.message);

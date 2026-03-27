@@ -41,11 +41,12 @@ export function createUIOverlays(state) {
       const sx = (ex - camX) * viewScale / TILE_SIZE + w / 2;
       const sy = (ey - camY) * viewScale / TILE_SIZE + h / 2;
       if (sx < -60 || sx > w + 60 || sy < -60 || sy > h + 60) continue;
+      const displayName = e.sleeping ? `${e.name} (sleeping)` : e.name;
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      const tw = ctx.measureText(e.name).width;
+      const tw = ctx.measureText(displayName).width;
       ctx.fillRect(sx - tw / 2 - 2, sy - 34, tw + 4, 12);
-      ctx.fillStyle = '#fff';
-      ctx.fillText(e.name, sx, sy - 24);
+      ctx.fillStyle = e.sleeping ? '#aaa' : '#fff';
+      ctx.fillText(displayName, sx, sy - 24);
     }
     ctx.restore();
   }

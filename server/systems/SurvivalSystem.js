@@ -1,5 +1,5 @@
 import { query, hasComponent } from 'bitecs';
-import { Player, Health, Hunger, Thirst, Temperature, Dead, Position, Armor } from '../../shared/components.js';
+import { Player, Health, Hunger, Thirst, Temperature, Dead, Sleeper, Position, Armor } from '../../shared/components.js';
 import { SERVER_TPS, BIOME_TEMP_MOD, BIOME, WEATHER, RADIATION_DAMAGE_RATE, ITEM_DEFS } from '../../shared/constants.js';
 
 export function createSurvivalSystem(gameState) {
@@ -20,18 +20,22 @@ export function createSurvivalSystem(gameState) {
       const eid = players[i];
       if (hasComponent(world, eid, Dead)) continue;
 
+      const isSleeper = hasComponent(world, eid, Sleeper);
       const connId = Player.connectionId[eid];
-      const client = gameState.clients.get(connId);
+      const client = isSleeper ? null : gameState.clients.get(connId);
       // Skip survival checks for 5 seconds after spawn (invulnerability)
       if (client?.spawnTick && gameState.tick - client.spawnTick < SERVER_TPS * 5) continue;
       const sprinting = client?.sprinting || false;
       const moving = client?.input?.keys > 0;
 
+      // Sleepers drain at 10% rate
+      const drainMult = isSleeper ? 0.1 : 1.0;
+
       // Hunger drain
       let hungerDrain = hungerIdleRate;
       if (sprinting) hungerDrain = hungerSprintRate;
       else if (moving) hungerDrain = hungerRunRate;
-      Hunger.current[eid] = Math.max(0, Hunger.current[eid] - hungerDrain);
+      Hunger.current[eid] = Math.max(0, Hunger.current[eid] - hungerDrain * drainMult);
 
       // Thirst drain
       let thirstDrain = thirstIdleRate;
@@ -39,7 +43,7 @@ export function createSurvivalSystem(gameState) {
       // Desert biome doubles thirst drain
       const biome = gameState.getBiomeAt?.(Position.x[eid], Position.y[eid]) ?? 0;
       if (biome === 3) thirstDrain *= 2; // BIOME.DESERT
-      Thirst.current[eid] = Math.max(0, Thirst.current[eid] - thirstDrain);
+      Thirst.current[eid] = Math.max(0, Thirst.current[eid] - thirstDrain * drainMult);
 
       // Temperature calculation
       const baseTempMod = BIOME_TEMP_MOD[biome] || 0;

@@ -77,6 +77,7 @@ export function createEntityRenderer(state) {
   function drawPlayer(ctx, sx, sy, e, isLocal) {
     const angle = e.a || 0;
     const dead = e.dead;
+    const sleeping = e.sleeping;
 
     if (dead && !deathAnims.has(e.eid)) {
       deathAnims.set(e.eid, { startTime: animTime, tilt: (Math.random() - 0.5) * 0.4 });
@@ -90,33 +91,45 @@ export function createEntityRenderer(state) {
       deathProgress = Math.min(1, (animTime - deathAnim.startTime) / 600);
     }
 
-    // Shadow
+    // Shadow — wider for sleeping/dead players
+    const laidDown = dead || sleeping;
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.2)';
     ctx.beginPath();
-    ctx.ellipse(sx, sy + 5, 10 + deathProgress * 4, 4 + deathProgress * 6, 0, 0, Math.PI * 2);
+    const shadowW = laidDown ? 14 : 10 + deathProgress * 4;
+    const shadowH = laidDown ? 10 : 4 + deathProgress * 6;
+    ctx.ellipse(sx, sy + 5, shadowW, shadowH, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
     ctx.save();
     if (dead) {
       ctx.globalAlpha = 1 - deathProgress * 0.4;
+    } else if (sleeping) {
+      ctx.globalAlpha = 0.8;
     }
     ctx.translate(sx, sy);
-    const deathTilt = deathAnim ? deathProgress * (Math.PI / 2 + deathAnim.tilt) : 0;
-    ctx.rotate(angle + Math.PI / 2 + deathTilt);
-    if (dead) {
-      ctx.scale(1, 1 - deathProgress * 0.3);
+    if (sleeping) {
+      // Sleeping: fully lying on their side
+      ctx.rotate(Math.PI / 2);
+      ctx.scale(1, 0.7);
+    } else {
+      const deathTilt = deathAnim ? deathProgress * (Math.PI / 2 + deathAnim.tilt) : 0;
+      ctx.rotate(angle + Math.PI / 2 + deathTilt);
+      if (dead) {
+        ctx.scale(1, 1 - deathProgress * 0.3);
+      }
     }
 
-    const hasLegsArmor = !dead && e.armorLegs;
-    const hasChestArmor = !dead && e.armorChest;
-    const hasHeadArmor = !dead && e.armorHead;
+    const inactive = dead || sleeping;
+    const hasLegsArmor = !inactive && e.armorLegs;
+    const hasChestArmor = !inactive && e.armorChest;
+    const hasHeadArmor = !inactive && e.armorHead;
 
-    const skinColor = dead ? '#777' : '#d4a574';
-    const shirtColor = dead ? '#555' : hasChestArmor ? '#7a5a2a' : (isLocal ? '#3a8fd6' : '#d6553a');
-    const pantsColor = dead ? '#444' : hasLegsArmor ? '#6a4a1a' : (isLocal ? '#2a5f8f' : '#8f3a2a');
-    const outlineColor = dead ? '#333' : '#222';
+    const skinColor = inactive ? '#777' : '#d4a574';
+    const shirtColor = inactive ? '#555' : hasChestArmor ? '#7a5a2a' : (isLocal ? '#3a8fd6' : '#d6553a');
+    const pantsColor = inactive ? '#444' : hasLegsArmor ? '#6a4a1a' : (isLocal ? '#2a5f8f' : '#8f3a2a');
+    const outlineColor = inactive ? '#333' : '#222';
 
     // Legs
     ctx.fillStyle = pantsColor;
@@ -311,6 +324,25 @@ export function createEntityRenderer(state) {
     }
 
     ctx.restore();
+
+    // Draw "Zzz" above sleeping players
+    if (sleeping && !dead) {
+      ctx.save();
+      ctx.font = 'bold 10px Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(200,200,255,0.7)';
+      // Animate the Zzz floating up
+      const t = (animTime % 2000) / 2000;
+      const zOffset = -20 - t * 12;
+      const zAlpha = 1 - t * 0.6;
+      ctx.globalAlpha = zAlpha;
+      ctx.fillText('z', sx + 8, sy + zOffset);
+      ctx.font = 'bold 12px Consolas, monospace';
+      ctx.fillText('z', sx + 14, sy + zOffset - 8);
+      ctx.font = 'bold 14px Consolas, monospace';
+      ctx.fillText('Z', sx + 20, sy + zOffset - 18);
+      ctx.restore();
+    }
   }
 
   // ── Resource Nodes ──

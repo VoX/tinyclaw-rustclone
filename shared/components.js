@@ -14,6 +14,7 @@ export const Thirst = { current: [], max: [], decayRate: [] };
 export const Temperature = { current: [], comfort: [] };
 export const Armor = { headSlot: [], chestSlot: [], legsSlot: [] };
 export const Dead = { timer: [] };
+export const Sleeper = { uuid: [] }; // marks a disconnected player whose body stays in the world
 
 // ── Inventory / Items ──
 // Inventory: 24 slots, each slot has itemId and count (stored as arrays of typed arrays per entity)
@@ -60,7 +61,7 @@ export function initInventory(eid) {
 // All components list for easy registration
 export const allComponents = [
   Position, Velocity, Rotation, Sprite, Collider, NetworkSync,
-  Player, Health, Hunger, Thirst, Temperature, Armor, Dead,
+  Player, Health, Hunger, Thirst, Temperature, Armor, Dead, Sleeper,
   Inventory, Hotbar, WorldItem, ActiveTool,
   Projectile, MeleeHitbox, Damageable,
   Structure, Door, ToolCupboard, SleepingBag, StorageBox,

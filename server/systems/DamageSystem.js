@@ -1,5 +1,5 @@
 import { query, hasComponent, addComponent, addEntity, removeEntity } from 'bitecs';
-import { Health, Dead, Player, Position, Inventory, WorldItem, Collider, Sprite, NetworkSync,
+import { Health, Dead, Sleeper, Player, Position, Inventory, WorldItem, Collider, Sprite, NetworkSync,
          Animal, ResourceNode, SleepingBag, Damageable, initInventory, Armor, StorageBox, NPC, Recycler, ResearchTable, HeliCrate } from '../../shared/components.js';
 import { ITEM_DESPAWN_TICKS, SERVER_TPS, PLAYER_MAX_HP, RESPAWN_WAIT_TICKS, ANIMAL_DEFS } from '../../shared/constants.js';
 import { ENTITY_TYPE, MSG } from '../../shared/protocol.js';
@@ -162,6 +162,25 @@ export function createDamageSystem(gameState) {
           killerName,
           killerType,
         });
+
+        // If this was a sleeper (offline player), remove the entity entirely
+        if (hasComponent(world, eid, Sleeper)) {
+          // Clean up sleeper tracking
+          const uuid = gameState.eidToUuid?.get(eid);
+          if (uuid) {
+            gameState.sleepersByUuid?.delete(uuid);
+            gameState.eidToUuid?.delete(eid);
+            gameState.uuidToEid?.delete(uuid);
+            // Mark as dead so reconnect gets fresh spawn
+            const pdata = gameState.playersByUuid?.get(uuid);
+            if (pdata) pdata.alive = false;
+          }
+          gameState.removedEntities.add(eid);
+          gameState.entityTypes.delete(eid);
+          gameState.playerNames.delete(eid);
+          gameState.playerStats.delete(eid);
+          removeEntity(world, eid);
+        }
       } else {
         // Non-player entity died: remove it
         const deathX = Position.x[eid];

@@ -17,7 +17,7 @@ export const Dead = { timer: [] };
 
 // ── Inventory / Items ──
 // Inventory: 24 slots, each slot has itemId and count (stored as arrays of typed arrays per entity)
-export const Inventory = { items: [], counts: [] };
+export const Inventory = { items: [], counts: [], durability: [] };
 export const Hotbar = { selectedSlot: [] };
 export const WorldItem = { itemId: [], quantity: [], despawnTimer: [] };
 export const ActiveTool = { itemId: [], swingTimer: [], lastUseTime: [] };
@@ -49,6 +49,7 @@ export const StorageBox = { slots: [] }; // slots stored as array of {itemId, co
 export function initInventory(eid) {
   Inventory.items[eid] = new Uint16Array(24);
   Inventory.counts[eid] = new Uint16Array(24);
+  Inventory.durability[eid] = new Uint16Array(24);
 }
 
 // All components list for easy registration

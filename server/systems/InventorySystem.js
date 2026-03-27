@@ -1,6 +1,7 @@
 import { hasComponent, addEntity, addComponent, removeEntity } from 'bitecs';
 import { Player, Inventory, Hotbar, Position, WorldItem, Collider, Sprite, NetworkSync, Dead, Armor } from '../../shared/components.js';
 import { ITEM_DEFS, INVENTORY_SLOTS, ITEM_DESPAWN_TICKS, ITEM } from '../../shared/constants.js';
+import { addToInventory } from '../../shared/inventory.js';
 import { INV_ACTION, ENTITY_TYPE } from '../../shared/protocol.js';
 
 export function createInventorySystem(gameState) {
@@ -37,6 +38,12 @@ export function createInventorySystem(gameState) {
           inv.counts[fromSlot] = toCount;
           inv.items[toSlot] = fromItem;
           inv.counts[toSlot] = fromCount;
+          // Swap durability too
+          if (Inventory.durability[eid]) {
+            const fromDur = Inventory.durability[eid][fromSlot];
+            Inventory.durability[eid][fromSlot] = Inventory.durability[eid][toSlot];
+            Inventory.durability[eid][toSlot] = fromDur;
+          }
         }
         gameState.dirtyInventories.add(eid);
 
@@ -70,6 +77,7 @@ export function createInventorySystem(gameState) {
 
         inv.items[fromSlot] = 0;
         inv.counts[fromSlot] = 0;
+        if (Inventory.durability[eid]) Inventory.durability[eid][fromSlot] = 0;
         gameState.dirtyInventories.add(eid);
 
       } else if (req.action === INV_ACTION.SPLIT) {
@@ -157,29 +165,11 @@ export function createInventorySystem(gameState) {
 
       const itemId = WorldItem.itemId[targetEid];
       const qty = WorldItem.quantity[targetEid];
-      const maxStack = ITEM_DEFS[itemId]?.maxStack || 1;
 
-      let remaining = qty;
-      // Try stacking
-      for (let s = 0; s < INVENTORY_SLOTS && remaining > 0; s++) {
-        if (Inventory.items[eid][s] === itemId) {
-          const canAdd = maxStack - Inventory.counts[eid][s];
-          const add = Math.min(canAdd, remaining);
-          Inventory.counts[eid][s] += add;
-          remaining -= add;
-        }
-      }
-      // Try empty slots
-      for (let s = 0; s < INVENTORY_SLOTS && remaining > 0; s++) {
-        if (Inventory.items[eid][s] === 0) {
-          Inventory.items[eid][s] = itemId;
-          const add = Math.min(remaining, maxStack);
-          Inventory.counts[eid][s] = add;
-          remaining -= add;
-        }
-      }
+      const added = addToInventory(eid, itemId, qty);
+      const remaining = qty - added;
 
-      if (remaining < qty) {
+      if (added > 0) {
         if (remaining === 0) {
           // Fully picked up - remove world item
           gameState.removedEntities.add(targetEid);

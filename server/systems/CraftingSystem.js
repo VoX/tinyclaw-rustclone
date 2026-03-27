@@ -1,6 +1,7 @@
 import { query, hasComponent } from 'bitecs';
 import { Player, Inventory, Position, Workbench, Dead } from '../../shared/components.js';
 import { RECIPES, ITEM_DEFS, INVENTORY_SLOTS, CRAFT_TIER } from '../../shared/constants.js';
+import { addToInventory } from '../../shared/inventory.js';
 
 export function createCraftingSystem(gameState) {
   return function CraftingSystem(world) {
@@ -72,23 +73,8 @@ export function createCraftingSystem(gameState) {
         }
       }
 
-      // Add result
-      let added = false;
-      // First try to stack with existing
-      for (let s = 0; s < INVENTORY_SLOTS && !added; s++) {
-        if (inv.items[s] === recipe.result && inv.counts[s] + recipe.count <= maxStack) {
-          inv.counts[s] += recipe.count;
-          added = true;
-        }
-      }
-      // Then try empty slot
-      for (let s = 0; s < INVENTORY_SLOTS && !added; s++) {
-        if (inv.items[s] === 0) {
-          inv.items[s] = recipe.result;
-          inv.counts[s] = recipe.count;
-          added = true;
-        }
-      }
+      // Add result (addToInventory handles durability for tools)
+      addToInventory(eid, recipe.result, recipe.count);
 
       gameState.dirtyInventories.add(eid);
     }

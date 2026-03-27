@@ -21,27 +21,22 @@ export function createMovementSystem(gameState) {
       newX = Math.max(0, Math.min(maxCoord, newX));
       newY = Math.max(0, Math.min(maxCoord, newY));
 
-      // Check collision with static colliders (structures, nodes)
-      if (hasComponent(world, eid, Collider)) {
+      // Check collision with static colliders using spatial hash
+      if (hasComponent(world, eid, Collider) && gameState.spatialHash) {
         const myRadius = Collider.radius[eid];
-        const maxCheckDist = myRadius + 2; // max collider radius ~1 + margin
-        const statics = query(world, [Position, Collider]);
-        for (let j = 0; j < statics.length; j++) {
-          const other = statics[j];
+        const nearby = gameState.spatialHash.query(newX, newY, myRadius + 2);
+        for (let j = 0; j < nearby.length; j++) {
+          const other = nearby[j];
           if (other === eid) continue;
           if (!Collider.isStatic[other]) continue;
 
-          // Quick rejection — skip if clearly out of range
           const dx = newX - Position.x[other];
           const dy = newY - Position.y[other];
-          if (dx > maxCheckDist || dx < -maxCheckDist || dy > maxCheckDist || dy < -maxCheckDist) continue;
-
           const distSq = dx * dx + dy * dy;
           const minDist = myRadius + Collider.radius[other];
 
           if (distSq < minDist * minDist && distSq > 0) {
             const dist = Math.sqrt(distSq);
-            // Push out
             const overlap = minDist - dist;
             const nx = dx / dist;
             const ny = dy / dist;

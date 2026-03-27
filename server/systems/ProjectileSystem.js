@@ -23,9 +23,10 @@ export function createProjectileSystem(gameState) {
       const sourceEid = Projectile.sourceEid[eid];
       const projRadius = Collider.radius[eid] || 0.15;
 
-      const targets = query(world, [Position, Health, Collider]);
+      const targets = gameState.spatialHash ? gameState.spatialHash.query(px, py, 3) : [];
       for (let j = 0; j < targets.length; j++) {
         const target = targets[j];
+        if (!hasComponent(world, target, Health) || !hasComponent(world, target, Collider)) continue;
         if (target === sourceEid) continue;
         if (target === eid) continue;
         if (hasComponent(world, target, Dead)) continue;

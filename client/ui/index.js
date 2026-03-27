@@ -475,6 +475,22 @@ export function createUI(state, send) {
             iconCanvas.style.display = 'block';
           }
 
+          // Draw durability bar if applicable
+          const itemDef = ITEM_DEFS[item.id];
+          if (iconCanvas && itemDef && itemDef.durability && item.d > 0) {
+            const ictx2 = iconCanvas.getContext('2d');
+            const maxDur = itemDef.durability;
+            const pct = item.d / maxDur;
+            const barW = 28;
+            const barH = 3;
+            const barX = 2;
+            const barY = 27;
+            ictx2.fillStyle = '#333';
+            ictx2.fillRect(barX, barY, barW, barH);
+            ictx2.fillStyle = pct > 0.5 ? '#4a4' : pct > 0.2 ? '#aa4' : '#a44';
+            ictx2.fillRect(barX, barY, barW * pct, barH);
+          }
+
           // Update or create text elements
           let sn = nameSpan;
           if (!sn) {

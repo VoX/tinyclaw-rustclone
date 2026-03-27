@@ -63,8 +63,10 @@ export function createRespawnSystem(gameState) {
       initInventory(eid);
       Inventory.items[eid][0] = ITEM.ROCK;
       Inventory.counts[eid][0] = 1;
+      Inventory.durability[eid][0] = 50;
       Inventory.items[eid][1] = ITEM.TORCH;
       Inventory.counts[eid][1] = 1;
+      Inventory.durability[eid][1] = 50;
       Hotbar.selectedSlot[eid] = 0;
       gameState.dirtyInventories.add(eid);
 

@@ -5,6 +5,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
+import { query } from 'bitecs';
 import { Position, Velocity, Rotation, Player, Health, Hunger, Thirst, Temperature,
          Inventory, Hotbar, Collider, Sprite, NetworkSync, ActiveTool, Damageable,
          initInventory, StorageBox, Armor } from '../shared/components.js';
@@ -12,6 +13,7 @@ import { SERVER_TPS, SERVER_TICK_MS, PLAYER_MAX_HP, PLAYER_MAX_HUNGER,
          PLAYER_MAX_THIRST, PLAYER_COLLIDER_RADIUS, ITEM, WORLD_SIZE, TILE_SIZE } from '../shared/constants.js';
 import { MSG, KEY, MOUSE_ACTION, INV_ACTION, ENTITY_TYPE } from '../shared/protocol.js';
 
+import { SpatialHash } from '../shared/spatial.js';
 import { generateWorld, serializeBiomeMap } from './world.js';
 import { saveWorld, loadWorld } from './persistence.js';
 import { createInputSystem } from './systems/InputSystem.js';
@@ -59,6 +61,7 @@ const gameState = {
   biomeMap: null,
   getBiomeAt: null,
   nextConnId: 1,
+  spatialHash: new SpatialHash(8),
 };
 
 // ── World Generation ──
@@ -179,8 +182,10 @@ wss.on('connection', (ws) => {
   // Starting items
   Inventory.items[eid][0] = ITEM.ROCK;
   Inventory.counts[eid][0] = 1;
+  Inventory.durability[eid][0] = 50;
   Inventory.items[eid][1] = ITEM.TORCH;
   Inventory.counts[eid][1] = 1;
+  Inventory.durability[eid][1] = 50;
   Hotbar.selectedSlot[eid] = 0;
 
   gameState.entityTypes.set(eid, ENTITY_TYPE.PLAYER);
@@ -339,6 +344,15 @@ function gameLoop() {
   if (elapsed >= SERVER_TICK_MS) {
     lastTick = now - (elapsed % SERVER_TICK_MS);
     gameState.tick++;
+
+    // Rebuild spatial hash
+    const sh = gameState.spatialHash;
+    sh.clear();
+    const allPositioned = query(world, [Position]);
+    for (let i = 0; i < allPositioned.length; i++) {
+      const eid = allPositioned[i];
+      sh.insert(eid, Position.x[eid], Position.y[eid]);
+    }
 
     // Run all systems
     for (const system of systems) {

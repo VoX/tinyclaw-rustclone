@@ -35,13 +35,23 @@ export function createNetworkSyncSystem(gameState) {
       const delta = [];
       const removals = [];
 
+      // Use spatial hash for interest management if available
+      const nearbyEids = gameState.spatialHash
+        ? gameState.spatialHash.query(px, py, interestDist)
+        : null;
+      const eidSet = nearbyEids ? new Set(nearbyEids) : null;
+
       for (let i = 0; i < entities.length; i++) {
         const eid = entities[i];
 
-        // Interest check
-        const dx = Position.x[eid] - px;
-        const dy = Position.y[eid] - py;
-        if (dx * dx + dy * dy > interestDist * interestDist) continue;
+        // Interest check via spatial hash or distance
+        if (eidSet) {
+          if (!eidSet.has(eid)) continue;
+        } else {
+          const dx = Position.x[eid] - px;
+          const dy = Position.y[eid] - py;
+          if (dx * dx + dy * dy > interestDist * interestDist) continue;
+        }
 
         const entityType = gameState.entityTypes.get(eid) || 0;
         const isNew = gameState.newEntities.has(eid);
@@ -153,6 +163,7 @@ export function createNetworkSyncSystem(gameState) {
           items.push({
             id: Inventory.items[playerEid]?.[s] || 0,
             n: Inventory.counts[playerEid]?.[s] || 0,
+            d: Inventory.durability[playerEid]?.[s] || 0,
           });
         }
         try {

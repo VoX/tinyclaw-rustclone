@@ -7,7 +7,8 @@ import { createUI } from './ui/index.js';
 import { updateFootsteps, playHitGather, playHitAttack, playDeath,
          playPickup, playCraftComplete, playInventoryOpen, playInventoryClose,
          playGunshot, playBowShot, playDoorOpen, playPlaceStructure,
-         startAmbient } from './audio.js';
+         startAmbient, updateListenerPosition,
+         playHitGatherAt, playHitAttackAt, playGunshotAt } from './audio.js';
 
 // ── Game State ──
 const state = {
@@ -175,7 +176,7 @@ function handleServerMessage(msg) {
 
     case MSG.INVENTORY_UPDATE:
       for (let i = 0; i < 24; i++) {
-        state.inventory[i] = msg.items[i] || { id: 0, n: 0 };
+        state.inventory[i] = msg.items[i] || { id: 0, n: 0, d: 0 };
       }
       state.selectedSlot = msg.selected;
       // Detect damage for red flash
@@ -206,12 +207,20 @@ function handleServerMessage(msg) {
     case MSG.EVENT:
       if (msg.events) {
         state.events.push(...msg.events);
-        // Trigger audio for events
+        // Trigger positional audio for events
         for (const evt of msg.events) {
           if (evt.type === 'hit') {
-            playHitGather();
+            if (evt.x !== undefined && evt.y !== undefined) {
+              playHitGatherAt(evt.x, evt.y);
+            } else {
+              playHitGather();
+            }
           } else if (evt.type === 'blood') {
-            playHitAttack();
+            if (evt.x !== undefined && evt.y !== undefined) {
+              playHitAttackAt(evt.x, evt.y);
+            } else {
+              playHitAttack();
+            }
           }
         }
       }
@@ -409,8 +418,12 @@ function clientLoop(timestamp) {
     renderer.resetEventIndex();
   }
 
-  // Start ambient audio once connected
+  // Update audio listener position and start ambient audio
   if (state.connected && state.myEid) {
+    const me = state.entities.get(state.myEid);
+    if (me) {
+      updateListenerPosition(me.renderX || me.x, me.renderY || me.y);
+    }
     startAmbient(state.lightLevel);
   }
 

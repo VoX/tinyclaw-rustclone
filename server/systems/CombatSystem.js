@@ -3,6 +3,7 @@ import { Player, Position, Rotation, Health, ActiveTool, Inventory, Hotbar, Dead
          Projectile, Velocity, Collider, NetworkSync, Sprite, Damageable, ResourceNode, Armor } from '../../shared/components.js';
 import { MOUSE_ACTION } from '../../shared/protocol.js';
 import { ITEM_DEFS, SERVER_TPS, getArmorReduction } from '../../shared/constants.js';
+import { reduceDurability } from '../../shared/inventory.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
 
 export function createCombatSystem(gameState) {
@@ -85,10 +86,11 @@ export function createCombatSystem(gameState) {
         const range = 1.5; // tiles
         const arc = Math.PI / 3; // 60 degree arc
 
-        // Find targets in range+arc — query entities with Position+Health
-        const meleeTargets = query(world, [Position, Health]);
+        // Find targets in range+arc using spatial hash
+        const meleeTargets = gameState.spatialHash ? gameState.spatialHash.query(px, py, range) : [];
         for (let k = 0; k < meleeTargets.length; k++) {
           const targetEid = meleeTargets[k];
+          if (!hasComponent(world, targetEid, Health)) continue;
           if (targetEid === eid) continue;
           if (hasComponent(world, targetEid, Dead)) continue;
           // Don't melee resource nodes — gathering is handled by GatherSystem
@@ -125,6 +127,10 @@ export function createCombatSystem(gameState) {
             y: Position.y[targetEid],
             damage: def.damage,
           });
+
+          // Reduce weapon durability
+          reduceDurability(eid, slot);
+          gameState.dirtyInventories.add(eid);
 
           break; // Only hit one target per swing
         }

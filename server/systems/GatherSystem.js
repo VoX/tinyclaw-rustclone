@@ -1,15 +1,15 @@
 import { query, hasComponent } from 'bitecs';
-import { Player, Position, Rotation, Inventory, Hotbar, ResourceNode, Health, Dead } from '../../shared/components.js';
+import { Player, Position, Inventory, Hotbar, ResourceNode, Health, Dead } from '../../shared/components.js';
 import { MOUSE_ACTION } from '../../shared/protocol.js';
 import { ITEM_DEFS, RESOURCE_NODE_DEFS, GATHER_AMOUNTS, RESOURCE_TYPE,
-         getGatherTier, canGather, INVENTORY_SLOTS, SERVER_TPS } from '../../shared/constants.js';
+         getGatherTier, canGather, SERVER_TPS } from '../../shared/constants.js';
+import { addToInventory, reduceDurability } from '../../shared/inventory.js';
 
 export function createGatherSystem(gameState) {
   const gatherCooldowns = new Map(); // eid -> tick
 
   return function GatherSystem(world) {
     const players = query(world, [Player, Position]);
-    const nodes = query(world, [ResourceNode, Position]);
 
     for (let i = 0; i < players.length; i++) {
       const eid = players[i];
@@ -33,13 +33,14 @@ export function createGatherSystem(gameState) {
 
       const px = Position.x[eid];
       const py = Position.y[eid];
-      const angle = Rotation.angle[eid];
 
-      // Find nearest resource node in range + arc
+      // Find nearest resource node in range using spatial hash
       let bestNode = -1;
       let bestDist = Infinity;
-      for (let j = 0; j < nodes.length; j++) {
-        const nodeEid = nodes[j];
+      const nearby = gameState.spatialHash ? gameState.spatialHash.query(px, py, 3.5) : [];
+      for (let j = 0; j < nearby.length; j++) {
+        const nodeEid = nearby[j];
+        if (!hasComponent(world, nodeEid, ResourceNode)) continue;
         if (ResourceNode.remaining[nodeEid] <= 0) continue;
 
         const resType = ResourceNode.resourceType[nodeEid];
@@ -49,13 +50,6 @@ export function createGatherSystem(gameState) {
         const dy = Position.y[nodeEid] - py;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > 3.5) continue;
-
-        // Check arc
-        const targetAngle = Math.atan2(dy, dx);
-        let angleDiff = targetAngle - angle;
-        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-        while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-        if (Math.abs(angleDiff) > Math.PI * 0.75) continue; // 135 degrees
 
         if (dist < bestDist) {
           bestDist = dist;
@@ -82,26 +76,10 @@ export function createGatherSystem(gameState) {
 
       // Add resource to inventory
       const resourceItemId = resDef.resource;
-      const maxStack = ITEM_DEFS[resourceItemId]?.maxStack || 1000;
-      let remaining = actual;
+      addToInventory(eid, resourceItemId, actual);
 
-      // Stack with existing
-      for (let s = 0; s < INVENTORY_SLOTS && remaining > 0; s++) {
-        if (Inventory.items[eid][s] === resourceItemId) {
-          const canAdd = maxStack - Inventory.counts[eid][s];
-          const add = Math.min(canAdd, remaining);
-          Inventory.counts[eid][s] += add;
-          remaining -= add;
-        }
-      }
-      // New slot
-      for (let s = 0; s < INVENTORY_SLOTS && remaining > 0; s++) {
-        if (Inventory.items[eid][s] === 0) {
-          Inventory.items[eid][s] = resourceItemId;
-          Inventory.counts[eid][s] = Math.min(remaining, maxStack);
-          remaining -= Math.min(remaining, maxStack);
-        }
-      }
+      // Reduce tool durability
+      reduceDurability(eid, slot);
 
       gameState.dirtyInventories.add(eid);
 

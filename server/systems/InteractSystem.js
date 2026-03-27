@@ -4,6 +4,7 @@ import { Player, Position, Inventory, Dead, ToolCupboard, Campfire, Furnace,
 import { StorageBox } from '../../shared/components.js';
 import { MSG, ENTITY_TYPE } from '../../shared/protocol.js';
 import { ITEM, ITEM_DEFS, INVENTORY_SLOTS, SERVER_TPS } from '../../shared/constants.js';
+import { addToInventory } from '../../shared/inventory.js';
 
 const CONTAINER_SLOTS = 12;
 
@@ -372,26 +373,6 @@ export function createInteractSystem(gameState) {
   }
 
   function addItemToInventory(playerEid, itemId, count) {
-    const maxStack = ITEM_DEFS[itemId]?.maxStack || 1;
-    let remaining = count;
-    // Stack
-    for (let s = 0; s < INVENTORY_SLOTS && remaining > 0; s++) {
-      if (Inventory.items[playerEid][s] === itemId) {
-        const canAdd = maxStack - Inventory.counts[playerEid][s];
-        const add = Math.min(canAdd, remaining);
-        Inventory.counts[playerEid][s] += add;
-        remaining -= add;
-      }
-    }
-    // Empty
-    for (let s = 0; s < INVENTORY_SLOTS && remaining > 0; s++) {
-      if (Inventory.items[playerEid][s] === 0) {
-        Inventory.items[playerEid][s] = itemId;
-        const add = Math.min(remaining, maxStack);
-        Inventory.counts[playerEid][s] = add;
-        remaining -= add;
-      }
-    }
-    return count - remaining;
+    return addToInventory(playerEid, itemId, count);
   }
 }

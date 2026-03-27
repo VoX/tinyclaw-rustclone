@@ -214,10 +214,14 @@ export const ANIMAL_TYPE = {
 };
 
 export const ANIMAL_DEFS = {
-  [ANIMAL_TYPE.DEER]: { hp: 50, damage: 0, speed: 14.0, aggroRange: 0, behavior: 'flee', drops: [[ITEM.RAW_MEAT, 4], [ITEM.LEATHER, 15], [ITEM.ANIMAL_FAT, 5], [ITEM.BONE_FRAGMENTS, 10]] },
-  [ANIMAL_TYPE.BOAR]: { hp: 75, damage: 10, speed: 9.0, aggroRange: 5, behavior: 'flee_fight', drops: [[ITEM.RAW_MEAT, 3], [ITEM.LEATHER, 10], [ITEM.ANIMAL_FAT, 10], [ITEM.BONE_FRAGMENTS, 8]] },
+  // Deer: passive prey, flee-only. Speed 12 lets new players chase with rock melee.
+  [ANIMAL_TYPE.DEER]: { hp: 50, damage: 0, speed: 12.0, aggroRange: 0, behavior: 'flee', drops: [[ITEM.RAW_MEAT, 4], [ITEM.LEATHER, 15], [ITEM.ANIMAL_FAT, 5], [ITEM.BONE_FRAGMENTS, 10]] },
+  // Boar: defensive, fights back if you get close. Aggro 8 makes proximity matter.
+  [ANIMAL_TYPE.BOAR]: { hp: 75, damage: 10, speed: 9.0, aggroRange: 8, behavior: 'flee_fight', drops: [[ITEM.RAW_MEAT, 3], [ITEM.LEATHER, 10], [ITEM.ANIMAL_FAT, 10], [ITEM.BONE_FRAGMENTS, 8]] },
+  // Wolf: aggressive pack hunter. Fast enough to be scary, outrunnable at sprint.
   [ANIMAL_TYPE.WOLF]: { hp: 100, damage: 20, speed: 12.0, aggroRange: 20, behavior: 'aggro', drops: [[ITEM.RAW_MEAT, 2], [ITEM.LEATHER, 15], [ITEM.ANIMAL_FAT, 5], [ITEM.BONE_FRAGMENTS, 15]] },
-  [ANIMAL_TYPE.BEAR]: { hp: 250, damage: 40, speed: 8.0, aggroRange: 15, behavior: 'aggro', drops: [[ITEM.RAW_MEAT, 4], [ITEM.LEATHER, 25], [ITEM.ANIMAL_FAT, 15], [ITEM.BONE_FRAGMENTS, 20]] },
+  // Bear: boss-tier. Speed 10 means you must sprint to escape — no casual kiting.
+  [ANIMAL_TYPE.BEAR]: { hp: 250, damage: 40, speed: 10.0, aggroRange: 15, behavior: 'aggro', drops: [[ITEM.RAW_MEAT, 4], [ITEM.LEATHER, 25], [ITEM.ANIMAL_FAT, 15], [ITEM.BONE_FRAGMENTS, 20]] },
 };
 
 // ── AI States ──

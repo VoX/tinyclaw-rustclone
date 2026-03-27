@@ -7,7 +7,7 @@
 import { Bot } from './bot.js';
 import { Wanderer, Gatherer, Builder, Fighter, Survivor } from './behaviors.js';
 import { ITEM, ITEM_DEFS, RECIPES, RESOURCE_TYPE } from '../shared/constants.js';
-import { ENTITY_TYPE } from '../shared/protocol.js';
+import { ENTITY_TYPE, MOUSE_ACTION } from '../shared/protocol.js';
 
 const SERVER_URL = process.argv[2] || 'ws://localhost:8780';
 const DURATION_MIN = parseInt(process.argv[3] || '10', 10);
@@ -50,11 +50,16 @@ class Playtester {
     this.ticksSinceSpawn = 0;
     this.totalResourcesGathered = 0;
     this.totalItemsCrafted = 0;
+    this.craftedItems = []; // track names of crafted items
     this.totalStructuresPlaced = 0;
     this.deaths = 0;
   }
 
   nextPhase() {
+    // Log resource counts at phase transition
+    const wood = this.bot.countItem(ITEM.WOOD);
+    const stone = this.bot.countItem(ITEM.STONE);
+    log(`  Resources: wood=${wood}, stone=${stone}`);
     this.phaseIndex = (this.phaseIndex + 1) % PHASES.length;
     this.phase = PHASES[this.phaseIndex];
     this.phaseTicks = 0;
@@ -176,7 +181,8 @@ class Playtester {
     if (this.phaseTicks % 10 === 0) {
       const dx = this.bot.position.x - this.lastPosition.x;
       const dy = this.bot.position.y - this.lastPosition.y;
-      if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01 && this.phase !== 'craft_tools' && this.phase !== 'craft_building' && this.phase !== 'cook' && this.phase !== 'craft_weapons') {
+      const isGathering = this.bot.mouseAction === MOUSE_ACTION.PRIMARY;
+      if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01 && !isGathering && this.phase !== 'craft_tools' && this.phase !== 'craft_building' && this.phase !== 'cook' && this.phase !== 'craft_weapons') {
         this.stuckCounter++;
         if (this.stuckCounter > 5) {
           logIssue('minor', 'Bot appears stuck — no position change for extended period', `phase=${this.phase}, pos=(${this.bot.position.x.toFixed(1)}, ${this.bot.position.y.toFixed(1)})`);
@@ -208,8 +214,8 @@ class Playtester {
         const beforeCount = this.bot.countItem(recipe.result);
         this.bot.craft(recipe.id);
         this.totalItemsCrafted++;
+        this.craftedItems.push(recipeName);
         log(`Crafted: ${recipeName}`);
-        // We could verify after a delay that the item appeared, but async is complex here
       }
     }
   }
@@ -277,6 +283,7 @@ class Playtester {
       deaths: this.deaths,
       resourcesGathered: this.totalResourcesGathered,
       itemsCrafted: this.totalItemsCrafted,
+      craftedItems: this.craftedItems,
       issuesFound: issues.length,
       issues: issues,
     };
@@ -318,7 +325,7 @@ async function main() {
       log(`Actions: ${summary.actions}`);
       log(`Deaths: ${summary.deaths}`);
       log(`Resources gathered: ${summary.resourcesGathered}`);
-      log(`Items crafted: ${summary.itemsCrafted}`);
+      log(`Items crafted: ${summary.itemsCrafted}${summary.craftedItems.length > 0 ? ` (${summary.craftedItems.join(', ')})` : ''}`);
       log(`Issues found: ${summary.issuesFound}`);
       if (issues.length > 0) {
         log('');

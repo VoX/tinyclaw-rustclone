@@ -1,7 +1,7 @@
 import { createWorld, addEntity, addComponent, removeEntity, removeComponent, hasComponent } from 'bitecs';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath, URL } from 'url';
 
@@ -135,15 +135,33 @@ const httpServer = createServer((req, res) => {
     return;
   } else if (url === '/stats') {
     const allEnts = query(world, [Position]);
+    const uptimeSec = Math.floor((Date.now() - serverStartTime) / 1000);
+    const hours = Math.floor(uptimeSec / 3600);
+    const mins = Math.floor((uptimeSec % 3600) / 60);
+    const uptimeFormatted = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+    const mem = process.memoryUsage();
+    const sleeperCount = gameState.sleepersByUuid ? gameState.sleepersByUuid.size : 0;
+    let saveFileSizeBytes = 0;
+    const dataDir = existsSync('/app/data') ? '/app/data' : './data';
+    const saveFilePath = `${dataDir}/world-state.json`;
+    try { saveFileSizeBytes = statSync(saveFilePath).size; } catch (e) {}
     const stats = {
       players: gameState.clients.size,
       entities: allEnts.length,
       tick: gameState.tick,
       tickDurationMs: Math.round(lastTickDuration * 100) / 100,
       avgTickDurationMs: Math.round(avgTickDuration * 100) / 100,
-      uptimeSeconds: Math.floor((Date.now() - serverStartTime) / 1000),
+      uptimeSeconds: uptimeSec,
+      uptime: uptimeFormatted,
       worldTime: Math.round(gameState.worldTime * 100) / 100,
       dayNightPhase: gameState.dayNightPhase,
+      memoryMB: {
+        rss: Math.round(mem.rss / 1048576),
+        heapUsed: Math.round(mem.heapUsed / 1048576),
+        heapTotal: Math.round(mem.heapTotal / 1048576),
+      },
+      sleepers: sleeperCount,
+      saveFileSizeBytes,
     };
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(stats));

@@ -28,6 +28,8 @@ echo "--- 4. Quick server start test ---"
 # Stop Docker container first so port 8780 is free
 docker stop rustclone 2>/dev/null || true
 docker rm rustclone 2>/dev/null || true
+# Kill any zombie process holding port 8780
+kill $(lsof -ti :8780) 2>/dev/null || true
 sleep 1
 timeout 8 node server/index.js &
 SERVER_PID=$!

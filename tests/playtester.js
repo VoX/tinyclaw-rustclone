@@ -75,16 +75,18 @@ class Playtester {
       this.nextPhase();
     }
 
-    // Handle death
+    // Handle death (with cooldown to prevent spam)
     if (this.bot.isDead) {
-      log('Died! Attempting respawn...');
-      this.deaths++;
-      this.bot.respawn();
-      this.ticksSinceSpawn = 0;
-      // After respawn, go back to explore
-      this.phase = 'explore';
-      this.phaseTicks = 0;
-      this.behavior = null;
+      if (!this._lastRespawnTime || Date.now() - this._lastRespawnTime > 12000) {
+        log('Died! Attempting respawn...');
+        this.deaths++;
+        this.bot.respawn();
+        this._lastRespawnTime = Date.now();
+        this.ticksSinceSpawn = 0;
+        this.phase = 'explore';
+        this.phaseTicks = 0;
+        this.behavior = null;
+      }
       return;
     }
 

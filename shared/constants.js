@@ -85,6 +85,10 @@ export const ITEM = {
   METAL_PIPE: 74,
   SPRING: 75,
   SMALL_STASH: 76,
+  // Armor
+  LEATHER_HEAD: 90,
+  LEATHER_CHEST: 91,
+  LEATHER_LEGS: 92,
   // Explosives
   SATCHEL_CHARGE: 80,
   C4: 81,
@@ -163,6 +167,10 @@ export const ITEM_DEFS = {
   [ITEM.WOOD_DOOR]: { name: 'Wood Door', maxStack: 1, cat: 'building' },
   [ITEM.METAL_DOOR]: { name: 'Metal Door', maxStack: 1, cat: 'building' },
   [ITEM.STORAGE_BOX]: { name: 'Storage Box', maxStack: 1, cat: 'deployable' },
+  // Armor
+  [ITEM.LEATHER_HEAD]: { name: 'Leather Helmet', maxStack: 1, cat: 'armor', armorSlot: 'head', armorPct: 0.10 },
+  [ITEM.LEATHER_CHEST]: { name: 'Leather Chest', maxStack: 1, cat: 'armor', armorSlot: 'chest', armorPct: 0.15 },
+  [ITEM.LEATHER_LEGS]: { name: 'Leather Legs', maxStack: 1, cat: 'armor', armorSlot: 'legs', armorPct: 0.10 },
 };
 
 // ── Resource Node Types ──
@@ -223,6 +231,7 @@ export const BIOME = {
   DESERT: 3,
   SNOW: 4,
   MOUNTAIN: 5,
+  WATER: 6,
 };
 
 export const BIOME_TEMP_MOD = {
@@ -306,6 +315,10 @@ export const RECIPES = [
   { id: 35, result: ITEM.C4, count: 1, tier: CRAFT_TIER.WORKBENCH_T3, ing: [[ITEM.GUNPOWDER, 30], [ITEM.CLOTH, 5], [ITEM.ROPE, 2], [ITEM.METAL_FRAGS, 100]] },
   // Storage
   { id: 40, result: ITEM.STORAGE_BOX, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.WOOD, 250], [ITEM.STONE, 50]] },
+  // Armor
+  { id: 41, result: ITEM.LEATHER_HEAD, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.LEATHER, 15], [ITEM.CLOTH, 5]] },
+  { id: 42, result: ITEM.LEATHER_CHEST, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.LEATHER, 25], [ITEM.CLOTH, 10]] },
+  { id: 43, result: ITEM.LEATHER_LEGS, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.LEATHER, 20], [ITEM.CLOTH, 5]] },
 ];
 
 // Inventory size

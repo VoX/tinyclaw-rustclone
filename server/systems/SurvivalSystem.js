@@ -22,6 +22,8 @@ export function createSurvivalSystem(gameState) {
 
       const connId = Player.connectionId[eid];
       const client = gameState.clients.get(connId);
+      // Skip survival checks for 5 seconds after spawn (invulnerability)
+      if (client?.spawnTick && gameState.tick - client.spawnTick < SERVER_TPS * 5) continue;
       const sprinting = client?.sprinting || false;
       const moving = client?.input?.keys > 0;
 

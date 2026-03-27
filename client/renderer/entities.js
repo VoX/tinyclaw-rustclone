@@ -30,6 +30,7 @@ export function createEntityRenderer(state) {
     const type = e.t;
     if (type === ENTITY_TYPE.PLAYER) {
       drawPlayer(ctx, sx, sy, e, e.eid === state.myEid);
+      if (e.sleeping && !e.dead) drawSleepingZzz(ctx, sx, sy);
     } else if (type === ENTITY_TYPE.RESOURCE_NODE) {
       drawResourceNode(ctx, sx, sy, e);
     } else if (type === ENTITY_TYPE.WORLD_ITEM) {
@@ -323,25 +324,24 @@ export function createEntityRenderer(state) {
     }
 
     ctx.restore();
+  }
 
-    // Draw "Zzz" above e.sleeping players
-    if (e.sleeping && !e.dead) {
-      ctx.save();
-      ctx.font = 'bold 10px Consolas, monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = 'rgba(200,200,255,0.7)';
-      // Animate the Zzz floating up
-      const t = (animTime % 2000) / 2000;
-      const zOffset = -20 - t * 12;
-      const zAlpha = 1 - t * 0.6;
-      ctx.globalAlpha = zAlpha;
-      ctx.fillText('z', sx + 8, sy + zOffset);
-      ctx.font = 'bold 12px Consolas, monospace';
-      ctx.fillText('z', sx + 14, sy + zOffset - 8);
-      ctx.font = 'bold 14px Consolas, monospace';
-      ctx.fillText('Z', sx + 20, sy + zOffset - 18);
-      ctx.restore();
-    }
+  // ── Sleeping Zzz animation (called from drawEntity for sleeping players) ──
+  function drawSleepingZzz(ctx, sx, sy) {
+    ctx.save();
+    ctx.font = 'bold 10px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(200,200,255,0.7)';
+    const t = (animTime % 2000) / 2000;
+    const zOffset = -20 - t * 12;
+    const zAlpha = 1 - t * 0.6;
+    ctx.globalAlpha = zAlpha;
+    ctx.fillText('z', sx + 8, sy + zOffset);
+    ctx.font = 'bold 12px Consolas, monospace';
+    ctx.fillText('z', sx + 14, sy + zOffset - 8);
+    ctx.font = 'bold 14px Consolas, monospace';
+    ctx.fillText('Z', sx + 20, sy + zOffset - 18);
+    ctx.restore();
   }
 
   // ── Resource Nodes ──

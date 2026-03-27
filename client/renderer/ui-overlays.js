@@ -33,7 +33,7 @@ export function createUIOverlays(state) {
     ctx.font = '10px Consolas, monospace';
     ctx.textAlign = 'center';
     for (const e of sortedEntities) {
-      if (e.t !== 1) continue; // ENTITY_TYPE.PLAYER
+      if (e.t !== ENTITY_TYPE.PLAYER) continue;
       if (!e.name) continue;
       if (e.eid === state.myEid) continue;
       const ex = e.renderX || e.x;

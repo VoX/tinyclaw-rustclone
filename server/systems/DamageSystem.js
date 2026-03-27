@@ -74,9 +74,9 @@ export function createDamageSystem(gameState) {
 
           // Store loot in container inventory
           if (!gameState.containerInv) gameState.containerInv = new Map();
-          // Pad to 12 slots
-          while (lootItems.length < 12) lootItems.push({ id: 0, n: 0 });
-          gameState.containerInv.set(bagEid, lootItems.slice(0, 12));
+          // Pad to 27 slots (24 inv + 3 armor) to avoid truncating items
+          while (lootItems.length < 27) lootItems.push({ id: 0, n: 0 });
+          gameState.containerInv.set(bagEid, lootItems);
 
           // Track for despawn (5 minutes)
           if (!gameState.lootBagTimers) gameState.lootBagTimers = new Map();
@@ -94,7 +94,7 @@ export function createDamageSystem(gameState) {
         for (let b = 0; b < allBags.length; b++) {
           const bagEid = allBags[b];
           if (SleepingBag.ownerPlayerId[bagEid] === eid && SleepingBag.cooldown[bagEid] <= 0) {
-            const isBed = gameState.entityTypes.get(bagEid) === 16; // ENTITY_TYPE.BED
+            const isBed = gameState.entityTypes.get(bagEid) === ENTITY_TYPE.BED;
             bags.push({
               eid: bagEid,
               x: Math.round(Position.x[bagEid]),

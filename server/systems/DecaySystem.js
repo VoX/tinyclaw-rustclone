@@ -33,9 +33,9 @@ export function createDecaySystem(gameState) {
 
       if (protected_) continue;
 
-      // Apply decay damage
+      // Apply decay damage (Health.current is authoritative; sync Structure.hp)
       Health.current[eid] -= DECAY_DAMAGE;
-      Structure.hp[eid] -= DECAY_DAMAGE;
+      Structure.hp[eid] = Health.current[eid];
 
       // Destroy if dead
       if (Health.current[eid] <= 0) {

@@ -444,6 +444,13 @@ export function createInteractSystem(gameState) {
       } catch (e) {}
     }
 
+    // Clean up openContainers for disconnected players
+    for (const [playerEid, _] of openContainers) {
+      if (!hasComponent(world, playerEid, Player)) {
+        openContainers.delete(playerEid);
+      }
+    }
+
     return world;
   };
 
@@ -598,7 +605,7 @@ export function createInteractSystem(gameState) {
       let remaining = count;
 
       // Stack with existing
-      for (let s = 0; s < CONTAINER_SLOTS && remaining > 0; s++) {
+      for (let s = 0; s < slots.length && remaining > 0; s++) {
         if (slots[s].id === itemId) {
           const canAdd = maxStack - slots[s].n;
           const add = Math.min(canAdd, remaining);
@@ -607,7 +614,7 @@ export function createInteractSystem(gameState) {
         }
       }
       // Empty slot
-      for (let s = 0; s < CONTAINER_SLOTS && remaining > 0; s++) {
+      for (let s = 0; s < slots.length && remaining > 0; s++) {
         if (slots[s].id === 0) {
           slots[s].id = itemId;
           const add = Math.min(remaining, maxStack);
@@ -622,7 +629,7 @@ export function createInteractSystem(gameState) {
       gameState.dirtyInventories.add(playerEid);
     } else if (action.action === 'withdraw') {
       const fromSlot = action.fromSlot;
-      if (fromSlot < 0 || fromSlot >= CONTAINER_SLOTS) return;
+      if (fromSlot < 0 || fromSlot >= slots.length) return;
       const itemId = slots[fromSlot].id;
       const count = slots[fromSlot].n;
       if (!itemId || count <= 0) return;

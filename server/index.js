@@ -365,36 +365,40 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('close', () => {
-    console.log(`Player disconnected: ${connId}`);
-    gameState.clients.delete(connId);
-    if (gameState.clipState) gameState.clipState.delete(eid);
-    if (gameState.craftQueue) gameState.craftQueue.delete(connId);
+    try {
+      console.log(`Player disconnected: ${connId}`);
+      gameState.clients.delete(connId);
+      if (gameState.clipState) gameState.clipState.delete(eid);
+      if (gameState.craftQueue) gameState.craftQueue.delete(connId);
 
-    const isDead = hasComponent(world, eid, Dead);
+      const isDead = hasComponent(world, eid, Dead);
 
-    if (playerUuid && hasComponent(world, eid, Position) && !isDead) {
-      // Convert to sleeper — body stays in world
-      addComponent(world, eid, Sleeper);
-      Velocity.vx[eid] = 0;
-      Velocity.vy[eid] = 0;
-      Player.connectionId[eid] = 0; // no active connection
-      gameState.sleepersByUuid.set(playerUuid, eid);
-      // Keep entityTypes as PLAYER, keep playerNames for rendering
-      console.log(`Player ${playerName} is now sleeping at (${Math.round(Position.x[eid])}, ${Math.round(Position.y[eid])})`);
-    } else {
-      // Player was dead or has no UUID — remove from world
-      gameState.removedEntities.add(eid);
-      gameState.entityTypes.delete(eid);
-      gameState.playerNames.delete(eid);
-      gameState.playerStats.delete(eid);
-      if (playerUuid) {
-        gameState.eidToUuid.delete(eid);
-        gameState.uuidToEid.delete(playerUuid);
-        // Mark as dead in playersByUuid so reconnect gets fresh spawn
-        const existing = gameState.playersByUuid.get(playerUuid);
-        if (existing) existing.alive = false;
+      if (playerUuid && hasComponent(world, eid, Position) && !isDead) {
+        // Convert to sleeper — body stays in world
+        addComponent(world, eid, Sleeper);
+        Velocity.vx[eid] = 0;
+        Velocity.vy[eid] = 0;
+        Player.connectionId[eid] = 0; // no active connection
+        gameState.sleepersByUuid.set(playerUuid, eid);
+        // Keep entityTypes as PLAYER, keep playerNames for rendering
+        console.log(`Player ${playerName} is now sleeping at (${Math.round(Position.x[eid])}, ${Math.round(Position.y[eid])})`);
+      } else {
+        // Player was dead or has no UUID — remove from world
+        gameState.removedEntities.add(eid);
+        gameState.entityTypes.delete(eid);
+        gameState.playerNames.delete(eid);
+        gameState.playerStats.delete(eid);
+        if (playerUuid) {
+          gameState.eidToUuid.delete(eid);
+          gameState.uuidToEid.delete(playerUuid);
+          // Mark as dead in playersByUuid so reconnect gets fresh spawn
+          const existing = gameState.playersByUuid.get(playerUuid);
+          if (existing) existing.alive = false;
+        }
+        removeEntity(world, eid);
       }
-      removeEntity(world, eid);
+    } catch (err) {
+      console.error(`Error during disconnect for connId=${connId}:`, err.message);
     }
   });
 
@@ -553,22 +557,26 @@ function gameLoop() {
     gameState.tick++;
     const tickStart = performance.now();
 
-    // Rebuild spatial hash
-    const sh = gameState.spatialHash;
-    sh.clear();
-    const allPositioned = query(world, [Position]);
-    for (let i = 0; i < allPositioned.length; i++) {
-      const eid = allPositioned[i];
-      sh.insert(eid, Position.x[eid], Position.y[eid]);
-    }
-
-    // Run all systems
-    for (const system of systems) {
-      try {
-        system(world);
-      } catch (err) {
-        console.error(`System error in ${system.name || 'unknown'}:`, err.message);
+    try {
+      // Rebuild spatial hash
+      const sh = gameState.spatialHash;
+      sh.clear();
+      const allPositioned = query(world, [Position]);
+      for (let i = 0; i < allPositioned.length; i++) {
+        const eid = allPositioned[i];
+        sh.insert(eid, Position.x[eid], Position.y[eid]);
       }
+
+      // Run all systems
+      for (const system of systems) {
+        try {
+          system(world);
+        } catch (err) {
+          console.error(`System error in ${system.name || 'unknown'}:`, err.message);
+        }
+      }
+    } catch (err) {
+      console.error(`Critical tick error at tick ${gameState.tick}:`, err);
     }
 
     lastTickDuration = performance.now() - tickStart;

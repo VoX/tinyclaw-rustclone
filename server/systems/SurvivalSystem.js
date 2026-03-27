@@ -42,7 +42,7 @@ export function createSurvivalSystem(gameState) {
       if (moving) thirstDrain = thirstRunRate;
       // Desert biome doubles thirst drain
       const biome = gameState.getBiomeAt?.(Position.x[eid], Position.y[eid]) ?? 0;
-      if (biome === 3) thirstDrain *= 2; // BIOME.DESERT
+      if (biome === BIOME.DESERT) thirstDrain *= 2;
       Thirst.current[eid] = Math.max(0, Thirst.current[eid] - thirstDrain * drainMult);
 
       // Temperature calculation

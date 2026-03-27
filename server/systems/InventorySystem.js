@@ -31,7 +31,10 @@ export function createInventorySystem(gameState) {
           const canMove = Math.min(fromCount, maxStack - toCount);
           inv.counts[toSlot] += canMove;
           inv.counts[fromSlot] -= canMove;
-          if (inv.counts[fromSlot] === 0) inv.items[fromSlot] = 0;
+          if (inv.counts[fromSlot] === 0) {
+            inv.items[fromSlot] = 0;
+            if (Inventory.durability[eid]) Inventory.durability[eid][fromSlot] = 0;
+          }
         } else {
           // Swap
           inv.items[fromSlot] = toItem;

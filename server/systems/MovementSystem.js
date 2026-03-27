@@ -28,6 +28,7 @@ export function createMovementSystem(gameState) {
         for (let j = 0; j < nearby.length; j++) {
           const other = nearby[j];
           if (other === eid) continue;
+          if (!hasComponent(world, other, Collider)) continue;
           if (!Collider.isStatic[other]) continue;
 
           const dx = newX - Position.x[other];

@@ -29,6 +29,7 @@ export function saveWorld(world, gameState) {
     toolCupboards: [],
     sleepingBags: [],
     storageBoxes: [],
+    lootBags: [],
     tcAuth: {},
     doorAuth: {},
     containerInv: {},
@@ -183,10 +184,11 @@ export function saveWorld(world, gameState) {
     });
   }
 
-  // Save storage boxes
+  // Save storage boxes (skip loot bags — saved separately)
   const boxes = query(world, [StorageBox, Position]);
   for (let i = 0; i < boxes.length; i++) {
     const eid = boxes[i];
+    if (gameState.entityTypes.get(eid) === ENTITY_TYPE.LOOT_BAG) continue;
     const slots = gameState.containerInv?.get(eid) || [];
     data.storageBoxes.push({
       x: Position.x[eid],
@@ -195,6 +197,20 @@ export function saveWorld(world, gameState) {
       maxHp: Health.max[eid],
       slots,
     });
+  }
+
+  // Save loot bags with despawn timers
+  if (gameState.lootBagTimers) {
+    for (const [eid, timer] of gameState.lootBagTimers) {
+      if (!hasComponent(world, eid, Position)) continue;
+      const slots = gameState.containerInv?.get(eid) || [];
+      data.lootBags.push({
+        x: Position.x[eid],
+        y: Position.y[eid],
+        timer,
+        slots,
+      });
+    }
   }
 
   // Save TC auth and door auth using UUIDs where possible
@@ -488,6 +504,33 @@ export function loadWorld(world, gameState) {
       const slots = (box.slots || []).map(s => ({ id: s.id || 0, n: s.n || 0 }));
       while (slots.length < 12) slots.push({ id: 0, n: 0 });
       gameState.containerInv.set(eid, slots);
+      loaded++;
+    }
+
+    // Recreate loot bags
+    if (!gameState.lootBagTimers) gameState.lootBagTimers = new Map();
+    for (const bag of (data.lootBags || [])) {
+      const eid = addEntity(world);
+      addComponent(world, eid, Position);
+      addComponent(world, eid, Collider);
+      addComponent(world, eid, Sprite);
+      addComponent(world, eid, NetworkSync);
+      addComponent(world, eid, StorageBox);
+      addComponent(world, eid, Health);
+
+      Position.x[eid] = bag.x;
+      Position.y[eid] = bag.y;
+      Collider.radius[eid] = 0.4;
+      Sprite.spriteId[eid] = 230;
+      NetworkSync.lastTick[eid] = 0;
+      Health.current[eid] = 1000;
+      Health.max[eid] = 1000;
+      gameState.entityTypes.set(eid, ENTITY_TYPE.LOOT_BAG);
+
+      if (!gameState.containerInv) gameState.containerInv = new Map();
+      const slots = (bag.slots || []).map(s => ({ id: s.id || 0, n: s.n || 0 }));
+      gameState.containerInv.set(eid, slots);
+      gameState.lootBagTimers.set(eid, bag.timer || 0);
       loaded++;
     }
 

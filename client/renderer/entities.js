@@ -75,13 +75,12 @@ export function createEntityRenderer(state) {
 
   // ── Player drawing ──
   function drawPlayer(ctx, sx, sy, e, isLocal) {
-    const angle = e.a || 0;
-    const dead = e.dead;
-    const sleeping = e.sleeping;
+    // NOTE: use e.a, e.e.dead, e.e.sleeping directly throughout — do NOT capture
+    // to const variables, esbuild minifier breaks closure references over them
 
-    if (dead && !deathAnims.has(e.eid)) {
+    if (e.dead && !deathAnims.has(e.eid)) {
       deathAnims.set(e.eid, { startTime: animTime, tilt: (Math.random() - 0.5) * 0.4 });
-    } else if (!dead && deathAnims.has(e.eid)) {
+    } else if (!e.dead && deathAnims.has(e.eid)) {
       deathAnims.delete(e.eid);
     }
 
@@ -91,8 +90,8 @@ export function createEntityRenderer(state) {
       deathProgress = Math.min(1, (animTime - deathAnim.startTime) / 600);
     }
 
-    // Shadow — wider for sleeping/dead players
-    const laidDown = dead || sleeping;
+    // Shadow — wider for e.sleeping/e.dead players
+    const laidDown = e.dead || e.sleeping;
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.2)';
     ctx.beginPath();
@@ -103,25 +102,25 @@ export function createEntityRenderer(state) {
     ctx.restore();
 
     ctx.save();
-    if (dead) {
+    if (e.dead) {
       ctx.globalAlpha = 1 - deathProgress * 0.4;
-    } else if (sleeping) {
+    } else if (e.sleeping) {
       ctx.globalAlpha = 0.8;
     }
     ctx.translate(sx, sy);
-    if (sleeping) {
+    if (e.sleeping) {
       // Sleeping: fully lying on their side
       ctx.rotate(Math.PI / 2);
       ctx.scale(1, 0.7);
     } else {
       const deathTilt = deathAnim ? deathProgress * (Math.PI / 2 + deathAnim.tilt) : 0;
-      ctx.rotate(angle + Math.PI / 2 + deathTilt);
-      if (dead) {
+      ctx.rotate((e.a || 0) + Math.PI / 2 + deathTilt);
+      if (e.dead) {
         ctx.scale(1, 1 - deathProgress * 0.3);
       }
     }
 
-    const inactive = dead || sleeping;
+    const inactive = e.dead || e.sleeping;
     const hasLegsArmor = !inactive && e.armorLegs;
     const hasChestArmor = !inactive && e.armorChest;
     const hasHeadArmor = !inactive && e.armorHead;
@@ -192,7 +191,7 @@ export function createEntityRenderer(state) {
     }
 
     // Eyes
-    if (!dead) {
+    if (!e.dead) {
       ctx.fillStyle = '#222';
       ctx.beginPath();
       ctx.arc(-1.5, -10.5, 0.8, 0, Math.PI * 2);
@@ -212,8 +211,8 @@ export function createEntityRenderer(state) {
     ctx.restore();
 
     // Held weapon
-    if (e.held && e.held !== ITEM.NONE && !dead) {
-      drawHeldWeapon(ctx, sx, sy, angle, e.held);
+    if (e.held && e.held !== ITEM.NONE && !e.e.dead) {
+      drawHeldWeapon(ctx, sx, sy, e.a || 0, e.held);
     }
   }
 
@@ -222,12 +221,12 @@ export function createEntityRenderer(state) {
     if (!def) return;
     const cat = def.cat;
     const dist = 13;
-    const tipX = sx + Math.cos(angle) * dist;
-    const tipY = sy + Math.sin(angle) * dist;
+    const tipX = sx + Math.cos((e.a || 0)) * dist;
+    const tipY = sy + Math.sin((e.a || 0)) * dist;
 
     ctx.save();
     ctx.translate(tipX, tipY);
-    ctx.rotate(angle);
+    ctx.rotate((e.a || 0));
 
     if (itemId === ITEM.ROCK) {
       ctx.fillStyle = '#888';
@@ -325,8 +324,8 @@ export function createEntityRenderer(state) {
 
     ctx.restore();
 
-    // Draw "Zzz" above sleeping players
-    if (e.sleeping && !e.dead) {
+    // Draw "Zzz" above e.sleeping players
+    if (e.e.sleeping && !e.e.dead) {
       ctx.save();
       ctx.font = 'bold 10px Consolas, monospace';
       ctx.textAlign = 'center';

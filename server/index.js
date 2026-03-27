@@ -121,6 +121,8 @@ const httpServer = createServer((req, res) => {
     filePath = join(__dirname, '..', 'client', 'dist', 'index.html');
   } else if (url === '/bundle.js') {
     filePath = join(__dirname, '..', 'client', 'dist', 'bundle.js');
+  } else if (url === '/bundle.js.map') {
+    filePath = join(__dirname, '..', 'client', 'dist', 'bundle.js.map');
   } else if (url.startsWith('/icons/')) {
     filePath = join(__dirname, '..', 'client', 'dist', 'icons', url.slice(7));
     if (!existsSync(filePath)) {

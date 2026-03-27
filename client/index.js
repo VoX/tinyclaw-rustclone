@@ -111,15 +111,27 @@ for (let i = 0; i < 24; i++) {
   state.inventory.push({ id: 0, n: 0 });
 }
 
+// ── Player Identity ──
+function getPlayerId() {
+  let id = localStorage.getItem('rustclone_playerId');
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem('rustclone_playerId', id);
+  }
+  return id;
+}
+const playerId = getPlayerId();
+
 // ── WebSocket Connection ──
 const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const wsUrl = window.location.port === '8780' || window.location.port === ''
+const wsBase = window.location.port === '8780' || window.location.port === ''
   ? `${wsProto}//${window.location.host}/rustclone`
   : `ws://${window.location.hostname}:8780`;
 let ws;
 
 function connect() {
   state.connecting = true;
+  const wsUrl = `${wsBase}?playerId=${encodeURIComponent(playerId)}`;
   ws = new WebSocket(wsUrl);
   ws.onopen = () => {
     state.connected = true;

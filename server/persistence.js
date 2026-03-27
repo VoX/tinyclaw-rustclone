@@ -1,12 +1,22 @@
-import { writeFileSync, readFileSync, existsSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
 import { query, addEntity, addComponent, hasComponent } from 'bitecs';
 import { Position, Structure, Door, ToolCupboard, SleepingBag,
          Campfire, Furnace, Workbench, Health, ResourceNode, Collider,
-         Sprite, NetworkSync, StorageBox } from '../shared/components.js';
-import { STRUCT_TYPE, STRUCT_HP, RESOURCE_NODE_DEFS } from '../shared/constants.js';
+         Sprite, NetworkSync, StorageBox, Player, Inventory, Hotbar,
+         Hunger, Thirst, Temperature, Velocity, Rotation, ActiveTool,
+         Damageable, Armor, initInventory } from '../shared/components.js';
+import { STRUCT_TYPE, STRUCT_HP, RESOURCE_NODE_DEFS, PLAYER_MAX_HP,
+         PLAYER_MAX_HUNGER, PLAYER_MAX_THIRST, PLAYER_COLLIDER_RADIUS,
+         ITEM, WORLD_SIZE, TILE_SIZE } from '../shared/constants.js';
 import { ENTITY_TYPE } from '../shared/protocol.js';
 
-const SAVE_FILE = 'world-state.json';
+// Save to /app/data/ in Docker, fallback to ./data/ for local dev
+const DATA_DIR = existsSync('/app/data') ? '/app/data' : './data';
+const SAVE_FILE = `${DATA_DIR}/world-state.json`;
+
+// Ensure data directory exists
+try { mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
 
 export function saveWorld(world, gameState) {
   const data = {
@@ -23,7 +33,54 @@ export function saveWorld(world, gameState) {
     doorAuth: {},
     containerInv: {},
     resourceDepletion: [],
+    players: {},  // UUID -> player data
   };
+
+  // ── Save player data keyed by UUID ──
+  if (gameState.playersByUuid) {
+    // Save currently connected players' live state
+    for (const [connId, client] of gameState.clients) {
+      if (!client.uuid) continue;
+      const eid = client.playerEid;
+      if (!hasComponent(world, eid, Position)) continue;
+
+      const invItems = [];
+      const invCounts = [];
+      const invDurability = [];
+      if (Inventory.items[eid]) {
+        for (let i = 0; i < 24; i++) {
+          invItems.push(Inventory.items[eid][i] || 0);
+          invCounts.push(Inventory.counts[eid][i] || 0);
+          invDurability.push(Inventory.durability[eid]?.[i] || 0);
+        }
+      }
+
+      gameState.playersByUuid.set(client.uuid, {
+        x: Position.x[eid],
+        y: Position.y[eid],
+        hp: Health.current[eid],
+        maxHp: Health.max[eid],
+        hunger: Hunger.current[eid],
+        thirst: Thirst.current[eid],
+        invItems,
+        invCounts,
+        invDurability,
+        selectedSlot: Hotbar.selectedSlot[eid],
+        armor: {
+          head: Armor.headSlot[eid] || 0,
+          chest: Armor.chestSlot[eid] || 0,
+          legs: Armor.legsSlot[eid] || 0,
+        },
+        name: client.playerName,
+        alive: true,
+      });
+    }
+
+    // Write all known players (connected and disconnected)
+    for (const [uuid, pdata] of gameState.playersByUuid) {
+      data.players[uuid] = pdata;
+    }
+  }
 
   // Save structures
   const structures = query(world, [Structure, Position]);
@@ -39,7 +96,7 @@ export function saveWorld(world, gameState) {
       placedBy: Structure.placedBy[eid],
     };
     // Check if it's a door
-    if (Door.isOpen[eid] !== undefined) {
+    if (hasComponent(world, eid, Door)) {
       entry.isDoor = true;
       entry.isOpen = Door.isOpen[eid];
       entry.lockType = Door.lockType[eid];
@@ -103,15 +160,25 @@ export function saveWorld(world, gameState) {
     });
   }
 
-  // Save sleeping bags
+  // Save sleeping bags and beds
   const bags = query(world, [SleepingBag, Position]);
   for (let i = 0; i < bags.length; i++) {
     const eid = bags[i];
+    const entityType = gameState.entityTypes.get(eid);
+    // Resolve owner UUID from eid
+    let ownerUuid = null;
+    const ownerEid = SleepingBag.ownerPlayerId[eid];
+    if (gameState.eidToUuid) {
+      ownerUuid = gameState.eidToUuid.get(ownerEid) || null;
+    }
     data.sleepingBags.push({
       x: Position.x[eid],
       y: Position.y[eid],
       owner: SleepingBag.ownerPlayerId[eid],
+      ownerUuid,
       cooldown: SleepingBag.cooldown[eid],
+      isBed: entityType === ENTITY_TYPE.BED,
+      spriteId: Sprite.spriteId[eid],
     });
   }
 
@@ -129,21 +196,27 @@ export function saveWorld(world, gameState) {
     });
   }
 
-  // NOTE: TC auth and door auth reference player EIDs which are ephemeral.
-  // After restart, these EIDs won't match any player. We save them anyway
-  // so they persist if the server is restarted mid-session, but they will
-  // be stale for players who reconnect. A persistent player identity system
-  // would be needed to fully fix this.
+  // Save TC auth and door auth using UUIDs where possible
   for (const [eid, authSet] of gameState.tcAuth) {
     if (!hasComponent(world, eid, Position)) continue;
     const key = `${Math.round(Position.x[eid])},${Math.round(Position.y[eid])}`;
-    data.tcAuth[key] = [...authSet];
+    const uuids = [];
+    for (const playerEid of authSet) {
+      const uuid = gameState.eidToUuid?.get(playerEid);
+      if (uuid) uuids.push(uuid);
+    }
+    data.tcAuth[key] = uuids;
   }
 
   for (const [eid, authSet] of gameState.doorAuth) {
     if (!hasComponent(world, eid, Position)) continue;
     const key = `${Math.round(Position.x[eid])},${Math.round(Position.y[eid])}`;
-    data.doorAuth[key] = [...authSet];
+    const uuids = [];
+    for (const playerEid of authSet) {
+      const uuid = gameState.eidToUuid?.get(playerEid);
+      if (uuid) uuids.push(uuid);
+    }
+    data.doorAuth[key] = uuids;
   }
 
   // Save depleted resource nodes
@@ -165,7 +238,8 @@ export function saveWorld(world, gameState) {
     const total = data.structures.length + data.campfires.length + data.furnaces.length +
                   data.workbenches.length + data.toolCupboards.length + data.sleepingBags.length +
                   data.storageBoxes.length;
-    console.log(`World saved: ${total} placed objects, ${data.resourceDepletion.length} depleted nodes`);
+    const playerCount = Object.keys(data.players).length;
+    console.log(`World saved: ${total} placed objects, ${data.resourceDepletion.length} depleted nodes, ${playerCount} players`);
   } catch (e) {
     console.error('Failed to save world:', e.message);
   }
@@ -183,6 +257,18 @@ export function loadWorld(world, gameState) {
     // Map from position key to eid for auth restoration
     const tcEidByPos = new Map();
     const doorEidByPos = new Map();
+
+    // Load saved player data into playersByUuid
+    if (!gameState.playersByUuid) gameState.playersByUuid = new Map();
+    for (const [uuid, pdata] of Object.entries(data.players || {})) {
+      gameState.playersByUuid.set(uuid, pdata);
+    }
+    const playerCount = gameState.playersByUuid.size;
+
+    // Build a UUID->eid lookup for auth restoration (will be populated when players connect)
+    // For now, store the auth UUIDs so they can be resolved when players reconnect
+    if (!gameState.pendingTcAuth) gameState.pendingTcAuth = new Map(); // posKey -> [uuids]
+    if (!gameState.pendingDoorAuth) gameState.pendingDoorAuth = new Map();
 
     // Recreate structures
     for (const s of (data.structures || [])) {
@@ -311,7 +397,7 @@ export function loadWorld(world, gameState) {
       loaded++;
     }
 
-    // Recreate sleeping bags
+    // Recreate sleeping bags and beds
     for (const bag of (data.sleepingBags || [])) {
       const eid = addEntity(world);
       addComponent(world, eid, Position);
@@ -324,10 +410,17 @@ export function loadWorld(world, gameState) {
       Position.y[eid] = bag.y;
       SleepingBag.ownerPlayerId[eid] = bag.owner;
       SleepingBag.cooldown[eid] = bag.cooldown || 0;
-      Collider.radius[eid] = 0.4;
-      Sprite.spriteId[eid] = 210;
+      Collider.radius[eid] = bag.isBed ? 0.5 : 0.4;
+      Sprite.spriteId[eid] = bag.spriteId || (bag.isBed ? 216 : 210);
       NetworkSync.lastTick[eid] = 0;
-      gameState.entityTypes.set(eid, ENTITY_TYPE.SLEEPING_BAG);
+
+      const entityType = bag.isBed ? ENTITY_TYPE.BED : ENTITY_TYPE.SLEEPING_BAG;
+      gameState.entityTypes.set(eid, entityType);
+
+      // Store ownerUuid for later resolution when player connects
+      if (bag.ownerUuid && gameState.bagOwnerUuids) {
+        gameState.bagOwnerUuids.set(eid, bag.ownerUuid);
+      }
       loaded++;
     }
 
@@ -358,19 +451,28 @@ export function loadWorld(world, gameState) {
       loaded++;
     }
 
-    // Restore TC auth (position-based)
-    for (const [posKey, playerEids] of Object.entries(data.tcAuth || {})) {
+    // Store pending auth UUIDs for resolution when players connect
+    for (const [posKey, uuids] of Object.entries(data.tcAuth || {})) {
       const eid = tcEidByPos.get(posKey);
       if (eid !== undefined) {
-        gameState.tcAuth.set(eid, new Set(playerEids));
+        // If uuids are strings (UUID format), store as pending
+        if (uuids.length > 0 && typeof uuids[0] === 'string') {
+          gameState.pendingTcAuth.set(eid, uuids);
+        } else {
+          // Legacy format: numeric EIDs (won't resolve, but preserve for mid-session restarts)
+          gameState.tcAuth.set(eid, new Set(uuids));
+        }
       }
     }
 
-    // Restore door auth
-    for (const [posKey, playerEids] of Object.entries(data.doorAuth || {})) {
+    for (const [posKey, uuids] of Object.entries(data.doorAuth || {})) {
       const eid = doorEidByPos.get(posKey);
       if (eid !== undefined) {
-        gameState.doorAuth.set(eid, new Set(playerEids));
+        if (uuids.length > 0 && typeof uuids[0] === 'string') {
+          gameState.pendingDoorAuth.set(eid, uuids);
+        } else {
+          gameState.doorAuth.set(eid, new Set(uuids));
+        }
       }
     }
 
@@ -396,10 +498,71 @@ export function loadWorld(world, gameState) {
       console.log(`Restored ${depletedCount} depleted resource nodes`);
     }
 
-    console.log(`World loaded: ${loaded} placed objects`);
+    console.log(`World loaded: ${loaded} placed objects, ${playerCount} saved players`);
     return true;
   } catch (e) {
     console.error('Failed to load world:', e.message);
     return false;
+  }
+}
+
+// Restore a returning player's entity state from saved data
+export function restorePlayer(eid, playerData, gameState) {
+  Position.x[eid] = playerData.x;
+  Position.y[eid] = playerData.y;
+  Health.current[eid] = playerData.hp || PLAYER_MAX_HP;
+  Health.max[eid] = playerData.maxHp || PLAYER_MAX_HP;
+  Hunger.current[eid] = playerData.hunger ?? PLAYER_MAX_HUNGER;
+  Thirst.current[eid] = playerData.thirst ?? PLAYER_MAX_THIRST;
+  Hotbar.selectedSlot[eid] = playerData.selectedSlot || 0;
+
+  // Restore inventory
+  if (playerData.invItems) {
+    for (let i = 0; i < 24; i++) {
+      Inventory.items[eid][i] = playerData.invItems[i] || 0;
+      Inventory.counts[eid][i] = playerData.invCounts[i] || 0;
+      Inventory.durability[eid][i] = playerData.invDurability?.[i] || 0;
+    }
+  }
+
+  // Restore armor
+  if (playerData.armor) {
+    Armor.headSlot[eid] = playerData.armor.head || 0;
+    Armor.chestSlot[eid] = playerData.armor.chest || 0;
+    Armor.legsSlot[eid] = playerData.armor.legs || 0;
+  }
+
+  return playerData.name || null;
+}
+
+// Resolve pending auth entries when a player with a known UUID connects
+export function resolveAuthForPlayer(uuid, eid, gameState) {
+  // Resolve pending TC auth
+  for (const [tcEid, uuids] of gameState.pendingTcAuth) {
+    if (uuids.includes(uuid)) {
+      if (!gameState.tcAuth.has(tcEid)) {
+        gameState.tcAuth.set(tcEid, new Set());
+      }
+      gameState.tcAuth.get(tcEid).add(eid);
+    }
+  }
+
+  // Resolve pending door auth
+  for (const [doorEid, uuids] of gameState.pendingDoorAuth) {
+    if (uuids.includes(uuid)) {
+      if (!gameState.doorAuth.has(doorEid)) {
+        gameState.doorAuth.set(doorEid, new Set());
+      }
+      gameState.doorAuth.get(doorEid).add(eid);
+    }
+  }
+
+  // Resolve sleeping bag ownership
+  if (gameState.bagOwnerUuids) {
+    for (const [bagEid, ownerUuid] of gameState.bagOwnerUuids) {
+      if (ownerUuid === uuid) {
+        SleepingBag.ownerPlayerId[bagEid] = eid;
+      }
+    }
   }
 }

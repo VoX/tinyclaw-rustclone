@@ -934,7 +934,7 @@ export function createUIOverlays(state) {
     // Draw ghost
     const sx = (snappedX - camX) * viewScale / TILE_SIZE + w / 2;
     const sy = (snappedY - camY) * viewScale / TILE_SIZE + h / 2;
-    const ghostSize = viewScale * 2; // 2 tiles wide
+    const ghostSize = viewScale * 0.9; // match drawStructure size
 
     ctx.save();
     ctx.globalAlpha = 0.4;
@@ -948,8 +948,9 @@ export function createUIOverlays(state) {
         ctx.fillRect(sx - ghostSize / 2, sy - ghostSize / 2, ghostSize, ghostSize);
         ctx.strokeRect(sx - ghostSize / 2, sy - ghostSize / 2, ghostSize, ghostSize);
       } else if (piece === 2 || piece === 3 || piece === 7) { // Wall/Doorway/Window
-        ctx.fillRect(sx - ghostSize / 2, sy - 4, ghostSize, 8);
-        ctx.strokeRect(sx - ghostSize / 2, sy - 4, ghostSize, 8);
+        const wallThick = ghostSize * 0.2;
+        ctx.fillRect(sx - ghostSize / 2, sy - wallThick / 2, ghostSize, wallThick);
+        ctx.strokeRect(sx - ghostSize / 2, sy - wallThick / 2, ghostSize, wallThick);
       } else { // Ceiling/Stairs
         ctx.fillRect(sx - ghostSize / 2, sy - ghostSize / 2, ghostSize, ghostSize);
         ctx.strokeRect(sx - ghostSize / 2, sy - ghostSize / 2, ghostSize, ghostSize);
@@ -1091,7 +1092,7 @@ export function createUIOverlays(state) {
     const boxW = 420;
     const boxH = hints.length * 22 + 20;
     const boxX = w / 2 - boxW / 2;
-    const boxY = h - 120;
+    const boxY = h - 200;
 
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.fillRect(boxX, boxY, boxW, boxH);

@@ -314,7 +314,7 @@ export const RECIPES = [
   { id: 21, result: ITEM.PISTOL_AMMO, count: 20, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.METAL_FRAGS, 3], [ITEM.GUNPOWDER, 2]] },
   { id: 22, result: ITEM.KEY_LOCK, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.METAL_FRAGS, 13]] },
   { id: 23, result: ITEM.CODE_LOCK, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.METAL_FRAGS, 50]] },
-  { id: 24, result: ITEM.TOOL_CUPBOARD_ITEM, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.WOOD, 500]] },
+  { id: 24, result: ITEM.TOOL_CUPBOARD_ITEM, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.WOOD, 500]] },
   { id: 25, result: ITEM.FURNACE_ITEM, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.STONE, 100], [ITEM.WOOD, 50], [ITEM.LOW_GRADE_FUEL, 25]] },
   { id: 26, result: ITEM.ROPE, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.CLOTH, 15]] },
   { id: 27, result: ITEM.GUNPOWDER, count: 10, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.SULFUR, 5], [ITEM.CHARCOAL, 3]] },

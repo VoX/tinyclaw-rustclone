@@ -147,6 +147,9 @@ export function createBuildSystem(gameState) {
         SleepingBag.cooldown[newEid] = 0;
         Collider.radius[newEid] = 0.4;
         Sprite.spriteId[newEid] = 210;
+        // Track UUID ownership for persistence
+        const ownerUuid = gameState.eidToUuid?.get(eid);
+        if (ownerUuid && gameState.bagOwnerUuids) gameState.bagOwnerUuids.set(newEid, ownerUuid);
         // Enforce sleeping bag limit: if player has more than MAX, destroy oldest
         const allBags = query(world, [SleepingBag, Position]);
         const playerBags = [];
@@ -214,6 +217,9 @@ export function createBuildSystem(gameState) {
         SleepingBag.cooldown[newEid] = 0;
         Collider.radius[newEid] = 0.5;
         Sprite.spriteId[newEid] = 216; // bed sprite (different from sleeping bag 210)
+        // Track UUID ownership for persistence
+        const bedOwnerUuid = gameState.eidToUuid?.get(eid);
+        if (bedOwnerUuid && gameState.bagOwnerUuids) gameState.bagOwnerUuids.set(newEid, bedOwnerUuid);
       }
 
       gameState.entityTypes.set(newEid, entityType);

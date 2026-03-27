@@ -1,9 +1,9 @@
-import { createWorld, addEntity, addComponent, removeEntity } from 'bitecs';
+import { createWorld, addEntity, addComponent, removeEntity, hasComponent } from 'bitecs';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, URL } from 'url';
 
 import { query } from 'bitecs';
 import { Position, Velocity, Rotation, Player, Health, Hunger, Thirst, Temperature,
@@ -15,7 +15,7 @@ import { MSG, KEY, MOUSE_ACTION, INV_ACTION, ENTITY_TYPE } from '../shared/proto
 
 import { SpatialHash } from '../shared/spatial.js';
 import { generateWorld, serializeBiomeMap } from './world.js';
-import { saveWorld, loadWorld } from './persistence.js';
+import { saveWorld, loadWorld, restorePlayer, resolveAuthForPlayer } from './persistence.js';
 import { createInputSystem } from './systems/InputSystem.js';
 import { createMovementSystem } from './systems/MovementSystem.js';
 import { createAnimalAISystem } from './systems/AnimalAISystem.js';
@@ -64,6 +64,12 @@ const gameState = {
   animalSpawns: [],            // {x, y, animalType, respawnAt} for respawning
   playerNames: new Map(),      // eid -> name string
   playerStats: new Map(),      // eid -> { kills, resources, name }
+  playersByUuid: new Map(),    // uuid -> saved player data
+  eidToUuid: new Map(),        // eid -> uuid (for connected players)
+  uuidToEid: new Map(),        // uuid -> eid (for connected players)
+  pendingTcAuth: new Map(),    // tc eid -> [uuids] awaiting resolution
+  pendingDoorAuth: new Map(),  // door eid -> [uuids] awaiting resolution
+  bagOwnerUuids: new Map(),    // bag eid -> owner uuid (for sleeping bag resolution)
   biomeMap: null,
   getBiomeAt: null,
   nextConnId: 1,
@@ -159,9 +165,22 @@ function randomPlayerName() {
 // ── WebSocket Server ──
 const wss = new WebSocketServer({ server: httpServer });
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
   const connId = gameState.nextConnId++;
-  console.log(`Player connected: ${connId}`);
+
+  // Parse player UUID from query string
+  let playerUuid = null;
+  try {
+    const params = new URL(req.url, 'http://localhost').searchParams;
+    playerUuid = params.get('playerId') || null;
+  } catch (e) {}
+
+  // Validate UUID format (basic check)
+  if (playerUuid && !/^[0-9a-f-]{36}$/i.test(playerUuid)) {
+    playerUuid = null;
+  }
+
+  console.log(`Player connected: ${connId}${playerUuid ? ` (uuid: ${playerUuid.substring(0, 8)}...)` : ''}`);
 
   // Create player entity
   const eid = addEntity(world);
@@ -183,29 +202,55 @@ wss.on('connection', (ws) => {
   addComponent(world, eid, Damageable);
   addComponent(world, eid, Armor);
 
-  // Random beach spawn
-  const maxCoord = WORLD_SIZE * TILE_SIZE;
-  const margin = maxCoord * 0.05;
-  const side = Math.floor(Math.random() * 4);
-  let sx, sy;
-  switch (side) {
-    case 0: sx = margin + Math.random() * (maxCoord - 2 * margin); sy = Math.random() * margin; break;
-    case 1: sx = margin + Math.random() * (maxCoord - 2 * margin); sy = maxCoord - Math.random() * margin; break;
-    case 2: sx = Math.random() * margin; sy = margin + Math.random() * (maxCoord - 2 * margin); break;
-    default: sx = maxCoord - Math.random() * margin; sy = margin + Math.random() * (maxCoord - 2 * margin); break;
+  // Check if we have saved data for this player
+  let restored = false;
+  let playerName;
+  const savedData = playerUuid ? gameState.playersByUuid.get(playerUuid) : null;
+
+  if (savedData && savedData.alive) {
+    // Restore from saved state
+    playerName = restorePlayer(eid, savedData, gameState) || randomPlayerName();
+    restored = true;
+    console.log(`Restored player ${playerName} from save`);
+  } else {
+    // Fresh spawn on beach
+    const maxCoord = WORLD_SIZE * TILE_SIZE;
+    const margin = maxCoord * 0.05;
+    const side = Math.floor(Math.random() * 4);
+    let sx, sy;
+    switch (side) {
+      case 0: sx = margin + Math.random() * (maxCoord - 2 * margin); sy = Math.random() * margin; break;
+      case 1: sx = margin + Math.random() * (maxCoord - 2 * margin); sy = maxCoord - Math.random() * margin; break;
+      case 2: sx = Math.random() * margin; sy = margin + Math.random() * (maxCoord - 2 * margin); break;
+      default: sx = maxCoord - Math.random() * margin; sy = margin + Math.random() * (maxCoord - 2 * margin); break;
+    }
+
+    Position.x[eid] = sx;
+    Position.y[eid] = sy;
+    Health.current[eid] = PLAYER_MAX_HP;
+    Health.max[eid] = PLAYER_MAX_HP;
+    Hunger.current[eid] = PLAYER_MAX_HUNGER;
+    Hunger.max[eid] = PLAYER_MAX_HUNGER;
+    Thirst.current[eid] = PLAYER_MAX_THIRST;
+    Thirst.max[eid] = PLAYER_MAX_THIRST;
+
+    // Starting items
+    Inventory.items[eid][0] = ITEM.ROCK;
+    Inventory.counts[eid][0] = 1;
+    Inventory.durability[eid][0] = 50;
+    Inventory.items[eid][1] = ITEM.TORCH;
+    Inventory.counts[eid][1] = 1;
+    Inventory.durability[eid][1] = 50;
+    Hotbar.selectedSlot[eid] = 0;
+
+    playerName = (savedData && savedData.name) ? savedData.name : randomPlayerName();
   }
 
-  Position.x[eid] = sx;
-  Position.y[eid] = sy;
   Velocity.vx[eid] = 0;
   Velocity.vy[eid] = 0;
   Player.connectionId[eid] = connId;
-  Health.current[eid] = PLAYER_MAX_HP;
-  Health.max[eid] = PLAYER_MAX_HP;
-  Hunger.current[eid] = PLAYER_MAX_HUNGER;
   Hunger.max[eid] = PLAYER_MAX_HUNGER;
   Hunger.decayRate[eid] = 1;
-  Thirst.current[eid] = PLAYER_MAX_THIRST;
   Thirst.max[eid] = PLAYER_MAX_THIRST;
   Thirst.decayRate[eid] = 1;
   Temperature.current[eid] = 20;
@@ -214,25 +259,25 @@ wss.on('connection', (ws) => {
   Sprite.spriteId[eid] = 1; // player sprite
   NetworkSync.lastTick[eid] = gameState.tick;
 
-  // Starting items
-  Inventory.items[eid][0] = ITEM.ROCK;
-  Inventory.counts[eid][0] = 1;
-  Inventory.durability[eid][0] = 50;
-  Inventory.items[eid][1] = ITEM.TORCH;
-  Inventory.counts[eid][1] = 1;
-  Inventory.durability[eid][1] = 50;
-  Hotbar.selectedSlot[eid] = 0;
-
-  const playerName = randomPlayerName();
   gameState.entityTypes.set(eid, ENTITY_TYPE.PLAYER);
   gameState.playerNames.set(eid, playerName);
   gameState.playerStats.set(eid, { kills: 0, resources: 0, name: playerName });
   gameState.newEntities.add(eid);
+
+  // Track UUID <-> EID mapping
+  if (playerUuid) {
+    gameState.eidToUuid.set(eid, playerUuid);
+    gameState.uuidToEid.set(playerUuid, eid);
+    // Resolve any pending auth entries for this UUID
+    resolveAuthForPlayer(playerUuid, eid, gameState);
+  }
+
   const client = {
     ws,
     playerEid: eid,
     connId,
     playerName,
+    uuid: playerUuid,
     input: { keys: 0, mouseAngle: 0, mouseAction: MOUSE_ACTION.NONE },
     mouseAction: MOUSE_ACTION.NONE,
     sprinting: false,
@@ -248,8 +293,8 @@ wss.on('connection', (ws) => {
     drinkWaterRequest: null,
     reloadRequest: false,
     spawnTick: gameState.tick,
-    spawnProtectionUntil: gameState.tick + 10 * SERVER_TPS, // 10s spawn protection
-    isFirstSpawn: true,
+    spawnProtectionUntil: restored ? gameState.tick : gameState.tick + 10 * SERVER_TPS,
+    isFirstSpawn: !restored,
     // Rate limiting
     actionTimestamps: [], // recent action timestamps for rate limiting
   };
@@ -292,11 +337,49 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     console.log(`Player disconnected: ${connId}`);
+
+    // Save player state before removing entity
+    if (playerUuid && hasComponent(world, eid, Position)) {
+      const invItems = [];
+      const invCounts = [];
+      const invDurability = [];
+      if (Inventory.items[eid]) {
+        for (let i = 0; i < 24; i++) {
+          invItems.push(Inventory.items[eid][i] || 0);
+          invCounts.push(Inventory.counts[eid][i] || 0);
+          invDurability.push(Inventory.durability[eid]?.[i] || 0);
+        }
+      }
+      gameState.playersByUuid.set(playerUuid, {
+        x: Position.x[eid],
+        y: Position.y[eid],
+        hp: Health.current[eid],
+        maxHp: Health.max[eid],
+        hunger: Hunger.current[eid],
+        thirst: Thirst.current[eid],
+        invItems,
+        invCounts,
+        invDurability,
+        selectedSlot: Hotbar.selectedSlot[eid],
+        armor: {
+          head: Armor.headSlot[eid] || 0,
+          chest: Armor.chestSlot[eid] || 0,
+          legs: Armor.legsSlot[eid] || 0,
+        },
+        name: playerName,
+        alive: Health.current[eid] > 0,
+      });
+    }
+
     gameState.clients.delete(connId);
     gameState.removedEntities.add(eid);
     gameState.entityTypes.delete(eid);
     gameState.playerNames.delete(eid);
     gameState.playerStats.delete(eid);
+    if (playerUuid) {
+      gameState.eidToUuid.delete(eid);
+      gameState.uuidToEid.delete(playerUuid);
+    }
     if (gameState.clipState) gameState.clipState.delete(eid);
     if (gameState.craftQueue) gameState.craftQueue.delete(connId);
     removeEntity(world, eid);

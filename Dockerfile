@@ -9,7 +9,7 @@ COPY shared/ shared/
 COPY server/ server/
 COPY client/ client/
 
-RUN npx esbuild client/index.js --bundle --outfile=client/dist/bundle.js --format=esm --minify
+RUN npx esbuild client/index.js --bundle --outfile=client/dist/bundle.js --format=esm --sourcemap
 
 EXPOSE 8780
 

@@ -96,6 +96,9 @@ export function saveWorld(world, gameState) {
       hp: Structure.hp[eid],
       maxHp: Structure.maxHp[eid],
       placedBy: Structure.placedBy[eid],
+      rotation: Structure.rotation[eid] || 0,
+      boxHalfW: Structure.boxHalfW[eid] || 0,
+      boxHalfH: Structure.boxHalfH[eid] || 0,
     };
     // Check if it's a door
     if (hasComponent(world, eid, Door)) {
@@ -343,10 +346,35 @@ export function loadWorld(world, gameState) {
       Structure.hp[eid] = s.hp;
       Structure.maxHp[eid] = s.maxHp;
       Structure.placedBy[eid] = s.placedBy;
+      Structure.rotation[eid] = s.rotation || 0;
+      Structure.boxHalfW[eid] = s.boxHalfW || 0;
+      Structure.boxHalfH[eid] = s.boxHalfH || 0;
       Health.current[eid] = s.hp;
       Health.max[eid] = s.maxHp;
-      Collider.radius[eid] = 0.9;
-      Collider.isStatic[eid] = s.type === 3 ? 0 : 1; // Doorways passable
+
+      // Foundations are walkable (no collider)
+      // Walls have OBB collision. Doorways are passable.
+      const isFoundationType = (s.type === 1 || s.type === 8); // FOUNDATION, FOUNDATION_TRI
+      const isWallType = (s.type === 2 || s.type === 7); // WALL, WINDOW
+      const isDoorway = (s.type === 3); // DOORWAY
+      if (isFoundationType) {
+        Collider.radius[eid] = 0;
+        Collider.isStatic[eid] = 0;
+      } else if (isWallType) {
+        Collider.radius[eid] = 2.0;
+        Collider.isStatic[eid] = 1;
+        // Ensure OBB dimensions for old saves without them
+        if (!Structure.boxHalfW[eid]) {
+          Structure.boxHalfW[eid] = 2.0;
+          Structure.boxHalfH[eid] = 0.2;
+        }
+      } else if (isDoorway) {
+        Collider.radius[eid] = 0;
+        Collider.isStatic[eid] = 0;
+      } else {
+        Collider.radius[eid] = 0.9;
+        Collider.isStatic[eid] = 1;
+      }
       Sprite.spriteId[eid] = 200 + s.type;
       NetworkSync.lastTick[eid] = 0;
 
@@ -355,7 +383,13 @@ export function loadWorld(world, gameState) {
         Door.isOpen[eid] = s.isOpen || 0;
         Door.lockType[eid] = s.lockType || 0;
         Door.lockCode[eid] = s.lockCode || 0;
+        // Doors use OBB collision when closed
+        Collider.radius[eid] = 2.0;
         Collider.isStatic[eid] = s.isOpen ? 0 : 1;
+        if (!Structure.boxHalfW[eid]) {
+          Structure.boxHalfW[eid] = 2.0;
+          Structure.boxHalfH[eid] = 0.15;
+        }
         doorEidByPos.set(`${Math.round(s.x)},${Math.round(s.y)}`, eid);
         gameState.entityTypes.set(eid, ENTITY_TYPE.DOOR);
       } else {

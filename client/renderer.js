@@ -2034,39 +2034,6 @@ export function createRenderer(canvas, state) {
         ctx.lineWidth = 1;
         ctx.strokeRect(sx - size * 0.15, sy - wallThick / 2, size * 0.3, wallThick);
       }
-    } else if (st === STRUCT_TYPE.CEILING) {
-      // Semi-transparent floor above
-      ctx.globalAlpha = 0.5;
-      ctx.fillStyle = tc.fill;
-      ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
-      ctx.strokeStyle = tc.stroke;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(sx - size / 2, sy - size / 2, size, size);
-      // X pattern
-      ctx.strokeStyle = tc.detail;
-      ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.moveTo(sx - size / 2, sy - size / 2);
-      ctx.lineTo(sx + size / 2, sy + size / 2);
-      ctx.moveTo(sx + size / 2, sy - size / 2);
-      ctx.lineTo(sx - size / 2, sy + size / 2);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    } else if (st === STRUCT_TYPE.STAIRS) {
-      // Stair steps
-      ctx.fillStyle = tc.fill;
-      const steps = 4;
-      for (let i = 0; i < steps; i++) {
-        const stepW = size * 0.8;
-        const stepH = size / steps;
-        const alpha = 0.5 + (i / steps) * 0.5;
-        ctx.globalAlpha = alpha;
-        ctx.fillRect(sx - stepW / 2, sy - size / 2 + i * stepH, stepW, stepH - 1);
-      }
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = tc.stroke;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(sx - size * 0.4, sy - size / 2, size * 0.8, size);
     } else {
       // Fallback
       ctx.fillStyle = tc.fill;

@@ -5,6 +5,7 @@ import { Player, Position, Inventory, Structure, Collider, Sprite, NetworkSync,
 import { ITEM, STRUCT_TYPE, STRUCT_TIER, STRUCT_HP, TILE_SIZE, INVENTORY_SLOTS,
          ITEM_DEFS, SERVER_TPS, UPGRADE_COSTS, MAX_SLEEPING_BAGS } from '../../shared/constants.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
+import { snapFoundation, snapWall } from '../../shared/building.js';
 
 export function createBuildSystem(gameState) {
   return function BuildSystem(world) {
@@ -22,10 +23,50 @@ export function createBuildSystem(gameState) {
 
       const { pieceType, x, y } = req;
 
-      // Snap to 2x2 tile grid (matching client grid)
-      const gridSize = TILE_SIZE * 2;
-      const snapX = Math.round(x / gridSize) * gridSize;
-      const snapY = Math.round(y / gridSize) * gridSize;
+      // Gather existing foundations for snap calculations
+      const allStructures = query(world, [Structure, Position]);
+      const foundations = [];
+      for (let fi = 0; fi < allStructures.length; fi++) {
+        const feid = allStructures[fi];
+        const st = Structure.structureType[feid];
+        if (st === STRUCT_TYPE.FOUNDATION || st === STRUCT_TYPE.FOUNDATION_TRI) {
+          foundations.push({
+            x: Position.x[feid], y: Position.y[feid],
+            st, rot: Structure.rotation[feid] || 0,
+          });
+        }
+      }
+
+      let snapX, snapY, wallRotation = 0;
+      const isFoundation = (pieceType === STRUCT_TYPE.FOUNDATION || pieceType === STRUCT_TYPE.FOUNDATION_TRI);
+      const isWallType = (pieceType === STRUCT_TYPE.WALL || pieceType === STRUCT_TYPE.DOORWAY || pieceType === STRUCT_TYPE.WINDOW);
+
+      if (isFoundation) {
+        // Foundations: snap to existing foundation edges, or free-place if none nearby
+        const snap = snapFoundation(x, y, pieceType, foundations);
+        if (snap) {
+          snapX = snap.x;
+          snapY = snap.y;
+          wallRotation = snap.rotation;
+        } else {
+          // Free placement (first foundation or nothing nearby)
+          snapX = x;
+          snapY = y;
+        }
+      } else if (isWallType) {
+        // Walls/doorways/windows: snap to outer foundation edges only
+        const snap = snapWall(x, y, foundations);
+        if (snap) {
+          snapX = snap.x;
+          snapY = snap.y;
+          wallRotation = snap.rotation;
+        } else {
+          continue; // Can't place wall without a foundation edge
+        }
+      } else {
+        snapX = x;
+        snapY = y;
+      }
 
       // Check distance from player
       const dx = snapX - Position.x[eid];
@@ -53,9 +94,10 @@ export function createBuildSystem(gameState) {
       let cost = null;
       let entityType = ENTITY_TYPE.STRUCTURE;
 
-      if (heldItem === ITEM.BUILDING_PLAN && pieceType >= 1 && pieceType <= 7) {
-        // Building structure - costs 30-50 wood for twig tier
-        cost = [[ITEM.WOOD, pieceType === STRUCT_TYPE.FOUNDATION ? 50 : 30]];
+      if (heldItem === ITEM.BUILDING_PLAN && (pieceType === STRUCT_TYPE.FOUNDATION || pieceType === STRUCT_TYPE.FOUNDATION_TRI || pieceType === STRUCT_TYPE.WALL || pieceType === STRUCT_TYPE.DOORWAY || pieceType === STRUCT_TYPE.WINDOW)) {
+        // Building structure - costs 50 wood for foundations, 30 for walls
+        const isFoundationPiece = (pieceType === STRUCT_TYPE.FOUNDATION || pieceType === STRUCT_TYPE.FOUNDATION_TRI);
+        cost = [[ITEM.WOOD, isFoundationPiece ? 50 : 30]];
       } else if (heldItem === ITEM.SLEEPING_BAG) {
         cost = null; // Already consumed the item
         entityType = ENTITY_TYPE.SLEEPING_BAG;
@@ -134,13 +176,37 @@ export function createBuildSystem(gameState) {
         Structure.placedBy[newEid] = eid;
         Health.current[newEid] = hp;
         Health.max[newEid] = hp;
-        Collider.radius[newEid] = 2.0; // match 2x2 tile snap grid
-        Collider.isStatic[newEid] = 1;
         Sprite.spriteId[newEid] = 200 + pieceType;
 
-        // Doorway special case
-        if (pieceType === STRUCT_TYPE.DOORWAY) {
-          Collider.isStatic[newEid] = 0; // doorways are passable
+        if (pieceType === STRUCT_TYPE.FOUNDATION || pieceType === STRUCT_TYPE.FOUNDATION_TRI) {
+          // Foundations are walkable — no static collider
+          Structure.rotation[newEid] = wallRotation;
+          Collider.radius[newEid] = 0;
+          Collider.isStatic[newEid] = 0;
+        } else if (pieceType === STRUCT_TYPE.WALL) {
+          // Walls use OBB collision (thin and long)
+          Structure.rotation[newEid] = wallRotation;
+          Structure.boxHalfW[newEid] = 2.0; // half-length along wall
+          Structure.boxHalfH[newEid] = 0.2; // half-thickness
+          Collider.radius[newEid] = 2.0; // broad-phase radius for spatial hash queries
+          Collider.isStatic[newEid] = 1;
+        } else if (pieceType === STRUCT_TYPE.WINDOW) {
+          // Windows block movement but not projectiles — same OBB as wall
+          Structure.rotation[newEid] = wallRotation;
+          Structure.boxHalfW[newEid] = 2.0;
+          Structure.boxHalfH[newEid] = 0.2;
+          Collider.radius[newEid] = 2.0;
+          Collider.isStatic[newEid] = 1;
+        } else if (pieceType === STRUCT_TYPE.DOORWAY) {
+          // Doorways use OBB but are passable (door entity blocks when closed)
+          Structure.rotation[newEid] = wallRotation;
+          Structure.boxHalfW[newEid] = 2.0;
+          Structure.boxHalfH[newEid] = 0.2;
+          Collider.radius[newEid] = 0;
+          Collider.isStatic[newEid] = 0;
+        } else {
+          Collider.radius[newEid] = 2.0;
+          Collider.isStatic[newEid] = 1;
         }
       } else if (entityType === ENTITY_TYPE.SLEEPING_BAG) {
         addComponent(world, newEid, SleepingBag);

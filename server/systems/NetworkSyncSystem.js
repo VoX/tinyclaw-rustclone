@@ -3,6 +3,7 @@ import { Position, Velocity, Rotation, Health, Player, Sprite, ResourceNode,
          WorldItem, Projectile, Structure, Animal, Campfire, Furnace, Workbench,
          ToolCupboard, SleepingBag, StorageBox, Door, Dead, Sleeper, Inventory, Hotbar,
          Hunger, Thirst, Temperature, NetworkSync, Armor, Helicopter, HeliCrate, Collider } from '../../shared/components.js';
+import { STRUCT_TYPE } from '../../shared/constants.js';
 import { MSG, ENTITY_TYPE } from '../../shared/protocol.js';
 import { INTEREST_RADIUS, TILE_SIZE, ITEM } from '../../shared/constants.js';
 
@@ -114,6 +115,13 @@ export function createNetworkSyncSystem(gameState) {
         } else if (entityType === ENTITY_TYPE.STRUCTURE) {
           state.st = Structure.structureType[eid];
           state.tier = Structure.tier[eid];
+          if (Structure.rotation[eid]) {
+            state.rot = Math.round(Structure.rotation[eid] * 1000) / 1000;
+          }
+          if (Structure.boxHalfW[eid] > 0) {
+            state.boxHW = Structure.boxHalfW[eid];
+            state.boxHH = Structure.boxHalfH[eid];
+          }
         } else if (entityType === ENTITY_TYPE.ANIMAL) {
           state.at = Animal.animalType[eid];
         } else if (entityType === ENTITY_TYPE.CAMPFIRE) {
@@ -124,6 +132,13 @@ export function createNetworkSyncSystem(gameState) {
           state.st = Structure.structureType[eid];
           state.tier = Structure.tier[eid];
           state.open = Door.isOpen[eid];
+          if (Structure.rotation[eid]) {
+            state.rot = Math.round(Structure.rotation[eid] * 1000) / 1000;
+          }
+          if (Structure.boxHalfW[eid] > 0) {
+            state.boxHW = Structure.boxHalfW[eid];
+            state.boxHH = Structure.boxHalfH[eid];
+          }
         } else if (entityType === ENTITY_TYPE.PLAYER) {
           state.sprite = Sprite.spriteId[eid];
           state.name = gameState.playerNames.get(eid) || '';

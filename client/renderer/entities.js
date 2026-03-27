@@ -1067,6 +1067,14 @@ export function createEntityRenderer(state) {
 
     ctx.save();
 
+    // Apply rotation for rotatable structures
+    const rot = e.rot || 0;
+    if (rot) {
+      ctx.translate(sx, sy);
+      ctx.rotate(rot);
+      ctx.translate(-sx, -sy);
+    }
+
     if (st === STRUCT_TYPE.FOUNDATION) {
       ctx.fillStyle = tc.fill;
       ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
@@ -1253,36 +1261,67 @@ export function createEntityRenderer(state) {
         ctx.arc(sx - size * 0.15, sy, size * 0.3, -Math.PI / 2, 0);
         ctx.stroke();
       }
-    } else if (st === STRUCT_TYPE.CEILING) {
-      ctx.globalAlpha = 0.5;
+    } else if (st === STRUCT_TYPE.FOUNDATION_TRI) {
+      // Triangle foundation
+      const half = size / 2;
+      const triH = half * Math.sqrt(3) / 2;
       ctx.fillStyle = tc.fill;
-      ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
+      ctx.beginPath();
+      ctx.moveTo(sx, sy - triH);
+      ctx.lineTo(sx - half, sy + triH);
+      ctx.lineTo(sx + half, sy + triH);
+      ctx.closePath();
+      ctx.fill();
+      // Tier detail
+      ctx.strokeStyle = tc.detail;
+      ctx.lineWidth = 0.5;
+      if (tier === 0) {
+        ctx.beginPath();
+        ctx.moveTo(sx, sy - triH); ctx.lineTo(sx, sy + triH);
+        ctx.stroke();
+      } else if (tier === 2) {
+        ctx.beginPath();
+        ctx.moveTo(sx - half * 0.5, sy); ctx.lineTo(sx + half * 0.5, sy);
+        ctx.stroke();
+      }
       ctx.strokeStyle = tc.stroke;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(sx - size / 2, sy - size / 2, size, size);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy - triH);
+      ctx.lineTo(sx - half, sy + triH);
+      ctx.lineTo(sx + half, sy + triH);
+      ctx.closePath();
+      ctx.stroke();
+    } else if (st === STRUCT_TYPE.WINDOW) {
+      // Window: like wall but with a gap in the middle (projectiles pass through)
+      const wallThick = size * 0.2;
+      const gapW = size * 0.25;
+      ctx.fillStyle = tc.fill;
+      // Left segment
+      ctx.fillRect(sx - size / 2, sy - wallThick / 2, (size - gapW) / 2, wallThick);
+      // Right segment
+      ctx.fillRect(sx + gapW / 2, sy - wallThick / 2, (size - gapW) / 2, wallThick);
+      // Window sill lines
       ctx.strokeStyle = tc.detail;
       ctx.lineWidth = 0.5;
       ctx.beginPath();
-      ctx.moveTo(sx - size / 2, sy - size / 2);
-      ctx.lineTo(sx + size / 2, sy + size / 2);
-      ctx.moveTo(sx + size / 2, sy - size / 2);
-      ctx.lineTo(sx - size / 2, sy + size / 2);
+      ctx.moveTo(sx - gapW / 2, sy - wallThick / 2);
+      ctx.lineTo(sx - gapW / 2, sy + wallThick / 2);
+      ctx.moveTo(sx + gapW / 2, sy - wallThick / 2);
+      ctx.lineTo(sx + gapW / 2, sy + wallThick / 2);
       ctx.stroke();
-      ctx.globalAlpha = 1;
-    } else if (st === STRUCT_TYPE.STAIRS) {
-      ctx.fillStyle = tc.fill;
-      const steps = 4;
-      for (let i = 0; i < steps; i++) {
-        const stepW = size * 0.8;
-        const stepH = size / steps;
-        const alpha = 0.5 + (i / steps) * 0.5;
-        ctx.globalAlpha = alpha;
-        ctx.fillRect(sx - stepW / 2, sy - size / 2 + i * stepH, stepW, stepH - 1);
-      }
-      ctx.globalAlpha = 1;
+      // Window cross
+      ctx.strokeStyle = tc.stroke;
+      ctx.lineWidth = 0.4;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy - wallThick / 2); ctx.lineTo(sx, sy + wallThick / 2);
+      ctx.moveTo(sx - gapW / 2, sy); ctx.lineTo(sx + gapW / 2, sy);
+      ctx.stroke();
+      // Outer border
       ctx.strokeStyle = tc.stroke;
       ctx.lineWidth = 1;
-      ctx.strokeRect(sx - size * 0.4, sy - size / 2, size * 0.8, size);
+      ctx.strokeRect(sx - size / 2, sy - wallThick / 2, (size - gapW) / 2, wallThick);
+      ctx.strokeRect(sx + gapW / 2, sy - wallThick / 2, (size - gapW) / 2, wallThick);
     } else {
       ctx.fillStyle = tc.fill;
       ctx.fillRect(sx - size / 2, sy - size / 2, size, size);

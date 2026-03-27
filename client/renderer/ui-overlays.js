@@ -1,5 +1,6 @@
 import { ENTITY_TYPE } from '../../shared/protocol.js';
 import { TILE_SIZE, ITEM, ITEM_DEFS, STRUCT_TIER, STRUCT_TYPE } from '../../shared/constants.js';
+import { snapFoundation, snapWall } from '../../shared/building.js';
 
 export function createUIOverlays(state) {
   let minimapCanvas = null;
@@ -1126,17 +1127,60 @@ export function createUIOverlays(state) {
     const worldX = me.x + (state.mouseScreenX - w / 2) * TILE_SIZE / viewScale;
     const worldY = me.y + (state.mouseScreenY - h / 2) * TILE_SIZE / viewScale;
 
-    // Snap to 2x2 tile grid
-    const gridSize = TILE_SIZE * 2;
-    const snappedX = Math.round(worldX / gridSize) * gridSize;
-    const snappedY = Math.round(worldY / gridSize) * gridSize;
+    const piece = isBuildPlan ? (state.buildPiece || 1) : 0;
+    const isFoundationPiece = (piece === STRUCT_TYPE.FOUNDATION || piece === STRUCT_TYPE.FOUNDATION_TRI);
+    const isWallPiece = (piece === STRUCT_TYPE.WALL || piece === STRUCT_TYPE.DOORWAY || piece === STRUCT_TYPE.WINDOW);
+
+    // Gather foundations from visible entities
+    const foundations = [];
+    for (const e of sortedEntities) {
+      if (e.t !== ENTITY_TYPE.STRUCTURE) continue;
+      if (e.st !== STRUCT_TYPE.FOUNDATION && e.st !== STRUCT_TYPE.FOUNDATION_TRI) continue;
+      foundations.push({
+        x: e.renderX || e.x, y: e.renderY || e.y,
+        st: e.st, rot: e.rot || 0,
+      });
+    }
+
+    let snappedX, snappedY, snapRotation = 0;
+
+    if (isBuildPlan && isFoundationPiece) {
+      const snap = snapFoundation(worldX, worldY, piece, foundations);
+      if (snap) {
+        snappedX = snap.x;
+        snappedY = snap.y;
+        snapRotation = snap.rotation;
+      } else {
+        snappedX = worldX;
+        snappedY = worldY;
+      }
+    } else if (isBuildPlan && isWallPiece) {
+      const snap = snapWall(worldX, worldY, foundations);
+      if (snap) {
+        snappedX = snap.x;
+        snappedY = snap.y;
+        snapRotation = snap.rotation;
+      } else {
+        snappedX = worldX;
+        snappedY = worldY;
+      }
+    } else {
+      snappedX = worldX;
+      snappedY = worldY;
+    }
 
     // Check placement validity
     const dx = snappedX - me.x;
     const dy = snappedY - me.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const maxDist = 8; // max build distance in world units
+    const maxDist = 8;
     let valid = dist <= maxDist;
+
+    // Walls require a foundation edge
+    if (valid && isWallPiece && foundations.length > 0) {
+      const snap = snapWall(worldX, worldY, foundations);
+      if (!snap) valid = false;
+    }
 
     // Check for overlap with existing entities
     if (valid) {
@@ -1146,7 +1190,7 @@ export function createUIOverlays(state) {
           const ey = e.renderY || e.y;
           const odx = ex - snappedX;
           const ody = ey - snappedY;
-          if (Math.abs(odx) < 1.5 && Math.abs(ody) < 1.5) {
+          if (Math.abs(odx) < 0.5 && Math.abs(ody) < 0.5) {
             valid = false;
             break;
           }
@@ -1157,7 +1201,7 @@ export function createUIOverlays(state) {
     // Draw ghost
     const sx = (snappedX - camX) * viewScale / TILE_SIZE + w / 2;
     const sy = (snappedY - camY) * viewScale / TILE_SIZE + h / 2;
-    const ghostSize = viewScale * 2; // all building pieces fill the 2x2 snap grid cell
+    const ghostSize = viewScale * 2;
 
     ctx.save();
     ctx.globalAlpha = 0.4;
@@ -1166,17 +1210,38 @@ export function createUIOverlays(state) {
     ctx.lineWidth = 2;
 
     if (isBuildPlan) {
-      const piece = state.buildPiece || 1;
-      if (piece === 1) { // Foundation
+      if (piece === STRUCT_TYPE.FOUNDATION) {
+        // Square foundation ghost
         ctx.fillRect(sx - ghostSize / 2, sy - ghostSize / 2, ghostSize, ghostSize);
         ctx.strokeRect(sx - ghostSize / 2, sy - ghostSize / 2, ghostSize, ghostSize);
-      } else if (piece === 2 || piece === 3 || piece === 7) { // Wall/Doorway/Window
+      } else if (piece === STRUCT_TYPE.FOUNDATION_TRI) {
+        // Triangle foundation ghost
+        const half = ghostSize / 2;
+        const triH = half * Math.sqrt(3) / 2;
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(snapRotation);
+        ctx.beginPath();
+        ctx.moveTo(0, -triH);
+        ctx.lineTo(-half, triH);
+        ctx.lineTo(half, triH);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        // Wall/Doorway/Window ghost — rotated
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(snapRotation);
         const wallThick = ghostSize * 0.2;
-        ctx.fillRect(sx - ghostSize / 2, sy - wallThick / 2, ghostSize, wallThick);
-        ctx.strokeRect(sx - ghostSize / 2, sy - wallThick / 2, ghostSize, wallThick);
-      } else { // Ceiling/Stairs
-        ctx.fillRect(sx - ghostSize / 2, sy - ghostSize / 2, ghostSize, ghostSize);
-        ctx.strokeRect(sx - ghostSize / 2, sy - ghostSize / 2, ghostSize, ghostSize);
+        ctx.fillRect(-ghostSize / 2, -wallThick / 2, ghostSize, wallThick);
+        ctx.strokeRect(-ghostSize / 2, -wallThick / 2, ghostSize, wallThick);
+        if (piece === STRUCT_TYPE.WINDOW) {
+          // Draw window gap
+          ctx.clearRect(-ghostSize * 0.1, -wallThick / 2 - 1, ghostSize * 0.2, wallThick + 2);
+        }
+        ctx.restore();
       }
     } else {
       // Deployable — circle

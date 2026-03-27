@@ -1,7 +1,8 @@
 import { query, hasComponent } from 'bitecs';
-import { Player, Velocity, Rotation, Position, ActiveTool, Health, Dead, Collider, Hotbar, Inventory } from '../../shared/components.js';
+import { Player, Velocity, Rotation, Position, ActiveTool, Health, Dead, Collider, Hotbar, Inventory, Structure } from '../../shared/components.js';
 import { KEY, MOUSE_ACTION } from '../../shared/protocol.js';
 import { PLAYER_SPEED, PLAYER_SPRINT_MULT, WATER_SPEED_MULT, ROAD_SPEED_MULT, BIOME, WORLD_SIZE, TILE_SIZE, SERVER_TPS, ITEM_DEFS } from '../../shared/constants.js';
+import { circleVsOBB } from '../../shared/collision.js';
 
 export function createInputSystem(gameState) {
   // Max distance a player can move per tick (sprint speed + tolerance)
@@ -65,24 +66,39 @@ export function createInputSystem(gameState) {
         // Collision validation against static colliders
         if (gameState.spatialHash) {
           const playerRadius = hasComponent(world, eid, Collider) ? Collider.radius[eid] : 0.4;
-          const nearby = gameState.spatialHash.query(Position.x[eid], Position.y[eid], playerRadius + 2);
+          const nearby = gameState.spatialHash.query(Position.x[eid], Position.y[eid], playerRadius + 3);
           for (let j = 0; j < nearby.length; j++) {
             const other = nearby[j];
             if (other === eid) continue;
             if (!hasComponent(world, other, Collider) || !Collider.isStatic[other]) continue;
 
-            const cdx = Position.x[eid] - Position.x[other];
-            const cdy = Position.y[eid] - Position.y[other];
-            const distSq = cdx * cdx + cdy * cdy;
-            const minDist = playerRadius + Collider.radius[other];
+            // Check if this is an OBB structure (wall/window)
+            if (hasComponent(world, other, Structure) && Structure.boxHalfW[other] > 0) {
+              const hit = circleVsOBB(
+                Position.x[eid], Position.y[eid], playerRadius,
+                Position.x[other], Position.y[other],
+                Structure.boxHalfW[other], Structure.boxHalfH[other],
+                Structure.rotation[other]
+              );
+              if (hit) {
+                Position.x[eid] += hit.nx * hit.overlap;
+                Position.y[eid] += hit.ny * hit.overlap;
+              }
+            } else {
+              // Circle-circle collision
+              const cdx = Position.x[eid] - Position.x[other];
+              const cdy = Position.y[eid] - Position.y[other];
+              const distSq = cdx * cdx + cdy * cdy;
+              const minDist = playerRadius + Collider.radius[other];
 
-            if (distSq < minDist * minDist && distSq > 0) {
-              const d = Math.sqrt(distSq);
-              const overlap = minDist - d;
-              const nx = cdx / d;
-              const ny = cdy / d;
-              Position.x[eid] += nx * overlap;
-              Position.y[eid] += ny * overlap;
+              if (distSq < minDist * minDist && distSq > 0) {
+                const d = Math.sqrt(distSq);
+                const overlap = minDist - d;
+                const nx = cdx / d;
+                const ny = cdy / d;
+                Position.x[eid] += nx * overlap;
+                Position.y[eid] += ny * overlap;
+              }
             }
           }
         }

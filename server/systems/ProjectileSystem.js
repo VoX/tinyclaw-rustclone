@@ -1,8 +1,9 @@
 import { query, removeEntity, hasComponent } from 'bitecs';
-import { Projectile, Position, Velocity, Collider, Health, Dead, Damageable, Player, ResourceNode, Armor, Sprite } from '../../shared/components.js';
-import { getArmorReduction, SERVER_TPS } from '../../shared/constants.js';
+import { Projectile, Position, Velocity, Collider, Health, Dead, Damageable, Player, ResourceNode, Armor, Sprite, Structure } from '../../shared/components.js';
+import { getArmorReduction, SERVER_TPS, STRUCT_TYPE } from '../../shared/constants.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
 import { areTeammates } from './TeamSystem.js';
+import { circleVsOBB } from '../../shared/collision.js';
 
 export function createProjectileSystem(gameState) {
   const ARROW_GRAVITY = 3.0; // tiles/sec^2 downward (Y increases)
@@ -47,6 +48,38 @@ export function createProjectileSystem(gameState) {
           const dist = Math.sqrt(dx * dx + dy * dy);
           const hitDist = projRadius + (Collider.radius[target] || 0.4);
           if (dist < hitDist) {
+            gameState.removedEntities.add(eid);
+            gameState.entityTypes.delete(eid);
+            removeEntity(world, eid);
+            destroyed = true;
+            break;
+          }
+          continue;
+        }
+
+        // OBB structures (walls) block projectiles and take damage — windows let projectiles through
+        if (hasComponent(world, target, Structure) && Structure.boxHalfW[target] > 0 && Collider.isStatic[target] && Structure.structureType[target] !== STRUCT_TYPE.WINDOW) {
+          const hit = circleVsOBB(
+            px, py, projRadius,
+            Position.x[target], Position.y[target],
+            Structure.boxHalfW[target], Structure.boxHalfH[target],
+            Structure.rotation[target]
+          );
+          if (hit) {
+            // Apply damage to wall if it has Health
+            if (hasComponent(world, target, Health) && !hasComponent(world, target, Dead)) {
+              Health.current[target] -= Projectile.damage[eid];
+              if (hasComponent(world, target, Damageable)) {
+                Damageable.lastHitTime[target] = gameState.tick;
+                Damageable.lastHitBy[target] = sourceEid;
+              }
+              gameState.events.push({
+                type: 'hit',
+                x: Position.x[target],
+                y: Position.y[target],
+                damage: Projectile.damage[eid],
+              });
+            }
             gameState.removedEntities.add(eid);
             gameState.entityTypes.delete(eid);
             removeEntity(world, eid);

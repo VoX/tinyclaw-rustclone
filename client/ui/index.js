@@ -267,9 +267,6 @@ export function createUI(state, send) {
   const itemNameEl = document.getElementById('item-name');
   const pingEl = document.getElementById('ping-display');
 
-  // Dragging state for inventory
-  let dragSlot = -1;
-
   // Tooltip element
   const tooltip = document.createElement('div');
   tooltip.style.cssText = 'position:fixed;display:none;background:#111;border:1px solid #555;color:#ccc;padding:6px 10px;font:11px Consolas,monospace;pointer-events:none;z-index:9999;max-width:240px;white-space:pre-line;';
@@ -335,63 +332,223 @@ export function createUI(state, send) {
   let smoothHunger = 100;
   let smoothThirst = 100;
 
-  // Build inventory grid with canvas icons
-  function buildInvGrid() {
-    invGrid.innerHTML = '';
-    for (let i = 0; i < INVENTORY_SLOTS; i++) {
-      const slot = document.createElement('div');
-      slot.className = 'inv-slot';
-      slot.dataset.slot = i;
+  // ── Drag-and-drop state ──
+  const dragGhost = document.getElementById('drag-ghost');
+  let dragState = null; // { gridId, slotIndex, itemId, count }
 
-      // Icon canvas
+  function startDrag(gridId, slotIndex, itemId, count, e) {
+    dragState = { gridId, slotIndex, itemId, count };
+    if (dragGhost) {
+      dragGhost.innerHTML = '';
+      const c = document.createElement('canvas');
+      c.width = 40; c.height = 40;
+      drawItemIcon(c.getContext('2d'), 0, 0, 40, itemId);
+      dragGhost.appendChild(c);
+      dragGhost.style.display = 'block';
+      dragGhost.style.left = (e.clientX - 20) + 'px';
+      dragGhost.style.top = (e.clientY - 20) + 'px';
+    }
+  }
+
+  function moveDrag(e) {
+    if (!dragState || !dragGhost) return;
+    dragGhost.style.left = (e.clientX - 20) + 'px';
+    dragGhost.style.top = (e.clientY - 20) + 'px';
+  }
+
+  function endDrag() {
+    dragState = null;
+    if (dragGhost) dragGhost.style.display = 'none';
+  }
+
+  document.addEventListener('mousemove', moveDrag);
+  document.addEventListener('mouseup', () => {
+    // If drag ended outside any slot, cancel
+    if (dragState) endDrag();
+  });
+
+  // ── Reusable inventory grid component ──
+  // Returns a DOM element. Call updateInventoryGrid() to refresh slot contents.
+  // gridId: unique string identifying this grid (for drag source tracking)
+  // slotCount: number of slots
+  // options: { columns, slotSize, onSlotClick(slotIndex), onSlotRightClick(slotIndex),
+  //            onSlotDblClick(slotIndex), onDragDrop(fromGridId, fromSlot, toSlot),
+  //            showTooltip, getSlotData(slotIndex) => {id, n, d} }
+  function createInventoryGrid(gridId, slotCount, options = {}) {
+    const columns = options.columns || 6;
+    const slotSize = options.slotSize || 60;
+    const iconSize = Math.floor(slotSize * 0.67);
+
+    const container = document.createElement('div');
+    container.className = 'inv-grid-shared';
+    container.style.gridTemplateColumns = `repeat(${columns}, ${slotSize}px)`;
+    container.dataset.gridId = gridId;
+
+    for (let i = 0; i < slotCount; i++) {
+      const slot = document.createElement('div');
+      slot.className = 'grid-slot';
+      slot.dataset.slot = i;
+      slot.style.width = slotSize + 'px';
+      slot.style.height = slotSize + 'px';
+
       const iconCanvas = document.createElement('canvas');
-      iconCanvas.width = 40;
-      iconCanvas.height = 40;
-      iconCanvas.className = 'inv-icon-canvas';
+      iconCanvas.width = iconSize;
+      iconCanvas.height = iconSize;
+      iconCanvas.className = 'grid-icon';
       slot.appendChild(iconCanvas);
 
-      const nameEl = document.createElement('div');
-      nameEl.className = 'slot-item';
-      slot.appendChild(nameEl);
-
       const qtyEl = document.createElement('div');
-      qtyEl.className = 'slot-qty';
+      qtyEl.className = 'grid-qty';
+      qtyEl.style.display = 'none';
       slot.appendChild(qtyEl);
 
+      // Durability bar container
+      const durBar = document.createElement('div');
+      durBar.className = 'grid-dur';
+      durBar.style.display = 'none';
+      const durFill = document.createElement('div');
+      durFill.className = 'grid-dur-fill';
+      durBar.appendChild(durFill);
+      slot.appendChild(durBar);
+
+      // Mouse events
       slot.addEventListener('mousedown', (e) => {
         if (e.button === 2) {
           e.preventDefault();
-          send({ type: MSG.INVENTORY, action: INV_ACTION.SPLIT, fromSlot: i });
-        } else {
-          dragSlot = i;
+          if (options.onSlotRightClick) options.onSlotRightClick(i);
+          return;
+        }
+        const data = options.getSlotData ? options.getSlotData(i) : null;
+        if (data?.id && data.id !== 0) {
+          startDrag(gridId, i, data.id, data.n, e);
         }
       });
 
       slot.addEventListener('mouseup', (e) => {
-        if (dragSlot >= 0 && dragSlot !== i) {
-          send({ type: MSG.INVENTORY, action: INV_ACTION.MOVE, fromSlot: dragSlot, toSlot: i });
-          dragSlot = -1;
+        if (!dragState) return;
+        if (dragState.gridId === gridId && dragState.slotIndex === i) {
+          endDrag();
+          return;
         }
+        if (options.onDragDrop) {
+          options.onDragDrop(dragState.gridId, dragState.slotIndex, i);
+        }
+        endDrag();
       });
 
-      slot.addEventListener('dblclick', () => {
-        // Double-click: equip if armor, else drop
-        const item = state.inventory[i];
-        if (item?.id && ITEM_DEFS[item.id]?.cat === 'armor') {
-          send({ type: MSG.INVENTORY, action: INV_ACTION.EQUIP_ARMOR, fromSlot: i });
-        } else {
-          send({ type: MSG.INVENTORY, action: INV_ACTION.DROP, fromSlot: i });
-        }
+      slot.addEventListener('click', (e) => {
+        if (options.onSlotClick) options.onSlotClick(i);
       });
 
-      slot.addEventListener('mouseenter', (e) => showTooltip(i, e.clientX, e.clientY));
-      slot.addEventListener('mousemove', (e) => showTooltip(i, e.clientX, e.clientY));
-      slot.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+      slot.addEventListener('dblclick', (e) => {
+        if (options.onSlotDblClick) options.onSlotDblClick(i);
+      });
 
-      invGrid.appendChild(slot);
+      if (options.showTooltip !== false) {
+        slot.addEventListener('mouseenter', (e) => {
+          const data = options.getSlotData ? options.getSlotData(i) : null;
+          if (data?.id) showItemTooltip(data.id, data.n, e.clientX, e.clientY);
+        });
+        slot.addEventListener('mousemove', (e) => {
+          const data = options.getSlotData ? options.getSlotData(i) : null;
+          if (data?.id) showItemTooltip(data.id, data.n, e.clientX, e.clientY);
+          else tooltip.style.display = 'none';
+        });
+        slot.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+      }
+
+      container.appendChild(slot);
     }
+
+    // Update method: refreshes all slot visuals
+    container.updateSlots = function() {
+      const slots = container.children;
+      for (let i = 0; i < slotCount; i++) {
+        const slot = slots[i];
+        if (!slot) continue;
+        const data = options.getSlotData ? options.getSlotData(i) : null;
+        const iconCanvas = slot.querySelector('.grid-icon');
+        const qtyEl = slot.querySelector('.grid-qty');
+        const durBar = slot.querySelector('.grid-dur');
+
+        if (data?.id && data.id !== 0) {
+          if (iconCanvas) {
+            const ictx = iconCanvas.getContext('2d');
+            ictx.clearRect(0, 0, iconSize, iconSize);
+            drawItemIcon(ictx, 0, 0, iconSize, data.id);
+            iconCanvas.style.display = 'block';
+          }
+          if (qtyEl) {
+            qtyEl.textContent = data.n > 1 ? data.n : '';
+            qtyEl.style.display = data.n > 1 ? '' : 'none';
+          }
+          // Durability
+          const def = ITEM_DEFS[data.id];
+          if (durBar && def?.durability && data.d > 0) {
+            const pct = data.d / def.durability;
+            durBar.style.display = '';
+            const fill = durBar.querySelector('.grid-dur-fill');
+            fill.style.width = (pct * 100) + '%';
+            fill.style.background = pct > 0.5 ? '#4a4' : pct > 0.2 ? '#aa4' : '#a44';
+          } else if (durBar) {
+            durBar.style.display = 'none';
+          }
+          slot.classList.add('has-item');
+          slot.title = def?.name || '';
+        } else {
+          if (iconCanvas) {
+            const ictx = iconCanvas.getContext('2d');
+            ictx.clearRect(0, 0, iconSize, iconSize);
+            iconCanvas.style.display = 'none';
+          }
+          if (qtyEl) { qtyEl.textContent = ''; qtyEl.style.display = 'none'; }
+          if (durBar) durBar.style.display = 'none';
+          slot.classList.remove('has-item');
+          slot.title = '';
+        }
+      }
+    };
+
+    return container;
   }
-  buildInvGrid();
+
+  // ── Player inventory grid (used in inventory screen and container screen) ──
+  const playerInvGrid = createInventoryGrid('player', INVENTORY_SLOTS, {
+    columns: 6,
+    slotSize: 60,
+    getSlotData: (i) => state.inventory[i],
+    onSlotRightClick: (i) => {
+      send({ type: MSG.INVENTORY, action: INV_ACTION.SPLIT, fromSlot: i });
+    },
+    onSlotDblClick: (i) => {
+      const item = state.inventory[i];
+      if (item?.id && ITEM_DEFS[item.id]?.cat === 'armor') {
+        send({ type: MSG.INVENTORY, action: INV_ACTION.EQUIP_ARMOR, fromSlot: i });
+      } else {
+        send({ type: MSG.INVENTORY, action: INV_ACTION.DROP, fromSlot: i });
+      }
+    },
+    onSlotClick: (i) => {
+      // If a container is open, clicking transfers to container
+      if (state.containerOpen && (state.containerOpen.type === 'storage')) {
+        const item = state.inventory[i];
+        if (item?.id && item.id !== 0) {
+          send({ type: MSG.CONTAINER_ACTION, action: 'deposit', fromSlot: i });
+        }
+      }
+    },
+    onDragDrop: (fromGridId, fromSlot, toSlot) => {
+      if (fromGridId === 'player') {
+        // Same grid: rearrange
+        send({ type: MSG.INVENTORY, action: INV_ACTION.MOVE, fromSlot, toSlot });
+      } else if (fromGridId === 'container') {
+        // From container to player: withdraw into specific slot (server just puts in first open)
+        send({ type: MSG.CONTAINER_ACTION, action: 'withdraw', fromSlot });
+      }
+    },
+  });
+  invGrid.innerHTML = '';
+  invGrid.appendChild(playerInvGrid);
 
   // Build craft panel with item icons — dynamic, updates on inventory changes
   let lastCraftHash = '';
@@ -549,10 +706,10 @@ export function createUI(state, send) {
 
   const buildOptions = [
     { type: STRUCT_TYPE.FOUNDATION, label: 'Foundation' },
+    { type: STRUCT_TYPE.FOUNDATION_TRI, label: 'Triangle' },
     { type: STRUCT_TYPE.WALL, label: 'Wall' },
     { type: STRUCT_TYPE.DOORWAY, label: 'Doorway' },
-    { type: STRUCT_TYPE.CEILING, label: 'Ceiling' },
-    { type: STRUCT_TYPE.STAIRS, label: 'Stairs' },
+    { type: STRUCT_TYPE.WINDOW, label: 'Window' },
   ];
 
   const buildMenu = document.getElementById('build-menu');
@@ -787,18 +944,18 @@ export function createUI(state, send) {
       }
     }
 
-    // Inventory screen
+    // Inventory screen: show when no container is open
     if (inventoryScreen) {
-      inventoryScreen.style.display = state.showInventory ? 'flex' : 'none';
+      inventoryScreen.style.display = (state.showInventory && !state.containerOpen) ? 'flex' : 'none';
     }
 
-    // Update craft panel when inventory is open
-    if (state.showInventory) {
+    // Update craft panel when inventory is open (and no container)
+    if (state.showInventory && !state.containerOpen) {
       buildCraftPanel();
     }
 
     // Update armor equipment slots (shown in inventory screen)
-    if (state.showInventory) {
+    if (state.showInventory && !state.containerOpen) {
       let armorPanel = document.getElementById('armor-panel');
       if (!armorPanel) {
         armorPanel = document.createElement('div');
@@ -857,47 +1014,9 @@ export function createUI(state, send) {
       }
     }
 
-    // Update inventory grid with canvas icons
-    if (state.showInventory && invGrid) {
-      const slots = invGrid.children;
-      for (let i = 0; i < INVENTORY_SLOTS; i++) {
-        const slot = slots[i];
-        if (!slot) continue;
-        const item = state.inventory[i];
-        const iconCanvas = slot.querySelector('.inv-icon-canvas');
-        const nameEl = slot.querySelector('.slot-item');
-        const qtyEl = slot.querySelector('.slot-qty');
-
-        if (item?.id && item.id !== 0) {
-          const def = ITEM_DEFS[item.id];
-          if (iconCanvas) {
-            const ictx = iconCanvas.getContext('2d');
-            ictx.clearRect(0, 0, 40, 40);
-            drawItemIcon(ictx, 0, 0, 40, item.id);
-            iconCanvas.style.display = 'block';
-          }
-          if (nameEl) nameEl.textContent = '';
-          slot.title = def?.name || '';
-          if (qtyEl) {
-            qtyEl.textContent = item.n > 1 ? item.n : '';
-            qtyEl.style.display = item.n > 1 ? '' : 'none';
-          }
-          slot.classList.add('has-item');
-        } else {
-          if (iconCanvas) {
-            const ictx = iconCanvas.getContext('2d');
-            ictx.clearRect(0, 0, 40, 40);
-            iconCanvas.style.display = 'none';
-          }
-          if (nameEl) nameEl.textContent = '';
-          slot.title = '';
-          if (qtyEl) {
-            qtyEl.textContent = '';
-            qtyEl.style.display = 'none';
-          }
-          slot.classList.remove('has-item');
-        }
-      }
+    // Update player inventory grid visuals
+    if (state.showInventory || state.containerOpen) {
+      playerInvGrid.updateSlots();
     }
 
     // Death screen
@@ -956,11 +1075,31 @@ export function createUI(state, send) {
 
     // Container screen
     if (containerScreen) {
+      const containerPlayerInv = document.getElementById('container-player-inv');
       if (state.containerOpen) {
         containerScreen.style.display = 'flex';
+        // Show player inventory on the left side for storage containers
+        if (containerPlayerInv) {
+          if (state.containerOpen.type === 'storage') {
+            containerPlayerInv.style.display = '';
+            renderContainerPlayerInv(containerPlayerInv);
+          } else {
+            containerPlayerInv.style.display = 'none';
+          }
+        }
         renderContainer(state.containerOpen);
+        if (containerGrid) containerGrid.updateSlots();
       } else {
         containerScreen.style.display = 'none';
+        if (containerPlayerInv) containerPlayerInv.style.display = 'none';
+        // Move player inv grid back to inventory screen if it was borrowed
+        if (playerInvGrid.parentElement !== invGrid && invGrid) {
+          invGrid.innerHTML = '';
+          invGrid.appendChild(playerInvGrid);
+        }
+        lastContainerRender = '';
+        lastContainerPlayerInvRender = '';
+        containerGrid = null;
       }
     }
 
@@ -1277,6 +1416,25 @@ export function createUI(state, send) {
   }
 
   let lastContainerRender = '';
+  let containerGrid = null;
+  let lastContainerPlayerInvRender = '';
+
+  // Render player inventory inside the container screen left panel
+  function renderContainerPlayerInv(el) {
+    const invHash = JSON.stringify(state.inventory);
+    if (invHash === lastContainerPlayerInvRender && el.children.length > 0) {
+      playerInvGrid.updateSlots();
+      return;
+    }
+    lastContainerPlayerInvRender = invHash;
+
+    el.innerHTML = '';
+    const h = document.createElement('h3');
+    h.textContent = 'Inventory';
+    el.appendChild(h);
+    el.appendChild(playerInvGrid);
+    playerInvGrid.updateSlots();
+  }
 
   function renderContainer(container) {
     const key = JSON.stringify(container);
@@ -1300,7 +1458,6 @@ export function createUI(state, send) {
       fuelInfo.textContent = `Fuel: ${container.fuel > 0 ? 'Burning' : 'No fuel'}`;
       containerPanel.appendChild(fuelInfo);
 
-      // Cook slots as icon grid
       const cookGrid = document.createElement('div');
       cookGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin:6px 0;';
       for (let i = 0; i < 2; i++) {
@@ -1336,6 +1493,8 @@ export function createUI(state, send) {
       });
       btnRow.appendChild(takeBtn);
       containerPanel.appendChild(btnRow);
+
+      containerGrid = null;
 
     } else if (container.type === 'furnace') {
       header.textContent = 'Furnace';
@@ -1419,40 +1578,45 @@ export function createUI(state, send) {
       btnRow.appendChild(takeBtn);
       containerPanel.appendChild(btnRow);
 
+      containerGrid = null;
+
     } else if (container.type === 'storage') {
       header.textContent = 'Storage Box';
       containerPanel.appendChild(header);
       containerPanel.appendChild(closeBtn);
 
-      const slotsDiv = document.createElement('div');
-      slotsDiv.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin:6px 0;';
+      const slotCount = container.slots?.length || 12;
 
-      for (let i = 0; i < (container.slots?.length || 12); i++) {
-        const slot = container.slots?.[i] || { id: 0, n: 0 };
-        const slotIdx = i;
-        slotsDiv.appendChild(createItemSlot(slot.id, slot.n, (slot.id && slot.n > 0) ? () => {
-          send({ type: MSG.CONTAINER_ACTION, action: 'withdraw', fromSlot: slotIdx });
-        } : null));
-      }
-      containerPanel.appendChild(slotsDiv);
+      // Create container inventory grid using the shared component
+      containerGrid = createInventoryGrid('container', slotCount, {
+        columns: Math.min(6, slotCount),
+        slotSize: 60,
+        getSlotData: (i) => {
+          return state.containerOpen?.slots?.[i] || { id: 0, n: 0 };
+        },
+        onSlotClick: (i) => {
+          const slot = state.containerOpen?.slots?.[i];
+          if (slot?.id && slot.id !== 0) {
+            send({ type: MSG.CONTAINER_ACTION, action: 'withdraw', fromSlot: i });
+          }
+        },
+        onDragDrop: (fromGridId, fromSlot, toSlot) => {
+          if (fromGridId === 'player') {
+            send({ type: MSG.CONTAINER_ACTION, action: 'deposit', fromSlot });
+          } else if (fromGridId === 'container' && fromSlot !== toSlot) {
+            send({ type: MSG.CONTAINER_ACTION, action: 'withdraw', fromSlot });
+          }
+        },
+      });
 
-      const depositInfo = document.createElement('div');
-      depositInfo.className = 'container-info';
-      depositInfo.textContent = 'Click inventory items below to deposit:';
-      containerPanel.appendChild(depositInfo);
+      containerPanel.appendChild(containerGrid);
+      containerGrid.updateSlots();
 
-      // Deposit buttons as icon slots
-      const depRow = document.createElement('div');
-      depRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin-top:6px;';
-      for (let i = 0; i < INVENTORY_SLOTS; i++) {
-        const item = state.inventory[i];
-        if (!item?.id || item.id === 0) continue;
-        const slotIdx = i;
-        depRow.appendChild(createItemSlot(item.id, item.n, () => {
-          send({ type: MSG.CONTAINER_ACTION, action: 'deposit', fromSlot: slotIdx });
-        }));
-      }
-      containerPanel.appendChild(depRow);
+      const hint = document.createElement('div');
+      hint.className = 'container-info';
+      hint.textContent = 'Click or drag items to transfer';
+      hint.style.marginTop = '8px';
+      containerPanel.appendChild(hint);
     }
   }
 

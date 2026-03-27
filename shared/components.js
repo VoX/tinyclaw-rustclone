@@ -29,7 +29,7 @@ export const MeleeHitbox = { damage: [], range: [], arc: [], sourceEid: [] };
 export const Damageable = { lastHitTime: [], lastHitBy: [] };
 
 // ── Building ──
-export const Structure = { structureType: [], tier: [], hp: [], maxHp: [], placedBy: [] };
+export const Structure = { structureType: [], tier: [], hp: [], maxHp: [], placedBy: [], rotation: [], boxHalfW: [], boxHalfH: [] };
 export const Door = { isOpen: [], lockCode: [], lockType: [] };
 export const ToolCupboard = { radius: [] };
 export const SleepingBag = { ownerPlayerId: [], cooldown: [] };

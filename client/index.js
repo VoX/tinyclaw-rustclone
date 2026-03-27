@@ -1,6 +1,7 @@
 import { MSG, KEY, MOUSE_ACTION, INV_ACTION, ENTITY_TYPE } from '../shared/protocol.js';
 import { ITEM, ITEM_DEFS, RECIPES, CRAFT_TIER, BIOME, TILE_SIZE, WORLD_SIZE,
          INVENTORY_SLOTS, HOTBAR_SLOTS, STRUCT_TYPE, WATER_SPEED_MULT, ROAD_SPEED_MULT } from '../shared/constants.js';
+import { circleVsOBB } from '../shared/collision.js';
 import { createRenderer } from './renderer/index.js';
 import { createInput } from './input.js';
 import { createUI } from './ui/index.js';
@@ -647,16 +648,31 @@ function clientLoop(timestamp) {
     for (const [eeid, e] of state.entities) {
       if (eeid === state.myEid) continue;
       if (!e.isStatic) continue;
-      const eRadius = e.colliderRadius || 0.5;
-      const cdx = me.x - (e.x || 0);
-      const cdy = me.y - (e.y || 0);
-      const distSq = cdx * cdx + cdy * cdy;
-      const minDist = playerRadius + eRadius;
-      if (distSq < minDist * minDist && distSq > 0) {
-        const d = Math.sqrt(distSq);
-        const overlap = minDist - d;
-        me.x += (cdx / d) * overlap;
-        me.y += (cdy / d) * overlap;
+
+      // OBB collision for walls
+      if (e.boxHW && e.boxHW > 0) {
+        const hit = circleVsOBB(
+          me.x, me.y, playerRadius,
+          e.x || 0, e.y || 0,
+          e.boxHW, e.boxHH || 0.2,
+          e.rot || 0
+        );
+        if (hit) {
+          me.x += hit.nx * hit.overlap;
+          me.y += hit.ny * hit.overlap;
+        }
+      } else {
+        const eRadius = e.colliderRadius || 0.5;
+        const cdx = me.x - (e.x || 0);
+        const cdy = me.y - (e.y || 0);
+        const distSq = cdx * cdx + cdy * cdy;
+        const minDist = playerRadius + eRadius;
+        if (distSq < minDist * minDist && distSq > 0) {
+          const d = Math.sqrt(distSq);
+          const overlap = minDist - d;
+          me.x += (cdx / d) * overlap;
+          me.y += (cdy / d) * overlap;
+        }
       }
     }
 

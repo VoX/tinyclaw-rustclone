@@ -31,7 +31,7 @@ export function createNetworkSyncSystem(gameState) {
 
       const playerEid = client.playerEid;
       if (!hasComponent(world, playerEid, Position)) {
-        if (tick % 20 === 0) console.log(`[SYNC] Player ${playerEid} has no Position component!`);
+        // Player without Position — skip silently
         continue;
       }
 
@@ -134,6 +134,13 @@ export function createNetworkSyncSystem(gameState) {
             state.armorChest = Armor.chestSlot[eid] || 0;
             state.armorLegs = Armor.legsSlot[eid] || 0;
           }
+          // Sync spawn protection remaining seconds
+          for (const [cid, cl] of gameState.clients) {
+            if (cl.playerEid === eid && tick < cl.spawnProtectionUntil) {
+              state.spawnProt = Math.ceil((cl.spawnProtectionUntil - tick) / 10); // seconds remaining
+              break;
+            }
+          }
         } else if (entityType === ENTITY_TYPE.LOOT_BAG) {
           // Loot bags just need position and type (already sent)
         } else if (entityType === ENTITY_TYPE.NPC) {
@@ -190,13 +197,9 @@ export function createNetworkSyncSystem(gameState) {
         prevState.delete(eid);
       }
 
-      // Log first few syncs for debugging
+      // Track sync count for connection verification (used by bot test)
       if (!client._syncCount) client._syncCount = 0;
-      if (client._syncCount < 3) {
-        const ownEntity = delta.find(e => e.eid === playerEid);
-        console.log(`[SYNC] connId=${connId} tick=${tick} delta=${delta.length} removals=${removals.length} ownEntity=${ownEntity ? `(${ownEntity.x?.toFixed(1)},${ownEntity.y?.toFixed(1)})` : 'NOT IN DELTA'} playerPos=(${px?.toFixed(1)},${py?.toFixed(1)})`);
-        client._syncCount++;
-      }
+      client._syncCount++;
 
       if (delta.length > 0 || removals.length > 0) {
         // Batch entity updates: send max 50 entities per message to reduce per-message overhead

@@ -371,13 +371,20 @@ export function createUIOverlays(state) {
       const ws = state.worldSize;
 
       const BIOME_RGB = {
-        0: [232, 214, 142],
-        1: [90, 143, 60],
-        2: [45, 90, 30],
-        3: [196, 163, 90],
-        4: [221, 232, 240],
-        5: [122, 122, 122],
+        0: [232, 214, 142],  // beach
+        1: [90, 143, 60],    // grassland
+        2: [45, 90, 30],     // forest
+        3: [196, 163, 90],   // desert
+        4: [221, 232, 240],  // snow
+        5: [122, 122, 122],  // mountain
+        6: [40, 80, 160],    // water
+        7: [138, 122, 90],   // road
       };
+
+      // Pre-compute radiation zone tile ranges for tinting
+      const radZoneTiles = (state.radiationZones || []).map(z => ({
+        tx: z.x / TILE_SIZE, ty: z.y / TILE_SIZE, r2: (z.radius / TILE_SIZE) * (z.radius / TILE_SIZE),
+      }));
 
       for (let my = 0; my < mapSize; my++) {
         for (let mx = 0; mx < mapSize; mx++) {
@@ -389,7 +396,19 @@ export function createUIOverlays(state) {
           } else {
             const biome = state.biomeMap[ty * ws + tx];
             const rgb = BIOME_RGB[biome] || [50, 50, 50];
-            data[idx] = rgb[0]; data[idx + 1] = rgb[1]; data[idx + 2] = rgb[2]; data[idx + 3] = 255;
+            let r = rgb[0], g = rgb[1], b = rgb[2];
+            // Tint radiation zones red
+            for (const rz of radZoneTiles) {
+              const rdx = tx - rz.tx;
+              const rdy = ty - rz.ty;
+              if (rdx * rdx + rdy * rdy < rz.r2) {
+                r = Math.min(255, r + 40);
+                g = Math.max(0, g - 15);
+                b = Math.max(0, b - 15);
+                break;
+              }
+            }
+            data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = 255;
           }
         }
       }
@@ -436,6 +455,38 @@ export function createUIOverlays(state) {
         ctx.beginPath();
         ctx.arc(dotX, dotY, radius, 0, Math.PI * 2);
         ctx.fill();
+      }
+
+      // Label NPCs as monument markers
+      if (e.t === ENTITY_TYPE.NPC) {
+        ctx.font = '7px Consolas, monospace';
+        ctx.fillStyle = 'rgba(200,255,200,0.8)';
+        ctx.textAlign = 'center';
+        ctx.fillText('MON', dotX, dotY - 5);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    // Draw radiation zone outlines on minimap
+    if (state.radiationZones) {
+      for (const zone of state.radiationZones) {
+        const zDx = zone.x / TILE_SIZE - px;
+        const zDy = zone.y / TILE_SIZE - py;
+        if (Math.abs(zDx) > tileRadius || Math.abs(zDy) > tileRadius) continue;
+        const zsx = mapX + mapSize / 2 + zDx * scale;
+        const zsy = mapY + mapSize / 2 + zDy * scale;
+        const zr = (zone.radius / TILE_SIZE) * scale;
+        ctx.strokeStyle = 'rgba(200,50,30,0.4)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(zsx, zsy, zr, 0, Math.PI * 2);
+        ctx.stroke();
+        // Radiation symbol
+        ctx.font = '8px Consolas, monospace';
+        ctx.fillStyle = 'rgba(200,50,30,0.6)';
+        ctx.textAlign = 'center';
+        ctx.fillText('☢', zsx, zsy + 3);
+        ctx.textAlign = 'left';
       }
     }
 

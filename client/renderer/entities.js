@@ -135,6 +135,9 @@ export function createEntityRenderer(state) {
       ctx.globalAlpha = 1 - deathProgress * 0.4;
     } else if (e.sleeping) {
       ctx.globalAlpha = 0.8;
+    } else if (e.spawnProt && !isLocal) {
+      // Other spawn-protected players are slightly transparent
+      ctx.globalAlpha = 0.6;
     }
     ctx.translate(sx, sy);
     if (e.sleeping) {
@@ -308,6 +311,39 @@ export function createEntityRenderer(state) {
     }
 
     ctx.restore();
+
+    // Spawn protection shield effect
+    if (e.spawnProt && !e.dead && !e.sleeping) {
+      ctx.save();
+      const shimmer = 0.15 + Math.sin(animTime * 0.008) * 0.08 + Math.sin(animTime * 0.013) * 0.05;
+      ctx.strokeStyle = `rgba(100, 200, 255, ${shimmer})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(sx, sy - 4, 16, 0, Math.PI * 2);
+      ctx.stroke();
+      // Inner shimmer ring
+      ctx.strokeStyle = `rgba(150, 230, 255, ${shimmer * 0.6})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(sx, sy - 4, 13, 0, Math.PI * 2);
+      ctx.stroke();
+      // Sparkle dots rotating around the shield
+      const sparkleAngle = animTime * 0.005;
+      ctx.fillStyle = `rgba(200, 240, 255, ${shimmer * 1.5})`;
+      for (let i = 0; i < 4; i++) {
+        const sa = sparkleAngle + (Math.PI / 2) * i;
+        ctx.beginPath();
+        ctx.arc(sx + Math.cos(sa) * 15, sy - 4 + Math.sin(sa) * 15, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Countdown text
+      ctx.font = 'bold 9px Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(100, 200, 255, 0.8)';
+      ctx.fillText(`Protected: ${e.spawnProt}s`, sx, sy - 26);
+      ctx.textAlign = 'left';
+      ctx.restore();
+    }
 
     // Held weapon with walk sway
     if (e.held && e.held !== ITEM.NONE && !e.dead) {

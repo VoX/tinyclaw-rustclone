@@ -108,16 +108,16 @@ describe('Movement', () => {
   });
 
   it('should support diagonal movement', async () => {
-    // First move to center-ish area to avoid edge clamping
+    // Move away from edges first — 20 ticks toward center
     bot.move(KEY.S | KEY.A);
-    await waitTicks(10);
+    await waitTicks(20);
     bot.stop();
-    await waitTicks(2);
+    await waitTicks(3);
 
     const startPos = { ...bot.position };
     // Move diagonally (S + D) — avoids world edge issues from prior W movement
     bot.move(KEY.S | KEY.D);
-    await waitTicks(15);
+    await waitTicks(20);
     bot.stop();
 
     const dx = bot.position.x - startPos.x;
@@ -221,8 +221,8 @@ describe('Crafting', () => {
     // For testing, we'll gather wood and stone first
     bot.selectSlot(0); // Rock
 
-    // Gather wood from trees
-    for (let pass = 0; pass < 100 && bot.countItem(ITEM.WOOD) < 200; pass++) {
+    // Gather wood from trees (recipe needs 100 wood)
+    for (let pass = 0; pass < 100 && bot.countItem(ITEM.WOOD) < 100; pass++) {
       const tree = bot.findNearestResource(RESOURCE_TYPE.TREE);
       if (tree && bot.distanceTo(tree.x, tree.y) < 2.0) {
         const angle = bot.angleTo(tree.x, tree.y);
@@ -235,8 +235,8 @@ describe('Crafting', () => {
       await waitTicks(3);
     }
 
-    // Gather stone
-    for (let pass = 0; pass < 100 && bot.countItem(ITEM.STONE) < 100; pass++) {
+    // Gather stone (recipe needs 50 stone)
+    for (let pass = 0; pass < 100 && bot.countItem(ITEM.STONE) < 50; pass++) {
       const stone = bot.findNearestResource(RESOURCE_TYPE.STONE_NODE);
       if (stone && bot.distanceTo(stone.x, stone.y) < 2.0) {
         const angle = bot.angleTo(stone.x, stone.y);
@@ -254,17 +254,18 @@ describe('Crafting', () => {
     const woodCount = bot.countItem(ITEM.WOOD);
     const stoneCount = bot.countItem(ITEM.STONE);
 
-    if (woodCount < 200 || stoneCount < 100) {
+    if (woodCount < 100 || stoneCount < 50) {
       console.log(`  (skipping: not enough resources - wood: ${woodCount}, stone: ${stoneCount})`);
       return;
     }
 
-    // Craft stone hatchet (recipe 1: 200 wood + 100 stone)
+    // Craft stone hatchet (recipe 1: 100 wood + 50 stone)
     const recipe = RECIPES.find(r => r.result === ITEM.STONE_HATCHET);
     assert.ok(recipe, 'Stone hatchet recipe should exist');
 
     bot.craft(recipe.id);
-    await waitTicks(5);
+    // Crafting takes getCraftTime() seconds (1s for HAND tier = 20 ticks), wait extra
+    await waitTicks(40);
 
     const hatchetCount = bot.countItem(ITEM.STONE_HATCHET);
     assert.ok(hatchetCount >= 1, 'Should have crafted a stone hatchet');
@@ -512,7 +513,7 @@ describe('Building', () => {
     // Craft building plan
     const planRecipe = RECIPES.find(r => r.result === ITEM.BUILDING_PLAN);
     bot.craft(planRecipe.id);
-    await waitTicks(5);
+    await waitTicks(40);
 
     const planSlot = bot.findSlot(ITEM.BUILDING_PLAN);
     if (planSlot < 0) {

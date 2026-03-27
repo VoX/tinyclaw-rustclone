@@ -25,6 +25,13 @@ for pid in $(pgrep -f "node server/index.js" 2>/dev/null); do
   echo "Killing existing server process $pid"
   kill "$pid" 2>/dev/null || true
 done
+
+# Wait for port to actually be freed
+PORT_WAIT=0
+while [ $PORT_WAIT -lt 20 ] && ss -tlnp 2>/dev/null | grep -q ":${SERVER_PORT} "; do
+  PORT_WAIT=$((PORT_WAIT + 1))
+  sleep 0.5
+done
 sleep 1
 
 node server/index.js &
@@ -58,9 +65,9 @@ echo ""
 echo "=== Running E2E Tests ==="
 echo ""
 
-# Run tests with node's built-in test runner
-node --test "$SCRIPT_DIR/e2e.test.js" 2>&1
-TEST_EXIT=$?
+# Run tests with node's built-in test runner (|| true to prevent set -e from killing the script)
+node --test --test-timeout=300000 "$SCRIPT_DIR/e2e.test.js" 2>&1 || TEST_EXIT=$?
+TEST_EXIT=${TEST_EXIT:-0}
 
 echo ""
 echo "=== Test run complete ==="

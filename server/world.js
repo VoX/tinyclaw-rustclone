@@ -1,7 +1,7 @@
 import { createNoise2D } from 'simplex-noise';
 import { addEntity, addComponent } from 'bitecs';
 import { Position, Collider, Sprite, NetworkSync, ResourceNode, Health, Damageable,
-         Animal, Velocity, Rotation, Workbench, Structure } from '../shared/components.js';
+         Animal, Velocity, Rotation, Workbench, Structure, NPC, StorageBox } from '../shared/components.js';
 import { WORLD_SIZE, TILE_SIZE, BIOME, RESOURCE_TYPE, RESOURCE_NODE_DEFS,
          ANIMAL_TYPE, ANIMAL_DEFS, AI_STATE, ITEM, STRUCT_TYPE, STRUCT_TIER } from '../shared/constants.js';
 import { ENTITY_TYPE } from '../shared/protocol.js';
@@ -221,7 +221,64 @@ export function generateWorld(world, gameState, seed = 42) {
     spawnMonument(world, gameState, biomeMap, mx, my, seedRng);
   }
 
-  console.log(`World generated: ${WORLD_SIZE}x${WORLD_SIZE} tiles, ${gameState.entityTypes.size} entities`);
+  // ── Spawn larger monuments (gas station, mining outpost, lighthouse) ──
+  const largeMonumentTypes = ['gas_station', 'mining_outpost', 'lighthouse'];
+  const largeMonumentPositions = [];
+  let lmAttempts = 0;
+  while (largeMonumentPositions.length < 3 && lmAttempts < 50) {
+    lmAttempts++;
+    const margin = Math.floor(WORLD_SIZE * 0.15);
+    const mx = margin + Math.floor(seedRng() * (WORLD_SIZE - 2 * margin));
+    const my = margin + Math.floor(seedRng() * (WORLD_SIZE - 2 * margin));
+    const biome = biomeMap[my * WORLD_SIZE + mx];
+    if (biome === BIOME.WATER || biome === BIOME.BEACH) continue;
+    // Check not too close to existing monuments or large monuments
+    let tooClose = false;
+    for (const [px, py] of monumentPositions) {
+      if ((mx - px) ** 2 + (my - py) ** 2 < 40 * 40) { tooClose = true; break; }
+    }
+    for (const pos of largeMonumentPositions) {
+      if ((mx - pos.x) ** 2 + (my - pos.y) ** 2 < 50 * 50) { tooClose = true; break; }
+    }
+    if (tooClose) continue;
+    const mType = largeMonumentTypes[largeMonumentPositions.length];
+    largeMonumentPositions.push({ x: mx, y: my, type: mType });
+    spawnLargeMonument(world, gameState, biomeMap, mx, my, mType, seedRng);
+  }
+
+  // ── Spawn radiation zones (1-2) ──
+  gameState.radiationZones = [];
+  let radAttempts = 0;
+  while (gameState.radiationZones.length < 2 && radAttempts < 30) {
+    radAttempts++;
+    const margin = Math.floor(WORLD_SIZE * 0.2);
+    const rx = margin + Math.floor(seedRng() * (WORLD_SIZE - 2 * margin));
+    const ry = margin + Math.floor(seedRng() * (WORLD_SIZE - 2 * margin));
+    const biome = biomeMap[ry * WORLD_SIZE + rx];
+    if (biome === BIOME.WATER || biome === BIOME.BEACH) continue;
+    // Not too close to other rad zones or monuments
+    let ok = true;
+    for (const z of gameState.radiationZones) {
+      if ((rx - z.x) ** 2 + (ry - z.y) ** 2 < 60 * 60) { ok = false; break; }
+    }
+    if (!ok) continue;
+    const radRadius = 8 + Math.floor(seedRng() * 5); // 8-12 tile radius
+    gameState.radiationZones.push({
+      x: rx * TILE_SIZE,
+      y: ry * TILE_SIZE,
+      radius: radRadius * TILE_SIZE,
+    });
+    // Spawn high-value loot crates inside radiation zone
+    for (let c = 0; c < 3; c++) {
+      const angle = seedRng() * Math.PI * 2;
+      const dist = seedRng() * radRadius * 0.6;
+      const cx = rx + Math.cos(angle) * dist;
+      const cy = ry + Math.sin(angle) * dist;
+      spawnLootCrate(world, gameState, cx, cy, seedRng);
+    }
+  }
+
+  console.log(`World generated: ${WORLD_SIZE}x${WORLD_SIZE} tiles, ${gameState.entityTypes.size} entities, ${gameState.radiationZones.length} rad zones, ${largeMonumentPositions.length} monuments`);
 }
 
 // Draw a road line between two points, 2-3 tiles wide, with slight wandering
@@ -442,6 +499,179 @@ function mulberry32(a) {
     t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
+}
+
+// Spawn NPC merchant at a world position
+function spawnNPCMerchant(world, gameState, tileX, tileY) {
+  const eid = addEntity(world);
+  addComponent(world, eid, Position);
+  addComponent(world, eid, Collider);
+  addComponent(world, eid, Sprite);
+  addComponent(world, eid, NetworkSync);
+  addComponent(world, eid, Health);
+  addComponent(world, eid, NPC);
+
+  Position.x[eid] = tileX * TILE_SIZE;
+  Position.y[eid] = tileY * TILE_SIZE;
+  NPC.npcType[eid] = 1; // merchant
+  Health.current[eid] = 9999;
+  Health.max[eid] = 9999;
+  Collider.radius[eid] = 0.5;
+  Collider.isStatic[eid] = 1;
+  Sprite.spriteId[eid] = 250; // NPC merchant sprite
+  NetworkSync.lastTick[eid] = 0;
+
+  gameState.entityTypes.set(eid, ENTITY_TYPE.NPC);
+}
+
+// Spawn a loot crate with high-value items (for rad zones)
+function spawnLootCrate(world, gameState, tileX, tileY, rng) {
+  const eid = addEntity(world);
+  addComponent(world, eid, Position);
+  addComponent(world, eid, Collider);
+  addComponent(world, eid, Sprite);
+  addComponent(world, eid, NetworkSync);
+  addComponent(world, eid, Health);
+  addComponent(world, eid, Damageable);
+  addComponent(world, eid, StorageBox);
+
+  Position.x[eid] = tileX * TILE_SIZE;
+  Position.y[eid] = tileY * TILE_SIZE;
+  Health.current[eid] = 50;
+  Health.max[eid] = 50;
+  Collider.radius[eid] = 0.5;
+  Collider.isStatic[eid] = 1;
+  Sprite.spriteId[eid] = 245; // loot crate sprite
+  NetworkSync.lastTick[eid] = 0;
+
+  gameState.entityTypes.set(eid, ENTITY_TYPE.LOOT_CRATE);
+
+  // Generate high-value loot
+  if (!gameState.containerInv) gameState.containerInv = new Map();
+  const loot = [];
+  loot.push({ id: ITEM.SCRAP, n: 20 + Math.floor(rng() * 30) });
+  const r = rng();
+  if (r < 0.25) {
+    loot.push({ id: ITEM.METAL_FRAGS, n: 30 + Math.floor(rng() * 40) });
+  } else if (r < 0.45) {
+    loot.push({ id: ITEM.METAL_PIPE, n: 1 });
+  } else if (r < 0.60) {
+    loot.push({ id: ITEM.SPRING, n: 1 });
+  } else if (r < 0.75) {
+    loot.push({ id: ITEM.GUNPOWDER, n: 15 + Math.floor(rng() * 20) });
+  } else if (r < 0.90) {
+    loot.push({ id: ITEM.RIFLE_AMMO, n: 10 + Math.floor(rng() * 20) });
+  } else {
+    loot.push({ id: ITEM.ROPE, n: 2 + Math.floor(rng() * 3) });
+  }
+  while (loot.length < 12) loot.push({ id: 0, n: 0 });
+  gameState.containerInv.set(eid, loot.slice(0, 12));
+}
+
+// Spawn large monument types
+function spawnLargeMonument(world, gameState, biomeMap, tileX, tileY, type, rng) {
+  const cx = tileX * TILE_SIZE;
+  const cy = tileY * TILE_SIZE;
+
+  // Clear area to ROAD
+  const clearRadius = type === 'lighthouse' ? 4 : 5;
+  for (let dy = -clearRadius; dy <= clearRadius; dy++) {
+    for (let dx = -clearRadius; dx <= clearRadius; dx++) {
+      const tx = tileX + dx;
+      const ty = tileY + dy;
+      if (tx >= 0 && tx < WORLD_SIZE && ty >= 0 && ty < WORLD_SIZE) {
+        if (biomeMap[ty * WORLD_SIZE + tx] !== BIOME.WATER) {
+          biomeMap[ty * WORLD_SIZE + tx] = BIOME.ROAD;
+        }
+      }
+    }
+  }
+
+  if (type === 'gas_station') {
+    // Stone walls forming a small building
+    const wallPositions = [[-3, -3], [3, -3], [-3, 3], [3, 3]];
+    for (const [wx, wy] of wallPositions) {
+      spawnMonumentWall(world, gameState, cx + wx * TILE_SIZE, cy + wy * TILE_SIZE);
+    }
+    // Barrels inside
+    for (let i = 0; i < 4; i++) {
+      const bx = tileX + (rng() - 0.5) * 4;
+      const by = tileY + (rng() - 0.5) * 4;
+      spawnBarrel(world, gameState, bx, by, rng);
+    }
+    // Storage box with random loot
+    spawnLootCrate(world, gameState, tileX, tileY, rng);
+    // NPC merchant
+    spawnNPCMerchant(world, gameState, tileX + 2, tileY);
+  } else if (type === 'mining_outpost') {
+    // Dense ore nodes around outpost
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2;
+      const dist = 2 + rng() * 3;
+      const nx = tileX + Math.cos(angle) * dist;
+      const ny = tileY + Math.sin(angle) * dist;
+      const oreType = rng() < 0.5 ? RESOURCE_TYPE.METAL_NODE : RESOURCE_TYPE.STONE_NODE;
+      spawnResourceNode(world, gameState, nx, ny, oreType, rng);
+    }
+    // Some crates
+    for (let i = 0; i < 2; i++) {
+      const ox = tileX + (rng() - 0.5) * 3;
+      const oy = tileY + (rng() - 0.5) * 3;
+      spawnLootCrate(world, gameState, ox, oy, rng);
+    }
+    // T1 workbench
+    const wbEid = addEntity(world);
+    addComponent(world, wbEid, Position);
+    addComponent(world, wbEid, Collider);
+    addComponent(world, wbEid, Sprite);
+    addComponent(world, wbEid, NetworkSync);
+    addComponent(world, wbEid, Workbench);
+    Position.x[wbEid] = cx;
+    Position.y[wbEid] = cy;
+    Workbench.tier[wbEid] = 1;
+    Collider.radius[wbEid] = 0.6;
+    Sprite.spriteId[wbEid] = 221;
+    NetworkSync.lastTick[wbEid] = 0;
+    gameState.entityTypes.set(wbEid, ENTITY_TYPE.WORKBENCH);
+    // NPC merchant
+    spawnNPCMerchant(world, gameState, tileX - 2, tileY);
+  } else if (type === 'lighthouse') {
+    // Tall structure walls (tighter)
+    const wallPositions = [[-2, -2], [2, -2], [-2, 2], [2, 2], [0, -2], [0, 2]];
+    for (const [wx, wy] of wallPositions) {
+      spawnMonumentWall(world, gameState, cx + wx * TILE_SIZE, cy + wy * TILE_SIZE);
+    }
+    // Small loot inside
+    spawnLootCrate(world, gameState, tileX, tileY, rng);
+    // Some barrels
+    spawnBarrel(world, gameState, tileX + 1, tileY + 1, rng);
+    spawnBarrel(world, gameState, tileX - 1, tileY + 1, rng);
+  }
+}
+
+function spawnMonumentWall(world, gameState, wx, wy) {
+  const wallEid = addEntity(world);
+  addComponent(world, wallEid, Position);
+  addComponent(world, wallEid, Collider);
+  addComponent(world, wallEid, Sprite);
+  addComponent(world, wallEid, NetworkSync);
+  addComponent(world, wallEid, Structure);
+  addComponent(world, wallEid, Health);
+
+  Position.x[wallEid] = wx;
+  Position.y[wallEid] = wy;
+  Structure.structureType[wallEid] = STRUCT_TYPE.WALL;
+  Structure.tier[wallEid] = STRUCT_TIER.STONE;
+  Structure.hp[wallEid] = 500;
+  Structure.maxHp[wallEid] = 500;
+  Structure.placedBy[wallEid] = 0;
+  Health.current[wallEid] = 500;
+  Health.max[wallEid] = 500;
+  Collider.radius[wallEid] = 0.9;
+  Collider.isStatic[wallEid] = 1;
+  Sprite.spriteId[wallEid] = 202;
+  NetworkSync.lastTick[wallEid] = 0;
+  gameState.entityTypes.set(wallEid, ENTITY_TYPE.STRUCTURE);
 }
 
 // Export biome map as compressed data for client

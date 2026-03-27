@@ -1,6 +1,6 @@
 import { query, hasComponent } from 'bitecs';
-import { Player, Health, Hunger, Thirst, Temperature, Dead, Position } from '../../shared/components.js';
-import { SERVER_TPS, BIOME_TEMP_MOD, BIOME } from '../../shared/constants.js';
+import { Player, Health, Hunger, Thirst, Temperature, Dead, Position, Armor } from '../../shared/components.js';
+import { SERVER_TPS, BIOME_TEMP_MOD, BIOME, WEATHER, RADIATION_DAMAGE_RATE, ITEM_DEFS } from '../../shared/constants.js';
 
 export function createSurvivalSystem(gameState) {
   // Rates per tick
@@ -74,6 +74,33 @@ export function createSurvivalSystem(gameState) {
       }
       if (temp > 45) {
         Health.current[eid] = Math.max(0, Health.current[eid] - coldDamageRate);
+      }
+
+      // Rain: free thirst regen (+0.3/tick)
+      if (gameState.weather === WEATHER.RAIN) {
+        Thirst.current[eid] = Math.min(100, Thirst.current[eid] + 0.3 / SERVER_TPS);
+      }
+
+      // Radiation zone damage
+      if (gameState.radiationZones) {
+        const px = Position.x[eid];
+        const py = Position.y[eid];
+        for (const zone of gameState.radiationZones) {
+          const rdx = px - zone.x;
+          const rdy = py - zone.y;
+          if (rdx * rdx + rdy * rdy < zone.radius * zone.radius) {
+            // Check if player has hazmat suit equipped
+            let hasHazmat = false;
+            if (hasComponent(world, eid, Armor)) {
+              const chestItem = Armor.chestSlot[eid];
+              if (chestItem && ITEM_DEFS[chestItem]?.radProtection) hasHazmat = true;
+            }
+            if (!hasHazmat) {
+              Health.current[eid] = Math.max(0, Health.current[eid] - RADIATION_DAMAGE_RATE);
+            }
+            break;
+          }
+        }
       }
 
       // HP regen when well-fed and hydrated

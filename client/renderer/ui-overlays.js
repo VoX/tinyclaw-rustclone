@@ -379,6 +379,8 @@ export function createUIOverlays(state) {
         color = rtColors[e.rt] || '#555'; radius = 1;
       } else if (e.t === ENTITY_TYPE.STRUCTURE || e.t === ENTITY_TYPE.DOOR) {
         color = 'rgba(180,180,150,0.6)'; radius = 1.5;
+      } else if (e.t === ENTITY_TYPE.NPC) {
+        color = '#4f4'; radius = 2.5;
       }
 
       if (color) {
@@ -474,6 +476,27 @@ export function createUIOverlays(state) {
     const ws = state.worldSize;
     const scale = mapW / ws;
     const ts = TILE_SIZE;
+
+    // Draw radiation zones on full map
+    if (state.radiationZones) {
+      for (const zone of state.radiationZones) {
+        const zx = mapX + (zone.x / ts) * scale;
+        const zy = mapY + (zone.y / ts) * scale;
+        const zr = (zone.radius / ts) * scale;
+        ctx.fillStyle = 'rgba(200, 50, 30, 0.2)';
+        ctx.beginPath();
+        ctx.arc(zx, zy, zr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(200, 50, 30, 0.5)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.font = '10px Consolas, monospace';
+        ctx.fillStyle = 'rgba(200, 50, 30, 0.7)';
+        ctx.textAlign = 'center';
+        ctx.fillText('RAD', zx, zy + 4);
+        ctx.textAlign = 'left';
+      }
+    }
 
     for (const [eid, ent] of state.entities) {
       if (ent.t === ENTITY_TYPE.SLEEPING_BAG) {

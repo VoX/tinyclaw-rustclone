@@ -1,9 +1,9 @@
 import { query, hasComponent } from 'bitecs';
 import { Player, Position, Inventory, Dead, ToolCupboard, Campfire, Furnace,
-         Workbench, Hotbar } from '../../shared/components.js';
+         Workbench, Hotbar, NPC } from '../../shared/components.js';
 import { StorageBox } from '../../shared/components.js';
 import { MSG, ENTITY_TYPE } from '../../shared/protocol.js';
-import { ITEM, ITEM_DEFS, INVENTORY_SLOTS, SERVER_TPS } from '../../shared/constants.js';
+import { ITEM, ITEM_DEFS, INVENTORY_SLOTS, SERVER_TPS, NPC_TRADES } from '../../shared/constants.js';
 import { addToInventory } from '../../shared/inventory.js';
 
 const CONTAINER_SLOTS = 12;
@@ -77,6 +77,25 @@ export function createInteractSystem(gameState) {
             containerType: 'workbench',
             containerEid: targetEid,
             tier,
+          }));
+        } catch (e) {}
+        continue;
+      }
+
+      // NPC Merchant interaction
+      if (hasComponent(world, targetEid, NPC)) {
+        client.interactRequest = null;
+        try {
+          client.ws.send(JSON.stringify({
+            type: MSG.NPC_TRADE_OPEN,
+            npcEid: targetEid,
+            trades: NPC_TRADES.map((t, i) => ({
+              idx: i,
+              itemId: t.itemId,
+              itemName: ITEM_DEFS[t.itemId]?.name || '?',
+              count: t.count,
+              cost: t.cost,
+            })),
           }));
         } catch (e) {}
         continue;
@@ -171,6 +190,47 @@ export function createInteractSystem(gameState) {
           authList,
         }));
       } catch (e) {}
+    }
+
+    // Process NPC trade buy requests
+    for (const [connId, client] of gameState.clients) {
+      if (!client.npcTradeBuy) continue;
+      const { npcEid, tradeIdx } = client.npcTradeBuy;
+      client.npcTradeBuy = null;
+
+      const eid = client.playerEid;
+      if (!eid || hasComponent(world, eid, Dead)) continue;
+      if (!hasComponent(world, npcEid, NPC)) continue;
+
+      // Distance check
+      const dx = Position.x[npcEid] - Position.x[eid];
+      const dy = Position.y[npcEid] - Position.y[eid];
+      if (dx * dx + dy * dy > 5 * 5) continue;
+
+      const trade = NPC_TRADES[tradeIdx];
+      if (!trade) continue;
+
+      // Check player has enough scrap
+      let scrapCount = 0;
+      for (let s = 0; s < INVENTORY_SLOTS; s++) {
+        if (Inventory.items[eid][s] === ITEM.SCRAP) scrapCount += Inventory.counts[eid][s];
+      }
+      if (scrapCount < trade.cost) continue;
+
+      // Deduct scrap
+      let toDeduct = trade.cost;
+      for (let s = 0; s < INVENTORY_SLOTS && toDeduct > 0; s++) {
+        if (Inventory.items[eid][s] === ITEM.SCRAP) {
+          const take = Math.min(Inventory.counts[eid][s], toDeduct);
+          Inventory.counts[eid][s] -= take;
+          toDeduct -= take;
+          if (Inventory.counts[eid][s] === 0) Inventory.items[eid][s] = 0;
+        }
+      }
+
+      // Give items
+      addItemToInventory(eid, trade.itemId, trade.count);
+      gameState.dirtyInventories.add(eid);
     }
 
     return world;

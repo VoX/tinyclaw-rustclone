@@ -1,6 +1,6 @@
 import { query, hasComponent, addComponent, addEntity, removeEntity } from 'bitecs';
 import { Health, Dead, Player, Position, Inventory, WorldItem, Collider, Sprite, NetworkSync,
-         Animal, ResourceNode, SleepingBag, Damageable, initInventory, Armor, StorageBox } from '../../shared/components.js';
+         Animal, ResourceNode, SleepingBag, Damageable, initInventory, Armor, StorageBox, NPC } from '../../shared/components.js';
 import { ITEM_DESPAWN_TICKS, SERVER_TPS, PLAYER_MAX_HP, RESPAWN_WAIT_TICKS, ANIMAL_DEFS } from '../../shared/constants.js';
 import { ENTITY_TYPE, MSG } from '../../shared/protocol.js';
 
@@ -14,6 +14,8 @@ export function createDamageSystem(gameState) {
 
       // Skip animals — AnimalAISystem handles their death and loot drops
       if (hasComponent(world, eid, Animal)) continue;
+      // Skip NPCs — they are invulnerable
+      if (hasComponent(world, eid, NPC)) { Health.current[eid] = Health.max[eid]; continue; }
       // Skip resource nodes — they use ResourceNode.remaining, not Health
       if (hasComponent(world, eid, ResourceNode)) {
         Health.current[eid] = 1; // Prevent re-processing; nodes don't die via HP
@@ -127,6 +129,10 @@ export function createDamageSystem(gameState) {
         const spawnTick = client?.spawnTick || 0;
         const survivedTicks = gameState.tick - spawnTick;
         const survivedSeconds = Math.floor(survivedTicks / SERVER_TPS);
+        // Get resources gathered this life
+        const playerStats = gameState.playerStats?.get(eid);
+        const resourcesGathered = playerStats?.resources || 0;
+
         if (client && client.ws) {
           client.ws.send(JSON.stringify({
             type: MSG.DEATH,
@@ -134,9 +140,13 @@ export function createDamageSystem(gameState) {
             killerName,
             killerType,
             survived: survivedSeconds,
+            resourcesGathered,
             respawnTime: Math.ceil(RESPAWN_WAIT_TICKS / SERVER_TPS),
           }));
         }
+
+        // Reset resources for next life
+        if (playerStats) playerStats.resources = 0;
 
         // Broadcast death event (for kill feed)
         const victimName = gameState.playerNames?.get(eid) || `Player ${connId}`;

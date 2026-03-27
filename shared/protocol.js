@@ -39,6 +39,9 @@ export const MSG = {
   CLIP_UPDATE: 65,
   CRAFT_PROGRESS: 66,
   LEADERBOARD: 67,
+  WEATHER: 68,
+  NPC_TRADE_OPEN: 69,
+  NPC_TRADE_BUY: 17,
 };
 
 // Input key bitmask
@@ -94,4 +97,6 @@ export const ENTITY_TYPE = {
   LOOT_BAG: 14,
   BARREL: 15,
   BED: 16,
+  NPC: 17,
+  LOOT_CRATE: 18,
 };

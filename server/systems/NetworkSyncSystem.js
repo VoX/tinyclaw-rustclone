@@ -119,6 +119,10 @@ export function createNetworkSyncSystem(gameState) {
           }
         } else if (entityType === ENTITY_TYPE.LOOT_BAG) {
           // Loot bags just need position and type (already sent)
+        } else if (entityType === ENTITY_TYPE.NPC) {
+          state.npcType = 1; // merchant
+        } else if (entityType === ENTITY_TYPE.LOOT_CRATE) {
+          // Just needs position and type
         }
 
         // Check if changed from prev state

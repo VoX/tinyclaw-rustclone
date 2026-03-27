@@ -77,7 +77,90 @@ export function createRenderer(canvas, state) {
         const text = evt.phase === 'night' ? 'Night is falling...' : 'A new day begins';
         const color = evt.phase === 'night' ? '#88a' : '#ee8';
         state.notifications.push({ text, time: Date.now(), color });
+      } else if (evt.type === 'weather') {
+        if (evt.text) {
+          const color = evt.weather === 1 ? '#8af' : evt.weather === 2 ? '#ccc' : '#ee8';
+          state.notifications.push({ text: evt.text, time: Date.now(), color });
+        }
       }
+    }
+  }
+
+  // ── Rain particles ──
+  const rainDrops = [];
+  for (let i = 0; i < 200; i++) {
+    rainDrops.push({ x: Math.random(), y: Math.random(), speed: 0.3 + Math.random() * 0.4, len: 8 + Math.random() * 12 });
+  }
+
+  function drawWeatherEffects(ctx, w, h, dt) {
+    if (state.weather === 1) { // RAIN
+      // Blue tint
+      ctx.fillStyle = 'rgba(40, 60, 120, 0.08)';
+      ctx.fillRect(0, 0, w, h);
+
+      // Rain drops
+      ctx.strokeStyle = 'rgba(180, 200, 255, 0.3)';
+      ctx.lineWidth = 1;
+      for (const drop of rainDrops) {
+        drop.y += drop.speed * dt * 0.001;
+        if (drop.y > 1) { drop.y = 0; drop.x = Math.random(); }
+        const dx = drop.x * w;
+        const dy = drop.y * h;
+        ctx.beginPath();
+        ctx.moveTo(dx, dy);
+        ctx.lineTo(dx - 1, dy + drop.len);
+        ctx.stroke();
+      }
+    } else if (state.weather === 2) { // FOG
+      // White fog overlay at edges, thicker
+      const fogGrad = ctx.createRadialGradient(w / 2, h / 2, w * 0.15, w / 2, h / 2, w * 0.45);
+      fogGrad.addColorStop(0, 'rgba(200, 210, 220, 0)');
+      fogGrad.addColorStop(0.6, 'rgba(200, 210, 220, 0.15)');
+      fogGrad.addColorStop(1, 'rgba(200, 210, 220, 0.45)');
+      ctx.fillStyle = fogGrad;
+      ctx.fillRect(0, 0, w, h);
+    }
+  }
+
+  function drawRadiationZones(ctx, w, h, camX, camY, viewScale) {
+    if (!state.radiationZones || state.radiationZones.length === 0) return;
+
+    for (const zone of state.radiationZones) {
+      const sx = (zone.x - camX) * viewScale / TILE_SIZE + w / 2;
+      const sy = (zone.y - camY) * viewScale / TILE_SIZE + h / 2;
+      const sr = zone.radius * viewScale / TILE_SIZE;
+
+      // Only draw if on screen
+      if (sx + sr < 0 || sx - sr > w || sy + sr < 0 || sy - sr > h) continue;
+
+      // Red tinted circle
+      const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr);
+      grad.addColorStop(0, 'rgba(200, 50, 30, 0.12)');
+      grad.addColorStop(0.7, 'rgba(200, 50, 30, 0.08)');
+      grad.addColorStop(1, 'rgba(200, 50, 30, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Dashed border
+      ctx.save();
+      ctx.strokeStyle = 'rgba(200, 50, 30, 0.3)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+
+      // Radiation symbol at center
+      ctx.save();
+      ctx.font = '14px Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(200, 50, 30, 0.5)';
+      ctx.fillText('☢', sx, sy + 5);
+      ctx.restore();
     }
   }
 
@@ -157,6 +240,12 @@ export function createRenderer(canvas, state) {
 
     // ── Fog of war: darken edges ──
     ui.drawEdgeVignette(ctx, w, h);
+
+    // ── Weather effects ──
+    drawWeatherEffects(ctx, w, h, dt);
+
+    // ── Radiation zone overlay ──
+    drawRadiationZones(ctx, w, h, camX, camY, viewScale);
 
     // ── Damage red flash ──
     ui.drawDamageFlash(ctx, w, h);

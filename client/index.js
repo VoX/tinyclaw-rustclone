@@ -82,6 +82,12 @@ const state = {
   // Stamina
   stamina: 100,
   staminaLocked: false, // locked until 25 when depleted
+  // Weather
+  weather: 0, // 0=clear, 1=rain, 2=fog
+  // NPC trade
+  npcTradeOpen: null, // { npcEid, trades }
+  // Radiation zones
+  radiationZones: [],
 };
 
 // Initialize inventory slots
@@ -152,6 +158,10 @@ function handleServerMessage(msg) {
       state.loadingProgress = 1.0;
       state.loadingWorld = false;
       state.worldReady = true;
+      // Load radiation zones
+      if (msg.radiationZones) {
+        state.radiationZones = msg.radiationZones;
+      }
       // Initialize fog of war explored tiles
       if (!state.exploredTiles) {
         const fogSize = Math.ceil(msg.worldSize / 8); // 1 tile per 8 world tiles
@@ -230,6 +240,7 @@ function handleServerMessage(msg) {
         killerName: msg.killerName || 'unknown',
         killerType: msg.killerType || 'environment',
         survived: msg.survived || 0,
+        resourcesGathered: msg.resourcesGathered || 0,
       };
       state.deathTime = Date.now();
       state.respawnTime = (msg.respawnTime || 10) * 1000; // ms
@@ -335,6 +346,17 @@ function handleServerMessage(msg) {
 
     case MSG.LEADERBOARD:
       state.leaderboard = msg.top || [];
+      break;
+
+    case MSG.WEATHER:
+      state.weather = msg.weather || 0;
+      break;
+
+    case MSG.NPC_TRADE_OPEN:
+      state.npcTradeOpen = {
+        npcEid: msg.npcEid,
+        trades: msg.trades || [],
+      };
       break;
   }
 }

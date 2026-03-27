@@ -91,6 +91,7 @@ export const ITEM = {
   LEATHER_HEAD: 90,
   LEATHER_CHEST: 91,
   LEATHER_LEGS: 92,
+  HAZMAT_SUIT: 93,
   // Explosives
   SATCHEL_CHARGE: 80,
   C4: 81,
@@ -175,6 +176,7 @@ export const ITEM_DEFS = {
   [ITEM.LEATHER_HEAD]: { name: 'Leather Helmet', maxStack: 1, cat: 'armor', armorSlot: 'head', armorPct: 0.10 },
   [ITEM.LEATHER_CHEST]: { name: 'Leather Chest', maxStack: 1, cat: 'armor', armorSlot: 'chest', armorPct: 0.15 },
   [ITEM.LEATHER_LEGS]: { name: 'Leather Legs', maxStack: 1, cat: 'armor', armorSlot: 'legs', armorPct: 0.10 },
+  [ITEM.HAZMAT_SUIT]: { name: 'Hazmat Suit', maxStack: 1, cat: 'armor', armorSlot: 'chest', armorPct: 0.05, radProtection: true },
 };
 
 // ── Resource Node Types ──
@@ -340,6 +342,8 @@ export const RECIPES = [
   { id: 47, result: ITEM.ROPE, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.SCRAP, 15], [ITEM.CLOTH, 5]] },
   // Bed
   { id: 48, result: ITEM.BED, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.WOOD, 100], [ITEM.CLOTH, 15], [ITEM.METAL_FRAGS, 20]] },
+  // Hazmat Suit
+  { id: 49, result: ITEM.HAZMAT_SUIT, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.CLOTH, 20], [ITEM.LOW_GRADE_FUEL, 10], [ITEM.METAL_FRAGS, 10]] },
 ];
 
 // Craft time in seconds based on tier (default if recipe has no `time` field)
@@ -389,6 +393,29 @@ export function getArmorReduction(headSlot, chestSlot, legsSlot) {
   if (legsSlot) { const d = ITEM_DEFS[legsSlot]; if (d && d.armorPct) reduction += d.armorPct; }
   return Math.min(reduction, 0.65); // cap at 65%
 }
+
+// ── Weather ──
+export const WEATHER = {
+  CLEAR: 0,
+  RAIN: 1,
+  FOG: 2,
+};
+
+export const WEATHER_MIN_DURATION = 5 * 60 * SERVER_TPS;  // 5 min
+export const WEATHER_MAX_DURATION = 15 * 60 * SERVER_TPS; // 15 min
+
+// ── NPC Trade ──
+export const NPC_TRADES = [
+  { itemId: ITEM.BANDAGE, count: 3, cost: 10 },         // 3 bandages for 10 scrap
+  { itemId: ITEM.WOODEN_ARROW, count: 10, cost: 5 },    // 10 arrows for 5 scrap
+  { itemId: ITEM.LOW_GRADE_FUEL, count: 10, cost: 8 },  // 10 fuel for 8 scrap
+  { itemId: ITEM.BONE_ARROW, count: 10, cost: 8 },      // 10 bone arrows for 8 scrap
+  { itemId: ITEM.CLOTH, count: 20, cost: 5 },            // 20 cloth for 5 scrap
+  { itemId: ITEM.STONE, count: 50, cost: 5 },            // 50 stone for 5 scrap
+];
+
+// ── Radiation ──
+export const RADIATION_DAMAGE_RATE = 5.0 / SERVER_TPS; // 5 HP/sec without hazmat
 
 // Water speed multiplier
 export const WATER_SPEED_MULT = 0.5;

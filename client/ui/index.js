@@ -161,6 +161,20 @@ function drawItemIcon(ctx, x, y, size, itemId) {
     ctx.moveTo(cx, cy - s * 0.45);
     ctx.lineTo(cx + s * 0.1, cy - s * 0.7);
     ctx.stroke();
+  } else if (itemId === ITEM.HAZMAT_SUIT) {
+    // Hazmat suit: yellow circle body
+    ctx.fillStyle = '#cc9900';
+    ctx.beginPath();
+    ctx.arc(cx, cy, s * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#886600';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Visor
+    ctx.fillStyle = '#334';
+    ctx.beginPath();
+    ctx.arc(cx, cy - s * 0.1, s * 0.2, 0, Math.PI * 2);
+    ctx.fill();
   } else if (itemId === ITEM.SCRAP) {
     // Scrap: jagged metal piece
     ctx.fillStyle = '#999';
@@ -795,7 +809,8 @@ export function createUI(state, send) {
         const elapsed = Date.now() - (state.deathTime || 0);
         const remaining = Math.max(0, Math.ceil((state.respawnTime - elapsed) / 1000));
         const timerText = remaining > 0 ? `<br><span style="color:#ff8;font-size:18px;">Respawn in ${remaining}s</span>` : '';
-        deathStats.innerHTML = `Killed by <span style="color:#e44">${info.killerName}</span><br>Survived: ${timeStr}${timerText}`;
+        const resText = info.resourcesGathered > 0 ? `<br>Resources gathered: <span style="color:#8d8">${info.resourcesGathered}</span>` : '';
+        deathStats.innerHTML = `Killed by <span style="color:#e44">${info.killerName}</span><br>Survived: ${timeStr}${resText}${timerText}`;
       }
       // Respawn button enable/disable
       const canRespawn = Date.now() - (state.deathTime || 0) >= state.respawnTime;
@@ -854,15 +869,97 @@ export function createUI(state, send) {
         tcAuthScreen.style.display = 'none';
       }
     }
+
+    // NPC Trade screen
+    renderNPCTrade();
   }
 
-  // Close container/TC on Escape
+  // Close container/TC/NPC on Escape
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Escape') {
       state.containerOpen = null;
       state.tcAuthOpen = null;
+      state.npcTradeOpen = null;
     }
   });
+
+  // NPC Trade UI
+  let npcTradeEl = null;
+  let lastNpcTradeKey = '';
+  function renderNPCTrade() {
+    if (!state.npcTradeOpen) {
+      if (npcTradeEl) npcTradeEl.style.display = 'none';
+      lastNpcTradeKey = '';
+      return;
+    }
+    const key = JSON.stringify(state.npcTradeOpen);
+    if (key === lastNpcTradeKey) {
+      if (npcTradeEl) npcTradeEl.style.display = 'flex';
+      return;
+    }
+    lastNpcTradeKey = key;
+
+    if (!npcTradeEl) {
+      npcTradeEl = document.createElement('div');
+      npcTradeEl.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100;display:flex;justify-content:center;align-items:center;backdrop-filter:blur(2px);';
+      document.body.appendChild(npcTradeEl);
+    }
+    npcTradeEl.style.display = 'flex';
+    npcTradeEl.innerHTML = '';
+
+    const panel = document.createElement('div');
+    panel.style.cssText = 'background:rgba(25,25,25,0.97);border:1px solid rgba(100,100,100,0.4);border-radius:6px;padding:16px;min-width:280px;max-width:400px;';
+
+    const h = document.createElement('h3');
+    h.textContent = 'Merchant';
+    h.style.cssText = 'font-size:14px;margin-bottom:12px;color:#ddd;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #333;padding-bottom:6px;';
+    panel.appendChild(h);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'container-btn container-close';
+    closeBtn.textContent = 'X';
+    closeBtn.style.cssText = 'float:right;margin-top:-30px;padding:4px 10px;background:rgba(60,60,60,0.8);color:#eee;border:1px solid #555;border-radius:4px;cursor:pointer;font-size:11px;';
+    closeBtn.addEventListener('click', () => { state.npcTradeOpen = null; });
+    panel.appendChild(closeBtn);
+
+    // Count player scrap
+    let scrapCount = 0;
+    for (let i = 0; i < INVENTORY_SLOTS; i++) {
+      if (state.inventory[i]?.id === ITEM.SCRAP) scrapCount += state.inventory[i].n;
+    }
+
+    const scrapInfo = document.createElement('div');
+    scrapInfo.style.cssText = 'font-size:11px;color:#e8c030;margin-bottom:10px;';
+    scrapInfo.textContent = `Your Scrap: ${scrapCount}`;
+    panel.appendChild(scrapInfo);
+
+    for (const trade of state.npcTradeOpen.trades) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 8px;margin-bottom:4px;background:rgba(40,40,40,0.8);border:1px solid rgba(80,80,80,0.4);border-radius:4px;';
+
+      const info = document.createElement('span');
+      info.style.cssText = 'font-size:11px;color:#ccc;';
+      info.textContent = `${trade.itemName} x${trade.count}`;
+      row.appendChild(info);
+
+      const btn = document.createElement('button');
+      btn.style.cssText = 'padding:4px 12px;font-size:10px;background:rgba(60,60,60,0.8);color:#eee;border:1px solid #555;border-radius:4px;cursor:pointer;';
+      btn.textContent = `${trade.cost} Scrap`;
+      const canAfford = scrapCount >= trade.cost;
+      if (!canAfford) {
+        btn.style.opacity = '0.4';
+        btn.style.pointerEvents = 'none';
+      }
+      btn.addEventListener('click', () => {
+        send({ type: MSG.NPC_TRADE_BUY, npcEid: state.npcTradeOpen.npcEid, tradeIdx: trade.idx });
+        state.npcTradeOpen = null; // close after buying
+      });
+      row.appendChild(btn);
+      panel.appendChild(row);
+    }
+
+    npcTradeEl.appendChild(panel);
+  }
 
   let lastContainerRender = '';
 

@@ -37,6 +37,7 @@ import { createGatherSystem } from './systems/GatherSystem.js';
 import { createInventorySystem } from './systems/InventorySystem.js';
 import { createInteractSystem } from './systems/InteractSystem.js';
 import { createDecaySystem } from './systems/DecaySystem.js';
+import { createWeatherSystem } from './systems/WeatherSystem.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = 8780;
@@ -96,6 +97,7 @@ const systems = [
   createRespawnSystem(gameState),
   createDecaySystem(gameState),
   createDayNightSystem(gameState),
+  createWeatherSystem(gameState),
   createNetworkSyncSystem(gameState),
 ];
 
@@ -263,7 +265,13 @@ wss.on('connection', (ws) => {
     tileSize: TILE_SIZE,
     biomes: serializeBiomeMap(gameState.biomeMap),
     seed: 12345,
+    radiationZones: gameState.radiationZones || [],
   }));
+
+  // Send current weather
+  if (gameState.weather !== undefined) {
+    ws.send(JSON.stringify({ type: MSG.WEATHER, weather: gameState.weather }));
+  }
 
   // Send initial inventory
   gameState.dirtyInventories.add(eid);
@@ -393,6 +401,11 @@ function handleClientMessage(connId, msg) {
 
     case MSG.CRAFT_CANCEL:
       client.craftCancel = true;
+      break;
+
+    case MSG.NPC_TRADE_BUY:
+      if (!checkRateLimit(client)) break;
+      client.npcTradeBuy = { npcEid: msg.npcEid, tradeIdx: msg.tradeIdx };
       break;
 
     case MSG.LEADERBOARD_REQ: {

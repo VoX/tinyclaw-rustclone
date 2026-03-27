@@ -58,6 +58,10 @@ export function createEntityRenderer(state) {
       drawLootBag(ctx, sx, sy, e);
     } else if (type === ENTITY_TYPE.BARREL) {
       drawBarrel(ctx, sx, sy, e);
+    } else if (type === ENTITY_TYPE.NPC) {
+      drawNPC(ctx, sx, sy, e);
+    } else if (type === ENTITY_TYPE.LOOT_CRATE) {
+      drawLootCrate(ctx, sx, sy, e);
     }
   }
 
@@ -1199,6 +1203,107 @@ export function createEntityRenderer(state) {
     ctx.moveTo(sx - 5, sy + 2);
     ctx.lineTo(sx + 5, sy + 2);
     ctx.stroke();
+  }
+
+  // ── NPC Merchant ──
+  function drawNPC(ctx, sx, sy, e) {
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + 6, 10, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(sx, sy);
+
+    // Body (green robe)
+    ctx.fillStyle = '#2a6a2a';
+    ctx.fillRect(-7, -4, 14, 10);
+    ctx.strokeStyle = '#1a4a1a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-7, -4, 14, 10);
+
+    // Arms
+    ctx.fillStyle = '#2a6a2a';
+    ctx.beginPath();
+    ctx.arc(-8, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(8, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Head
+    ctx.fillStyle = '#d4a574';
+    ctx.beginPath();
+    ctx.arc(0, -9, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Hat/hood
+    ctx.fillStyle = '#1a5a1a';
+    ctx.beginPath();
+    ctx.arc(0, -11, 6, Math.PI, 2 * Math.PI);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    ctx.arc(-1.5, -10, 0.8, 0, Math.PI * 2);
+    ctx.arc(1.5, -10, 0.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    // "TRADE" label
+    ctx.save();
+    ctx.font = '8px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    const tw = ctx.measureText('TRADE').width;
+    ctx.fillRect(sx - tw / 2 - 2, sy - 22, tw + 4, 10);
+    ctx.fillStyle = '#4f4';
+    ctx.fillText('TRADE', sx, sy - 14);
+    ctx.restore();
+  }
+
+  // ── Loot Crate ──
+  function drawLootCrate(ctx, sx, sy, e) {
+    ctx.save();
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + 5, 8, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Crate body
+    ctx.fillStyle = '#5a4a20';
+    ctx.fillRect(sx - 8, sy - 6, 16, 12);
+    ctx.strokeStyle = '#3a2a10';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx - 8, sy - 6, 16, 12);
+
+    // Metal bands
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(sx - 8, sy - 1);
+    ctx.lineTo(sx + 8, sy - 1);
+    ctx.stroke();
+
+    // Lock
+    ctx.fillStyle = '#aa8';
+    ctx.fillRect(sx - 2, sy - 3, 4, 3);
+
+    // Glow effect for high-value
+    const pulse = Math.sin(animTime * 0.005) * 0.15 + 0.15;
+    ctx.fillStyle = `rgba(255, 220, 80, ${pulse})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
   }
 
   return { drawEntity, getAnimTime, updateAnimTime };

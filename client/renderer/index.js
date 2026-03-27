@@ -226,6 +226,9 @@ export function createRenderer(canvas, state) {
     // ── Draw decorations ──
     terrain.drawDecorations(ctx, w, h, camX, camY, effectiveScale);
 
+    // ── Draw footprints (before entities so they appear under) ──
+    entities.drawFootprints(ctx, camX, camY, w, h, effectiveScale);
+
     // ── Draw entities ──
     const sortedEntities = [...state.entities.values()].sort((a, b) => (a.y || 0) - (b.y || 0));
 

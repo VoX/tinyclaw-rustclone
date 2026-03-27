@@ -458,10 +458,77 @@ export function createUIOverlays(state) {
       ctx.restore();
     }
 
-    ctx.font = '9px Consolas, monospace';
-    ctx.fillStyle = '#888';
+    // ── Compass ──
+    const playerAngle = me.a || 0;
+    const cx = mapX + mapSize / 2;
+    const cy = mapY + mapSize / 2;
+    const compassR = mapSize / 2 + 2;
+
+    // Compass cardinal directions (rotate with player facing)
+    ctx.font = 'bold 10px Consolas, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('N', mapX + mapSize / 2, mapY + 10);
+    ctx.textBaseline = 'middle';
+    const cardinals = [
+      { label: 'N', angle: -Math.PI / 2, color: '#e44' },
+      { label: 'E', angle: 0, color: '#aaa' },
+      { label: 'S', angle: Math.PI / 2, color: '#aaa' },
+      { label: 'W', angle: Math.PI, color: '#aaa' },
+    ];
+    for (const c of cardinals) {
+      const a = c.angle - playerAngle;
+      const lx = cx + Math.cos(a) * (compassR + 8);
+      const ly = cy + Math.sin(a) * (compassR + 8);
+      // Only show if label position is within reasonable bounds
+      if (lx > mapX - 14 && lx < mapX + mapSize + 14 && ly > mapY - 14 && ly < mapY + mapSize + 14) {
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.beginPath();
+        ctx.arc(lx, ly, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = c.color;
+        ctx.fillText(c.label, lx, ly);
+      }
+    }
+
+    // Compass rose (small triangle pointing north)
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-playerAngle);
+    ctx.fillStyle = 'rgba(220,60,60,0.5)';
+    ctx.beginPath();
+    ctx.moveTo(0, -compassR + 4);
+    ctx.lineTo(-3, -compassR + 10);
+    ctx.lineTo(3, -compassR + 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Bearing indicator to nearest radiation zone / monument
+    if (state.radiationZones && state.radiationZones.length > 0) {
+      let nearestDist = Infinity;
+      let nearestAngle = 0;
+      for (const zone of state.radiationZones) {
+        const zDx = zone.x / TILE_SIZE - px;
+        const zDy = zone.y / TILE_SIZE - py;
+        const zDist = Math.sqrt(zDx * zDx + zDy * zDy);
+        if (zDist < nearestDist) {
+          nearestDist = zDist;
+          nearestAngle = Math.atan2(zDy, zDx);
+        }
+      }
+      // Show bearing pip on compass edge
+      const bAngle = nearestAngle - playerAngle;
+      const bx = cx + Math.cos(bAngle) * (compassR - 2);
+      const by = cy + Math.sin(bAngle) * (compassR - 2);
+      ctx.fillStyle = '#f84';
+      ctx.beginPath();
+      ctx.arc(bx, by, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'left';
   }
 
@@ -706,15 +773,36 @@ export function createUIOverlays(state) {
     }
   }
 
+  // Player name color palette for chat (deterministic from name)
+  const NAME_COLORS = [
+    '#5bc0eb', '#fde74c', '#9bc53d', '#e55934', '#fa7921',
+    '#c97fff', '#ff6b6b', '#4ecdc4', '#ffe66d', '#a8e6cf',
+    '#ff8b94', '#88d8b0', '#b088f9', '#ffd93d', '#6bcb77',
+  ];
+  function nameColor(name) {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+    return NAME_COLORS[Math.abs(hash) % NAME_COLORS.length];
+  }
+
+  function formatTimestamp(time) {
+    const d = new Date(time);
+    const h = d.getHours().toString().padStart(2, '0');
+    const m = d.getMinutes().toString().padStart(2, '0');
+    return `${h}:${m}`;
+  }
+
   function drawChatLog(ctx, w, h) {
     const messages = state.chatMessages;
     if (messages.length === 0 && !state.chatOpen) return;
 
     const logX = 14;
-    const logY = h - 140;
+    const logY = h - 160;
     const now = Date.now();
+    const me = state.myEid ? state.entities.get(state.myEid) : null;
 
     const recent = messages.slice(-10);
+    let drawY = 0;
     for (let i = 0; i < recent.length; i++) {
       const msg = recent[i];
       const age = now - msg.time;
@@ -723,24 +811,66 @@ export function createUIOverlays(state) {
         if (age > 10000) continue;
         if (age > 8000) alpha = 1 - (age - 8000) / 2000;
       }
+
+      // Proximity-based text size: nearby players get larger text
+      let fontSize = 11;
+      if (me && msg.senderEid && msg.senderEid !== state.myEid) {
+        const sender = state.entities.get(msg.senderEid);
+        if (sender) {
+          const sdx = (sender.x || 0) - me.x;
+          const sdy = (sender.y || 0) - me.y;
+          const dist = Math.sqrt(sdx * sdx + sdy * sdy);
+          if (dist < 20) fontSize = 13;
+          else if (dist > 80) fontSize = 9;
+        }
+      }
+
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.font = '11px Consolas, monospace';
+      ctx.font = `${fontSize}px Consolas, monospace`;
+
+      // Timestamp
+      const timestamp = formatTimestamp(msg.time);
+      const tsText = `[${timestamp}] `;
+      const nameText = `${msg.senderName}`;
+      const msgText = `: ${msg.text}`;
+      const fullW = ctx.measureText(tsText + nameText + msgText).width;
+
+      // Background
       ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      const text = `${msg.senderName}: ${msg.text}`;
-      const tw = ctx.measureText(text).width;
-      ctx.fillRect(logX - 4, logY + i * 16 - 2, tw + 8, 16);
+      const lineH = fontSize + 5;
+      ctx.fillRect(logX - 4, logY + drawY - 2, fullW + 8, lineH);
+
+      const textY = logY + drawY + fontSize - 1;
+
+      // Timestamp in gray
+      ctx.fillStyle = '#666';
+      ctx.fillText(tsText, logX, textY);
+      const tsW = ctx.measureText(tsText).width;
+
+      // Player name in color
+      if (msg.system) {
+        ctx.fillStyle = '#ff0';
+      } else {
+        ctx.fillStyle = nameColor(msg.senderName);
+      }
+      ctx.fillText(nameText, logX + tsW, textY);
+      const nameW = ctx.measureText(nameText).width;
+
+      // Message text
       ctx.fillStyle = '#ddd';
-      ctx.fillText(text, logX, logY + i * 16 + 10);
+      ctx.fillText(msgText, logX + tsW + nameW, textY);
+
       ctx.restore();
+      drawY += lineH;
     }
 
     if (state.chatOpen) {
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(logX - 4, logY + recent.length * 16 + 4, 300, 20);
+      ctx.fillRect(logX - 4, logY + drawY + 4, 300, 20);
       ctx.font = '11px Consolas, monospace';
       ctx.fillStyle = '#fff';
-      ctx.fillText(`> ${state.chatInput}_`, logX, logY + recent.length * 16 + 18);
+      ctx.fillText(`> ${state.chatInput}_`, logX, logY + drawY + 18);
     }
   }
 

@@ -36,8 +36,35 @@ export function createInput(state, send) {
         return;
       }
       if (e.code === 'Enter') {
-        if (state.chatInput.trim()) {
-          send({ type: MSG.CHAT_SEND, text: state.chatInput.trim() });
+        const trimmed = state.chatInput.trim();
+        if (trimmed) {
+          // Handle client-side /commands
+          if (trimmed === '/help') {
+            state.chatMessages.push({
+              senderName: 'SYSTEM', senderEid: 0, text: 'Commands: /help, /players, /time, /team invite|leave|kick|list',
+              time: Date.now(), system: true,
+            });
+          } else if (trimmed === '/players') {
+            const players = [];
+            for (const [eid, ent] of state.entities) {
+              if (ent.t === 1 && ent.name) players.push(ent.name);
+            }
+            state.chatMessages.push({
+              senderName: 'SYSTEM', senderEid: 0,
+              text: `Online (${players.length}): ${players.join(', ') || 'none'}`,
+              time: Date.now(), system: true,
+            });
+          } else if (trimmed === '/time') {
+            const light = state.lightLevel;
+            const phase = light >= 0.9 ? 'Day' : light >= 0.5 ? 'Dusk/Dawn' : 'Night';
+            state.chatMessages.push({
+              senderName: 'SYSTEM', senderEid: 0,
+              text: `Time: ${phase} (light: ${Math.round(light * 100)}%)`,
+              time: Date.now(), system: true,
+            });
+          } else {
+            send({ type: MSG.CHAT_SEND, text: trimmed });
+          }
         }
         state.chatOpen = false;
         state.chatInput = '';

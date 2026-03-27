@@ -17,9 +17,23 @@ const ANIMAL_COLORS = {
   [ANIMAL_TYPE.BEAR]: '#4a3020',
 };
 
+// Player outfit color palettes (indexed by eid % N)
+const OUTFIT_PALETTES = [
+  { shirt: '#3a8fd6', pants: '#2a5f8f' },  // blue
+  { shirt: '#d6553a', pants: '#8f3a2a' },  // red
+  { shirt: '#4ab54a', pants: '#2a7a2a' },  // green
+  { shirt: '#d6a03a', pants: '#8f6a2a' },  // orange
+  { shirt: '#9a4ad6', pants: '#6a2a8f' },  // purple
+  { shirt: '#d64a9a', pants: '#8f2a6a' },  // pink
+  { shirt: '#4ad6d6', pants: '#2a8f8f' },  // teal
+  { shirt: '#d6d64a', pants: '#8f8f2a' },  // yellow
+];
+
 export function createEntityRenderer(state) {
   // Track death animation state per entity
   const deathAnims = new Map();
+  // Footprint trail system
+  const footprints = [];
   let animTime = 0;
 
   function getAnimTime() { return animTime; }
@@ -29,6 +43,20 @@ export function createEntityRenderer(state) {
   function drawEntity(ctx, sx, sy, e, viewScale) {
     const type = e.t;
     if (type === ENTITY_TYPE.PLAYER) {
+      // Emit footprints for walking players
+      if (!e.dead && !e.sleeping) {
+        const pdx = (e.renderX || e.x) - (e.prevX || e.x);
+        const pdy = (e.renderY || e.y) - (e.prevY || e.y);
+        if (pdx * pdx + pdy * pdy > 0.02) {
+          const lastFp = footprints.length > 0 ? footprints[footprints.length - 1] : null;
+          const fpDx = lastFp ? (e.x - lastFp.x) : 999;
+          const fpDy = lastFp ? (e.y - lastFp.y) : 999;
+          if (!lastFp || lastFp.eid !== e.eid || fpDx * fpDx + fpDy * fpDy > 2) {
+            footprints.push({ x: e.x, y: e.y, time: animTime, eid: e.eid });
+            if (footprints.length > 200) footprints.shift();
+          }
+        }
+      }
       drawPlayer(ctx, sx, sy, e, e.eid === state.myEid);
       if (e.sleeping && !e.dead) drawSleepingZzz(ctx, sx, sy);
     } else if (type === ENTITY_TYPE.RESOURCE_NODE) {
@@ -125,10 +153,15 @@ export function createEntityRenderer(state) {
     const hasLegsArmor = !inactive && e.armorLegs;
     const hasChestArmor = !inactive && e.armorChest;
     const hasHeadArmor = !inactive && e.armorHead;
+    const isHazmat = !inactive && e.armorChest === ITEM.HAZMAT_SUIT;
 
+    // Outfit color based on player eid
+    const palette = OUTFIT_PALETTES[(e.eid || 0) % OUTFIT_PALETTES.length];
     const skinColor = inactive ? '#777' : '#d4a574';
-    const shirtColor = inactive ? '#555' : hasChestArmor ? '#7a5a2a' : (isLocal ? '#3a8fd6' : '#d6553a');
-    const pantsColor = inactive ? '#444' : hasLegsArmor ? '#6a4a1a' : (isLocal ? '#2a5f8f' : '#8f3a2a');
+    const baseShirt = isLocal ? OUTFIT_PALETTES[0].shirt : palette.shirt;
+    const basePants = isLocal ? OUTFIT_PALETTES[0].pants : palette.pants;
+    const shirtColor = inactive ? '#555' : isHazmat ? '#b8b830' : hasChestArmor ? '#7a5a2a' : baseShirt;
+    const pantsColor = inactive ? '#444' : isHazmat ? '#8a8a20' : hasLegsArmor ? '#6a4a1a' : basePants;
     const outlineColor = inactive ? '#333' : '#222';
 
     // Legs
@@ -139,10 +172,25 @@ export function createEntityRenderer(state) {
     ctx.lineWidth = 0.5;
     ctx.strokeRect(-3, 0, 3, 6);
     ctx.strokeRect(1, 0, 3, 6);
-    if (hasLegsArmor) {
+    if (hasLegsArmor && !isHazmat) {
+      // Leather leg armor: brown strap overlays
       ctx.fillStyle = 'rgba(100,70,30,0.4)';
       ctx.fillRect(-3, 0, 3, 6);
       ctx.fillRect(1, 0, 3, 6);
+      ctx.strokeStyle = '#5a3a10';
+      ctx.lineWidth = 0.4;
+      ctx.beginPath();
+      ctx.moveTo(-3, 2); ctx.lineTo(0, 2);
+      ctx.moveTo(1, 4); ctx.lineTo(4, 4);
+      ctx.stroke();
+    } else if (isHazmat) {
+      // Hazmat: yellow-green with seam lines
+      ctx.strokeStyle = '#6a6a10';
+      ctx.lineWidth = 0.4;
+      ctx.beginPath();
+      ctx.moveTo(-1.5, 0); ctx.lineTo(-1.5, 6);
+      ctx.moveTo(2.5, 0); ctx.lineTo(2.5, 6);
+      ctx.stroke();
     }
 
     // Torso
@@ -151,19 +199,38 @@ export function createEntityRenderer(state) {
     ctx.strokeStyle = outlineColor;
     ctx.lineWidth = 1;
     ctx.strokeRect(-6, -5, 12, 8);
-    if (hasChestArmor) {
+    if (isHazmat) {
+      // Hazmat suit: zipper line and rad symbol
+      ctx.strokeStyle = '#6a6a10';
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(0, -5); ctx.lineTo(0, 3);
+      ctx.stroke();
+      // Small radiation trefoil
+      ctx.fillStyle = '#444';
+      ctx.beginPath();
+      ctx.arc(0, -1, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#b8b830';
+      ctx.beginPath();
+      ctx.arc(0, -1, 0.8, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (hasChestArmor) {
+      // Leather chest: stitching lines + shoulder pads
       ctx.strokeStyle = '#5a3a10';
       ctx.lineWidth = 0.8;
       ctx.beginPath();
-      ctx.moveTo(-2, -5);
-      ctx.lineTo(-2, 3);
-      ctx.moveTo(2, -5);
-      ctx.lineTo(2, 3);
+      ctx.moveTo(-2, -5); ctx.lineTo(-2, 3);
+      ctx.moveTo(2, -5); ctx.lineTo(2, 3);
       ctx.stroke();
+      // Shoulder pad accents
+      ctx.fillStyle = 'rgba(100,70,30,0.5)';
+      ctx.fillRect(-6, -5, 3, 3);
+      ctx.fillRect(3, -5, 3, 3);
     }
 
     // Arms
-    ctx.fillStyle = skinColor;
+    ctx.fillStyle = isHazmat ? '#a0a020' : skinColor;
     ctx.beginPath();
     ctx.arc(-7, -1, 2.5, 0, Math.PI * 2);
     ctx.fill();
@@ -172,16 +239,41 @@ export function createEntityRenderer(state) {
     ctx.arc(7, -1, 2.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    if (isHazmat) {
+      // Hazmat glove cuffs
+      ctx.strokeStyle = '#6a6a10';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.arc(-7, -1, 2.8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(7, -1, 2.8, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     // Head
-    ctx.fillStyle = skinColor;
+    ctx.fillStyle = isHazmat ? '#c0c040' : skinColor;
     ctx.beginPath();
     ctx.arc(0, -9, 5, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = outlineColor;
     ctx.lineWidth = 1;
     ctx.stroke();
-    if (hasHeadArmor) {
+    if (isHazmat) {
+      // Hazmat visor
+      ctx.fillStyle = 'rgba(60,60,60,0.7)';
+      ctx.beginPath();
+      ctx.arc(0, -10, 4, -0.6, 0.6);
+      ctx.lineTo(0, -10);
+      ctx.closePath();
+      ctx.fill();
+      // Visor reflection
+      ctx.fillStyle = 'rgba(200,200,100,0.3)';
+      ctx.beginPath();
+      ctx.arc(1, -11, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (hasHeadArmor) {
+      // Leather helmet
       ctx.fillStyle = '#7a5a2a';
       ctx.beginPath();
       ctx.arc(0, -10, 5.5, Math.PI, 2 * Math.PI);
@@ -189,6 +281,12 @@ export function createEntityRenderer(state) {
       ctx.strokeStyle = '#5a3a10';
       ctx.lineWidth = 0.8;
       ctx.stroke();
+      // Helmet rivets
+      ctx.fillStyle = '#8a6a3a';
+      ctx.beginPath();
+      ctx.arc(-3, -13, 0.6, 0, Math.PI * 2);
+      ctx.arc(3, -13, 0.6, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     // Eyes
@@ -211,13 +309,17 @@ export function createEntityRenderer(state) {
 
     ctx.restore();
 
-    // Held weapon
+    // Held weapon with walk sway
     if (e.held && e.held !== ITEM.NONE && !e.dead) {
-      drawHeldWeapon(ctx, sx, sy, e.a || 0, e.held);
+      // Detect movement for weapon sway
+      const pdx = (e.renderX || e.x) - (e.prevX || e.x);
+      const pdy = (e.renderY || e.y) - (e.prevY || e.y);
+      const isMoving = (pdx * pdx + pdy * pdy) > 0.01;
+      drawHeldWeapon(ctx, sx, sy, e.a || 0, e.held, isMoving);
     }
   }
 
-  function drawHeldWeapon(ctx, sx, sy, angle, itemId) {
+  function drawHeldWeapon(ctx, sx, sy, angle, itemId, isMoving) {
     const def = ITEM_DEFS[itemId];
     if (!def) return;
     const cat = def.cat;
@@ -229,13 +331,20 @@ export function createEntityRenderer(state) {
       const elapsed = Date.now() - state.meleeSwingTime;
       if (elapsed < 200) {
         const t = elapsed / 200;
-        // Quick forward swing then return: sine curve
-        swingOffset = Math.sin(t * Math.PI) * (Math.PI / 4); // 45 degrees
+        swingOffset = Math.sin(t * Math.PI) * (Math.PI / 4);
       }
     }
 
-    const tipX = sx + Math.cos(angle) * dist;
-    const tipY = sy + Math.sin(angle) * dist;
+    // Weapon sway while walking (slight bob)
+    let swayX = 0, swayY = 0;
+    if (isMoving && swingOffset === 0) {
+      const bobFreq = 0.008;
+      swayX = Math.sin(animTime * bobFreq) * 1.2;
+      swayY = Math.cos(animTime * bobFreq * 2) * 0.8;
+    }
+
+    const tipX = sx + Math.cos(angle) * dist + swayX;
+    const tipY = sy + Math.sin(angle) * dist + swayY;
 
     ctx.save();
     ctx.translate(tipX, tipY);
@@ -904,6 +1013,9 @@ export function createEntityRenderer(state) {
   }
 
   // ── Structures ──
+  // Track door open animation state
+  const doorAnims = new Map();
+
   function drawStructure(ctx, sx, sy, e, viewScale) {
     const size = viewScale * 0.9;
     const tier = e.tier || 0;
@@ -922,22 +1034,76 @@ export function createEntityRenderer(state) {
     if (st === STRUCT_TYPE.FOUNDATION) {
       ctx.fillStyle = tc.fill;
       ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
+      // Tile pattern based on tier
       ctx.strokeStyle = tc.detail;
       ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.moveTo(sx - size / 2, sy);
-      ctx.lineTo(sx + size / 2, sy);
-      ctx.moveTo(sx, sy - size / 2);
-      ctx.lineTo(sx, sy + size / 2);
-      ctx.stroke();
+      if (tier === 0) {
+        // Twig: simple cross-hatch
+        ctx.beginPath();
+        ctx.moveTo(sx - size / 2, sy); ctx.lineTo(sx + size / 2, sy);
+        ctx.moveTo(sx, sy - size / 2); ctx.lineTo(sx, sy + size / 2);
+        ctx.stroke();
+      } else if (tier === 1) {
+        // Wood: plank pattern (horizontal lines with vertical grain)
+        const planks = 4;
+        for (let i = 1; i < planks; i++) {
+          const py = sy - size / 2 + (size / planks) * i;
+          ctx.beginPath();
+          ctx.moveTo(sx - size / 2, py); ctx.lineTo(sx + size / 2, py);
+          ctx.stroke();
+        }
+        // Wood grain
+        ctx.strokeStyle = 'rgba(90,50,10,0.15)';
+        ctx.lineWidth = 0.3;
+        for (let i = 0; i < 6; i++) {
+          const gx = sx - size / 2 + size * (i + 0.5) / 6;
+          ctx.beginPath();
+          ctx.moveTo(gx, sy - size / 2 + 2); ctx.lineTo(gx + 1, sy + size / 2 - 2);
+          ctx.stroke();
+        }
+      } else if (tier === 2) {
+        // Stone: block grid pattern
+        const blocks = 3;
+        for (let row = 0; row < blocks; row++) {
+          for (let col = 0; col < blocks; col++) {
+            const bx = sx - size / 2 + (size / blocks) * col + 1;
+            const by = sy - size / 2 + (size / blocks) * row + 1;
+            const bw = size / blocks - 2;
+            const bh = size / blocks - 2;
+            ctx.fillStyle = (row + col) % 2 === 0 ? tc.fill : tc.detail;
+            ctx.fillRect(bx, by, bw, bh);
+          }
+        }
+      } else {
+        // Metal: diamond plate cross-hatch
+        ctx.strokeStyle = 'rgba(100,100,110,0.3)';
+        ctx.lineWidth = 0.4;
+        const step = size / 5;
+        for (let i = -5; i <= 5; i++) {
+          ctx.beginPath();
+          ctx.moveTo(sx - size / 2, sy + i * step);
+          ctx.lineTo(sx + size / 2, sy + i * step - size);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(sx - size / 2, sy + i * step);
+          ctx.lineTo(sx + size / 2, sy + i * step + size);
+          ctx.stroke();
+        }
+      }
       ctx.strokeStyle = tc.stroke;
       ctx.lineWidth = 1.5;
       ctx.strokeRect(sx - size / 2, sy - size / 2, size, size);
     } else if (st === STRUCT_TYPE.WALL) {
-      ctx.fillStyle = tc.fill;
       const wallThick = size * 0.2;
+      // Shadow/depth effect — darker bottom edge
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.fillRect(sx - size / 2 + 1, sy + wallThick / 2, size - 2, 2);
+      // Main wall fill
+      ctx.fillStyle = tc.fill;
       ctx.fillRect(sx - size / 2, sy - wallThick / 2, size, wallThick);
+      // Material texture
       if (tier === 1) {
+        // Wood: horizontal grain lines
         ctx.strokeStyle = '#5a3a0a';
         ctx.lineWidth = 0.3;
         for (let i = 0; i < 3; i++) {
@@ -947,7 +1113,16 @@ export function createEntityRenderer(state) {
           ctx.lineTo(sx + size / 2 - 2, sy + yOff);
           ctx.stroke();
         }
+        // Vertical wood grain
+        ctx.strokeStyle = 'rgba(90,50,10,0.12)';
+        for (let i = 0; i < 4; i++) {
+          const gx = sx - size / 2 + size * (i + 0.5) / 4;
+          ctx.beginPath();
+          ctx.moveTo(gx, sy - wallThick / 2 + 1); ctx.lineTo(gx, sy + wallThick / 2 - 1);
+          ctx.stroke();
+        }
       } else if (tier === 2) {
+        // Stone: block pattern with mortar lines
         ctx.strokeStyle = '#666';
         ctx.lineWidth = 0.5;
         ctx.beginPath();
@@ -956,21 +1131,37 @@ export function createEntityRenderer(state) {
         ctx.moveTo(sx + size * 0.15, sy - wallThick / 2);
         ctx.lineTo(sx + size * 0.15, sy + wallThick / 2);
         ctx.stroke();
+        // Stone block shading
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(sx - size / 2 + 1, sy - wallThick / 2, size * 0.3, wallThick * 0.4);
       } else if (tier === 3) {
+        // Metal: rivets along the wall
         ctx.fillStyle = '#888';
-        const rivetY = sy;
         for (let rx = -2; rx <= 2; rx++) {
           ctx.beginPath();
-          ctx.arc(sx + rx * size * 0.18, rivetY, 1.2, 0, Math.PI * 2);
+          ctx.arc(sx + rx * size * 0.18, sy, 1.2, 0, Math.PI * 2);
           ctx.fill();
         }
+        // Metal panel seam
+        ctx.strokeStyle = 'rgba(100,100,100,0.3)';
+        ctx.lineWidth = 0.4;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy - wallThick / 2); ctx.lineTo(sx, sy + wallThick / 2);
+        ctx.stroke();
       }
+      // Top highlight for 3D depth
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(sx - size / 2, sy - wallThick / 2, size, 1);
       ctx.strokeStyle = tc.stroke;
       ctx.lineWidth = 1;
       ctx.strokeRect(sx - size / 2, sy - wallThick / 2, size, wallThick);
     } else if (st === STRUCT_TYPE.DOORWAY) {
       const wallThick = size * 0.2;
       const gapSize = size * 0.35;
+      // Shadow under doorway pieces
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.fillRect(sx - size / 2 + 1, sy + wallThick / 2, (size - gapSize) / 2 - 2, 2);
+      ctx.fillRect(sx + gapSize / 2 + 1, sy + wallThick / 2, (size - gapSize) / 2 - 2, 2);
       ctx.fillStyle = tc.fill;
       ctx.fillRect(sx - size / 2, sy - wallThick / 2, (size - gapSize) / 2, wallThick);
       ctx.fillRect(sx + gapSize / 2, sy - wallThick / 2, (size - gapSize) / 2, wallThick);
@@ -981,16 +1172,50 @@ export function createEntityRenderer(state) {
     } else if (st === STRUCT_TYPE.DOOR) {
       const wallThick = size * 0.15;
       const doorColor = tier === 3 ? '#5a5a60' : '#7a5a14';
+
+      // Animate door open/close
+      const doorKey = e.eid || 0;
+      let doorAnim = doorAnims.get(doorKey);
+      if (!doorAnim) {
+        doorAnim = { openT: e.open ? 1 : 0 };
+        doorAnims.set(doorKey, doorAnim);
+      }
+      const targetT = e.open ? 1 : 0;
+      doorAnim.openT += (targetT - doorAnim.openT) * 0.15;
+
+      ctx.save();
+      ctx.translate(sx - size * 0.15, sy);
+      // Rotate door from hinge point (left edge)
+      ctx.rotate(doorAnim.openT * Math.PI / 2);
       ctx.fillStyle = doorColor;
-      ctx.fillRect(sx - size * 0.15, sy - wallThick / 2, size * 0.3, wallThick);
+      ctx.fillRect(0, -wallThick / 2, size * 0.3, wallThick);
+      // Door handle
       ctx.fillStyle = '#aa8800';
       ctx.beginPath();
-      ctx.arc(sx + size * 0.1, sy, 1.5, 0, Math.PI * 2);
+      ctx.arc(size * 0.25, 0, 1.5, 0, Math.PI * 2);
       ctx.fill();
+      // Wood/metal detail on door
+      if (tier === 3) {
+        ctx.fillStyle = 'rgba(100,100,110,0.3)';
+        ctx.fillRect(size * 0.05, -wallThick / 2, size * 0.08, wallThick);
+        ctx.fillRect(size * 0.18, -wallThick / 2, size * 0.08, wallThick);
+      } else {
+        ctx.strokeStyle = 'rgba(90,60,10,0.2)';
+        ctx.lineWidth = 0.3;
+        ctx.beginPath();
+        ctx.moveTo(size * 0.1, -wallThick / 2 + 1);
+        ctx.lineTo(size * 0.1, wallThick / 2 - 1);
+        ctx.moveTo(size * 0.2, -wallThick / 2 + 1);
+        ctx.lineTo(size * 0.2, wallThick / 2 - 1);
+        ctx.stroke();
+      }
+      ctx.restore();
       if (e.open) {
-        ctx.strokeStyle = 'rgba(100,255,100,0.4)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(sx - size * 0.15, sy - wallThick / 2, size * 0.3, wallThick);
+        ctx.strokeStyle = 'rgba(100,255,100,0.3)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.arc(sx - size * 0.15, sy, size * 0.3, -Math.PI / 2, 0);
+        ctx.stroke();
       }
     } else if (st === STRUCT_TYPE.CEILING) {
       ctx.globalAlpha = 0.5;
@@ -1554,5 +1779,31 @@ export function createEntityRenderer(state) {
     ctx.restore();
   }
 
-  return { drawEntity, getAnimTime, updateAnimTime };
+  function drawFootprints(ctx, camX, camY, w, h, viewScale) {
+    const now = animTime;
+    for (let i = footprints.length - 1; i >= 0; i--) {
+      const fp = footprints[i];
+      const age = now - fp.time;
+      if (age > 2000) {
+        footprints.splice(i, 1);
+        continue;
+      }
+      const alpha = Math.max(0, 1 - age / 2000) * 0.25;
+      const fsx = (fp.x - camX) * viewScale / TILE_SIZE + w / 2;
+      const fsy = (fp.y - camY) * viewScale / TILE_SIZE + h / 2;
+      if (fsx < -10 || fsx > w + 10 || fsy < -10 || fsy > h + 10) continue;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#3a3020';
+      ctx.beginPath();
+      ctx.ellipse(fsx - 1.5, fsy, 1.8, 1, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(fsx + 1.5, fsy, 1.8, 1, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  return { drawEntity, getAnimTime, updateAnimTime, drawFootprints };
 }

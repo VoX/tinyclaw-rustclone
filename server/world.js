@@ -535,7 +535,7 @@ function spawnAnimal(world, gameState, tileX, tileY, animalType, rng) {
   Velocity.vx[eid] = 0;
   Velocity.vy[eid] = 0;
   Animal.animalType[eid] = animalType;
-  Animal.aiState[eid] = AI_STATE.IDLE;
+  Animal.aiState[eid] = AI_STATE.WANDER;
   Animal.aggroRange[eid] = def.aggroRange;
   Animal.homeX[eid] = Position.x[eid];
   Animal.homeY[eid] = Position.y[eid];

@@ -104,6 +104,9 @@ const state = {
   heliNotification: 0, // timestamp for "crate locked" notification
   // Team
   teamMembers: [], // [{ eid, name }]
+  // ADS (aim down sights)
+  ads: false,
+  adsZoom: 1.0, // smooth interpolation target, 1.0 = normal, 1.2 = zoomed
 };
 
 // Initialize inventory slots
@@ -524,7 +527,14 @@ function clientLoop(timestamp) {
       state.stamina = Math.min(100, state.stamina + 20 * (dt / 1000));
     }
     if (state.staminaLocked && state.stamina >= 25) state.staminaLocked = false;
+
+    // ADS detection: right-click held + ranged weapon equipped
+    const heldItemId = state.inventory[state.selectedSlot]?.id || 0;
+    const heldDef = ITEM_DEFS[heldItemId];
+    state.ads = (input.getMouseAction() === MOUSE_ACTION.SECONDARY && heldDef && heldDef.cat === 'ranged');
+
     let speed = 10.0 * (sprinting ? 2.0 : 1.0);
+    if (state.ads) speed *= 0.5;
 
     // Water slowdown
     if (state.biomeMap) {
@@ -619,6 +629,10 @@ function clientLoop(timestamp) {
     }
     updateCampfires(cfPositions);
   }
+
+  // Smooth ADS zoom transition
+  const adsTarget = state.ads ? 1.2 : 1.0;
+  state.adsZoom += (adsTarget - state.adsZoom) * Math.min(1, dt * 0.008);
 
   // Render
   renderer.render(dt);

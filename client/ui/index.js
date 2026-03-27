@@ -1,8 +1,40 @@
 import { ITEM, ITEM_DEFS, RECIPES, CRAFT_TIER, HOTBAR_SLOTS, INVENTORY_SLOTS, STRUCT_TYPE, TILE_SIZE } from '../../shared/constants.js';
 import { MSG, INV_ACTION, ENTITY_TYPE } from '../../shared/protocol.js';
 
-// ── Canvas-drawn item icons ──
+// ── Image-based item icons ──
+const itemIconImages = new Map(); // itemId -> Image (loaded)
+const itemIconLoading = new Set(); // itemIds currently loading
+
+function loadItemIcon(itemId) {
+  if (itemIconImages.has(itemId) || itemIconLoading.has(itemId)) return;
+  itemIconLoading.add(itemId);
+  const img = new Image();
+  img.onload = () => {
+    itemIconImages.set(itemId, img);
+    itemIconLoading.delete(itemId);
+    iconCache.clear(); // invalidate cached canvases so they re-render with the image
+  };
+  img.onerror = () => {
+    itemIconLoading.delete(itemId);
+  };
+  img.src = `/icons/icon_${itemId}.png`;
+}
+
+// Preload all item icons
+for (const key of Object.keys(ITEM_DEFS)) {
+  const id = Number(key);
+  if (id > 0) loadItemIcon(id);
+}
+
+// ── Canvas-drawn item icons (fallback) ──
 function drawItemIcon(ctx, x, y, size, itemId) {
+  // Try image icon first
+  const img = itemIconImages.get(itemId);
+  if (img) {
+    ctx.drawImage(img, x, y, size, size);
+    return;
+  }
+
   const def = ITEM_DEFS[itemId];
   if (!def) return;
 
@@ -648,7 +680,8 @@ export function createUI(state, send) {
             sn.className = 'slot-name';
             slot.appendChild(sn);
           }
-          sn.textContent = ITEM_DEFS[item.id]?.name?.substring(0, 4) || '?';
+          sn.textContent = '';
+          slot.title = ITEM_DEFS[item.id]?.name || '';
 
           if (item.n > 1) {
             let sc = countSpan;
@@ -672,6 +705,7 @@ export function createUI(state, send) {
           }
           if (nameSpan) nameSpan.textContent = '';
           if (countSpan) countSpan.style.display = 'none';
+          slot.title = '';
 
           let ks = keySpan;
           if (!ks) {
@@ -774,7 +808,8 @@ export function createUI(state, send) {
             drawItemIcon(ictx, 0, 0, 40, item.id);
             iconCanvas.style.display = 'block';
           }
-          if (nameEl) nameEl.textContent = def?.name || '?';
+          if (nameEl) nameEl.textContent = '';
+          slot.title = def?.name || '';
           if (qtyEl) {
             qtyEl.textContent = item.n > 1 ? item.n : '';
             qtyEl.style.display = item.n > 1 ? '' : 'none';
@@ -787,6 +822,7 @@ export function createUI(state, send) {
             iconCanvas.style.display = 'none';
           }
           if (nameEl) nameEl.textContent = '';
+          slot.title = '';
           if (qtyEl) {
             qtyEl.textContent = '';
             qtyEl.style.display = 'none';

@@ -91,54 +91,77 @@ export function createUIOverlays(state) {
     if (light >= 1.0) return;
 
     const darkness = 1 - light;
-    let r = 0, g = 0, b = 20;
-    if (light > 0.5 && light < 0.8) {
-      r = 40; g = 15; b = 0;
+    // Full night: 0.95 opacity black. Dusk/dawn: scales smoothly
+    const overlayAlpha = darkness * 0.95;
+
+    // Dusk/dawn tint: warm orange during transitions, pure black at full night
+    let r = 0, g = 0, b = 0;
+    if (light > 0.3 && light < 0.8) {
+      const transition = Math.min(1, (light - 0.3) / 0.3);
+      r = Math.round(25 * transition);
+      g = Math.round(10 * transition);
     }
 
-    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${darkness * 0.85})`;
+    // Draw darkness overlay
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${overlayAlpha})`;
     ctx.fillRect(0, 0, w, h);
 
+    // Punch light holes using destination-out
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
 
+    // Helper: punch a circular light hole
+    function punchLight(sx, sy, radiusTiles, flickerSeed) {
+      const baseRadius = radiusTiles * viewScale / TILE_SIZE;
+      const flicker = baseRadius + Math.sin(animTime * 0.006 + flickerSeed) * (baseRadius * 0.08);
+      const gradient = ctx.createRadialGradient(sx, sy, 0, sx, sy, flicker);
+      gradient.addColorStop(0, `rgba(0,0,0,${overlayAlpha * 0.95})`);
+      gradient.addColorStop(0.4, `rgba(0,0,0,${overlayAlpha * 0.6})`);
+      gradient.addColorStop(0.7, `rgba(0,0,0,${overlayAlpha * 0.2})`);
+      gradient.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(sx - flicker, sy - flicker, flicker * 2, flicker * 2);
+    }
+
+    // Local player torch light (6 tile radius)
     if (me) {
       const heldItem = state.inventory[state.selectedSlot]?.id;
       if (heldItem === ITEM.TORCH) {
-        const gradient = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, 160);
-        gradient.addColorStop(0, `rgba(0,0,0,${darkness * 0.7})`);
-        gradient.addColorStop(0.6, `rgba(0,0,0,${darkness * 0.3})`);
-        gradient.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, w, h);
+        punchLight(w / 2, h / 2, 6, 0);
       }
     }
 
+    // World light sources
     for (const e of sortedEntities) {
+      const ex = e.renderX || e.x;
+      const ey = e.renderY || e.y;
+      const sx = (ex - camX) * viewScale / TILE_SIZE + w / 2;
+      const sy = (ey - camY) * viewScale / TILE_SIZE + h / 2;
+
+      // Skip if off-screen (with generous margin for large light radii)
+      if (sx < -300 || sx > w + 300 || sy < -300 || sy > h + 300) continue;
+
       if (e.t === ENTITY_TYPE.CAMPFIRE && e.lit) {
-        const ex2 = e.renderX || e.x;
-        const ey2 = e.renderY || e.y;
-        const sx2 = (ex2 - camX) * viewScale / TILE_SIZE + w / 2;
-        const sy2 = (ey2 - camY) * viewScale / TILE_SIZE + h / 2;
-        const flicker = 120 + Math.sin(animTime * 0.008) * 15;
-        const gradient = ctx.createRadialGradient(sx2, sy2, 0, sx2, sy2, flicker);
-        gradient.addColorStop(0, `rgba(0,0,0,${darkness * 0.6})`);
-        gradient.addColorStop(0.5, `rgba(0,0,0,${darkness * 0.2})`);
-        gradient.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(sx2 - flicker, sy2 - flicker, flicker * 2, flicker * 2);
+        punchLight(sx, sy, 8, ex);
+      } else if (e.t === ENTITY_TYPE.FURNACE && e.lit) {
+        punchLight(sx, sy, 5, ex + 100);
+      } else if (e.t === ENTITY_TYPE.PLAYER && e.eid !== state.myEid && e.held === ITEM.TORCH) {
+        // Other players holding torches
+        punchLight(sx, sy, 6, e.eid);
       }
     }
 
     ctx.restore();
 
-    // Warm glow overlays
+    // Warm glow overlays (additive color on top of the punched holes)
     if (me) {
       const heldItem = state.inventory[state.selectedSlot]?.id;
       if (heldItem === ITEM.TORCH) {
-        const flicker = 0.12 + Math.sin(animTime * 0.01) * 0.03;
-        const gradient = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, 160);
-        gradient.addColorStop(0, `rgba(255, 200, 100, ${flicker})`);
+        const flicker = 0.15 + Math.sin(animTime * 0.01) * 0.04;
+        const torchRad = 6 * viewScale / TILE_SIZE;
+        const gradient = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, torchRad);
+        gradient.addColorStop(0, `rgba(255, 200, 100, ${flicker * darkness})`);
+        gradient.addColorStop(0.6, `rgba(255, 160, 60, ${flicker * 0.3 * darkness})`);
         gradient.addColorStop(1, 'rgba(255, 200, 100, 0)');
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, w, h);
@@ -146,18 +169,37 @@ export function createUIOverlays(state) {
     }
 
     for (const e of sortedEntities) {
+      const ex = e.renderX || e.x;
+      const ey = e.renderY || e.y;
+      const sx = (ex - camX) * viewScale / TILE_SIZE + w / 2;
+      const sy = (ey - camY) * viewScale / TILE_SIZE + h / 2;
+      if (sx < -300 || sx > w + 300 || sy < -300 || sy > h + 300) continue;
+
       if (e.t === ENTITY_TYPE.CAMPFIRE && e.lit) {
-        const ex2 = e.renderX || e.x;
-        const ey2 = e.renderY || e.y;
-        const sx2 = (ex2 - camX) * viewScale / TILE_SIZE + w / 2;
-        const sy2 = (ey2 - camY) * viewScale / TILE_SIZE + h / 2;
-        const flicker = 0.08 + Math.sin(animTime * 0.007 + ex2) * 0.03;
-        const rad = 110 + Math.sin(animTime * 0.008) * 10;
-        const gradient = ctx.createRadialGradient(sx2, sy2, 0, sx2, sy2, rad);
-        gradient.addColorStop(0, `rgba(255, 160, 60, ${flicker})`);
+        const flicker = 0.1 + Math.sin(animTime * 0.007 + ex) * 0.04;
+        const rad = 8 * viewScale / TILE_SIZE;
+        const gradient = ctx.createRadialGradient(sx, sy, 0, sx, sy, rad);
+        gradient.addColorStop(0, `rgba(255, 160, 60, ${flicker * darkness})`);
+        gradient.addColorStop(0.5, `rgba(255, 120, 30, ${flicker * 0.3 * darkness})`);
         gradient.addColorStop(1, 'rgba(255, 160, 60, 0)');
         ctx.fillStyle = gradient;
-        ctx.fillRect(sx2 - rad, sy2 - rad, rad * 2, rad * 2);
+        ctx.fillRect(sx - rad, sy - rad, rad * 2, rad * 2);
+      } else if (e.t === ENTITY_TYPE.FURNACE && e.lit) {
+        const flicker = 0.08 + Math.sin(animTime * 0.009 + ex) * 0.03;
+        const rad = 5 * viewScale / TILE_SIZE;
+        const gradient = ctx.createRadialGradient(sx, sy, 0, sx, sy, rad);
+        gradient.addColorStop(0, `rgba(255, 140, 40, ${flicker * darkness})`);
+        gradient.addColorStop(1, 'rgba(255, 140, 40, 0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(sx - rad, sy - rad, rad * 2, rad * 2);
+      } else if (e.t === ENTITY_TYPE.PLAYER && e.eid !== state.myEid && e.held === ITEM.TORCH) {
+        const flicker = 0.1 + Math.sin(animTime * 0.01 + e.eid) * 0.03;
+        const rad = 6 * viewScale / TILE_SIZE;
+        const gradient = ctx.createRadialGradient(sx, sy, 0, sx, sy, rad);
+        gradient.addColorStop(0, `rgba(255, 200, 100, ${flicker * darkness})`);
+        gradient.addColorStop(1, 'rgba(255, 200, 100, 0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(sx - rad, sy - rad, rad * 2, rad * 2);
       }
     }
   }
@@ -1171,6 +1213,63 @@ export function createUIOverlays(state) {
     ctx.restore();
   }
 
+  function drawAdsCrosshair(ctx, w, h) {
+    const zoom = state.adsZoom || 1.0;
+    if (zoom <= 1.01) return; // not ADS
+
+    const t = Math.min(1, (zoom - 1.0) / 0.2); // 0..1 transition
+    const cx = w / 2;
+    const cy = h / 2;
+
+    ctx.save();
+    ctx.globalAlpha = t * 0.8;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+
+    // Tight crosshair lines
+    const innerGap = 4 + (1 - t) * 8;
+    const lineLen = 10;
+
+    ctx.beginPath();
+    ctx.moveTo(cx - innerGap - lineLen, cy);
+    ctx.lineTo(cx - innerGap, cy);
+    ctx.moveTo(cx + innerGap, cy);
+    ctx.lineTo(cx + innerGap + lineLen, cy);
+    ctx.moveTo(cx, cy - innerGap - lineLen);
+    ctx.lineTo(cx, cy - innerGap);
+    ctx.moveTo(cx, cy + innerGap);
+    ctx.lineTo(cx, cy + innerGap + lineLen);
+    ctx.stroke();
+
+    // Center dot
+    ctx.fillStyle = '#fff';
+    ctx.globalAlpha = t * 0.6;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawAdsVignette(ctx, w, h) {
+    const zoom = state.adsZoom || 1.0;
+    if (zoom <= 1.01) return;
+
+    const t = Math.min(1, (zoom - 1.0) / 0.2);
+    const cx = w / 2;
+    const cy = h / 2;
+    const radius = Math.max(w, h) * 0.55;
+
+    const grad = ctx.createRadialGradient(cx, cy, radius * 0.5, cx, cy, radius);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, `rgba(0,0,0,${0.35 * t})`);
+
+    ctx.save();
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
   return {
     drawHealthBars,
     drawPlayerNames,
@@ -1196,5 +1295,7 @@ export function createUIOverlays(state) {
     drawLeaderboard,
     drawBagCount,
     drawSaveIndicator,
+    drawAdsCrosshair,
+    drawAdsVignette,
   };
 }

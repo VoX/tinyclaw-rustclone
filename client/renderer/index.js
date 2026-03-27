@@ -189,6 +189,9 @@ export function createRenderer(canvas, state) {
 
     ctx.clearRect(0, 0, w, h);
 
+    // Apply ADS zoom
+    const effectiveScale = viewScale * (state.adsZoom || 1.0);
+
     // Process events for effects
     processEvents();
     particles.update(dt);
@@ -196,10 +199,10 @@ export function createRenderer(canvas, state) {
     const light = state.lightLevel;
 
     // ── Draw terrain ──
-    terrain.drawTerrain(ctx, w, h, camX, camY, viewScale);
+    terrain.drawTerrain(ctx, w, h, camX, camY, effectiveScale);
 
     // ── Draw decorations ──
-    terrain.drawDecorations(ctx, w, h, camX, camY, viewScale);
+    terrain.drawDecorations(ctx, w, h, camX, camY, effectiveScale);
 
     // ── Draw entities ──
     const sortedEntities = [...state.entities.values()].sort((a, b) => (a.y || 0) - (b.y || 0));
@@ -207,8 +210,8 @@ export function createRenderer(canvas, state) {
     for (const e of sortedEntities) {
       const ex = e.eid === state.myEid ? e.x : (e.renderX || e.x);
       const ey = e.eid === state.myEid ? e.y : (e.renderY || e.y);
-      const sx = (ex - camX) * viewScale / TILE_SIZE + w / 2;
-      const sy = (ey - camY) * viewScale / TILE_SIZE + h / 2;
+      const sx = (ex - camX) * effectiveScale / TILE_SIZE + w / 2;
+      const sy = (ey - camY) * effectiveScale / TILE_SIZE + h / 2;
 
       if (sx < -60 || sx > w + 60 || sy < -60 || sy > h + 60) continue;
 
@@ -218,26 +221,26 @@ export function createRenderer(canvas, state) {
       const edgeDist = Math.sqrt(dxEdge * dxEdge + dyEdge * dyEdge);
       const perspScale = 1.0 - Math.min(edgeDist, 1.0) * 0.05; // 0.95x at edges
 
-      entities.drawEntity(ctx, sx, sy, e, viewScale * perspScale);
+      entities.drawEntity(ctx, sx, sy, e, effectiveScale * perspScale);
     }
 
     // Health bars
-    ui.drawHealthBars(ctx, sortedEntities, camX, camY, w, h, viewScale);
+    ui.drawHealthBars(ctx, sortedEntities, camX, camY, w, h, effectiveScale);
 
     // Player names
-    ui.drawPlayerNames(ctx, sortedEntities, camX, camY, w, h, viewScale);
+    ui.drawPlayerNames(ctx, sortedEntities, camX, camY, w, h, effectiveScale);
 
     // Hammer upgrade preview
-    ui.drawHammerPreview(ctx, me, sortedEntities, camX, camY, w, h, viewScale, animTime);
+    ui.drawHammerPreview(ctx, me, sortedEntities, camX, camY, w, h, effectiveScale, animTime);
 
     // Building placement preview
-    ui.drawBuildPreview(ctx, w, h, camX, camY, viewScale, sortedEntities);
+    ui.drawBuildPreview(ctx, w, h, camX, camY, effectiveScale, sortedEntities);
 
     // ── Draw particles ──
-    particles.draw(ctx, camX, camY, w, h, viewScale);
+    particles.draw(ctx, camX, camY, w, h, effectiveScale);
 
     // ── Night overlay + lighting ──
-    ui.drawNightOverlay(ctx, w, h, light, sortedEntities, me, camX, camY, viewScale, animTime);
+    ui.drawNightOverlay(ctx, w, h, light, sortedEntities, me, camX, camY, effectiveScale, animTime);
 
     // ── Golden hour ──
     ui.drawGoldenHour(ctx, w, h, light);
@@ -245,11 +248,15 @@ export function createRenderer(canvas, state) {
     // ── Fog of war: darken edges ──
     ui.drawEdgeVignette(ctx, w, h);
 
+    // ── ADS effects ──
+    ui.drawAdsVignette(ctx, w, h);
+    ui.drawAdsCrosshair(ctx, w, h);
+
     // ── Weather effects ──
     drawWeatherEffects(ctx, w, h, dt);
 
     // ── Radiation zone overlay ──
-    drawRadiationZones(ctx, w, h, camX, camY, viewScale);
+    drawRadiationZones(ctx, w, h, camX, camY, effectiveScale);
 
     // ── Damage red flash ──
     ui.drawDamageFlash(ctx, w, h);
@@ -258,7 +265,7 @@ export function createRenderer(canvas, state) {
     ui.drawCraftProgress(ctx, w, h);
 
     // ── Temperature visual effects ──
-    ui.drawTemperatureEffects(ctx, w, h, sortedEntities, camX, camY, viewScale);
+    ui.drawTemperatureEffects(ctx, w, h, sortedEntities, camX, camY, effectiveScale);
 
     // ── Stamina bar ──
     ui.drawStaminaBar(ctx, w, h);
@@ -276,7 +283,7 @@ export function createRenderer(canvas, state) {
     ui.drawTutorialHint(ctx, w, h);
 
     // ── Chat bubbles above players ──
-    ui.drawChatBubbles(ctx, sortedEntities, camX, camY, w, h, viewScale);
+    ui.drawChatBubbles(ctx, sortedEntities, camX, camY, w, h, effectiveScale);
 
     // ── Minimap ──
     if (!state.showMap) {

@@ -110,6 +110,8 @@ export function createNetworkSyncSystem(gameState) {
           state.at = Animal.animalType[eid];
         } else if (entityType === ENTITY_TYPE.CAMPFIRE) {
           state.lit = Campfire.fuelRemaining[eid] > 0 ? 1 : 0;
+        } else if (entityType === ENTITY_TYPE.FURNACE) {
+          state.lit = hasComponent(world, eid, Furnace) && Furnace.fuelRemaining[eid] > 0 ? 1 : 0;
         } else if (entityType === ENTITY_TYPE.DOOR) {
           state.st = Structure.structureType[eid];
           state.tier = Structure.tier[eid];

@@ -1,7 +1,7 @@
 import { query, hasComponent } from 'bitecs';
-import { Player, Velocity, Rotation, Position, ActiveTool, Health, Dead, Collider } from '../../shared/components.js';
+import { Player, Velocity, Rotation, Position, ActiveTool, Health, Dead, Collider, Hotbar, Inventory } from '../../shared/components.js';
 import { KEY, MOUSE_ACTION } from '../../shared/protocol.js';
-import { PLAYER_SPEED, PLAYER_SPRINT_MULT, WATER_SPEED_MULT, ROAD_SPEED_MULT, BIOME, WORLD_SIZE, TILE_SIZE, SERVER_TPS } from '../../shared/constants.js';
+import { PLAYER_SPEED, PLAYER_SPRINT_MULT, WATER_SPEED_MULT, ROAD_SPEED_MULT, BIOME, WORLD_SIZE, TILE_SIZE, SERVER_TPS, ITEM_DEFS } from '../../shared/constants.js';
 
 export function createInputSystem(gameState) {
   // Max distance a player can move per tick (sprint speed + tolerance)
@@ -26,6 +26,12 @@ export function createInputSystem(gameState) {
       client.mouseAction = input.mouseAction || MOUSE_ACTION.NONE;
       client.sprinting = sprinting;
 
+      // ADS: active when holding right-click with a ranged weapon
+      const slot = Hotbar.selectedSlot[eid];
+      const itemId = Inventory.items[eid]?.[slot] || 0;
+      const itemDef = ITEM_DEFS[itemId];
+      client.ads = (client.mouseAction === MOUSE_ACTION.SECONDARY && itemDef && itemDef.cat === 'ranged');
+
       // Client-authoritative movement: accept client position if reasonable
       if (input.x !== undefined && input.y !== undefined) {
         const prevX = Position.x[eid];
@@ -39,17 +45,19 @@ export function createInputSystem(gameState) {
         newY = Math.max(0, Math.min(maxCoord, newY));
 
         // Validate distance (anti-cheat: can't move faster than sprint + tolerance)
+        // ADS halves max allowed movement speed
+        const adsMultiplier = client.ads ? 0.5 : 1.0;
         const dx = newX - prevX;
         const dy = newY - prevY;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist <= maxDistPerTick) {
+        if (dist <= maxDistPerTick * adsMultiplier) {
           // Accept position
           Position.x[eid] = newX;
           Position.y[eid] = newY;
         } else if (dist > 0) {
           // Too fast — clamp to max allowed distance in the requested direction
-          const scale = maxDistPerTick / dist;
+          const scale = (maxDistPerTick * adsMultiplier) / dist;
           Position.x[eid] = prevX + dx * scale;
           Position.y[eid] = prevY + dy * scale;
         }

@@ -1,6 +1,6 @@
 import { query, hasComponent, addEntity, addComponent, removeEntity } from 'bitecs';
 import { Animal, Position, Velocity, Health, Rotation, Player, Dead, Collider, Damageable,
-         WorldItem, Sprite, NetworkSync } from '../../shared/components.js';
+         WorldItem, Sprite, NetworkSync, Sleeper } from '../../shared/components.js';
 import { AI_STATE, ANIMAL_DEFS, ANIMAL_TYPE, SERVER_TPS, ITEM_DESPAWN_TICKS, TILE_SIZE, BIOME, WORLD_SIZE } from '../../shared/constants.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
 
@@ -71,12 +71,13 @@ export function createAnimalAISystem(gameState) {
       const def = ANIMAL_DEFS[type];
       if (!def) continue;
 
-      // Find nearest player
+      // Find nearest alive, non-sleeping player
       let nearestPlayer = -1;
       let nearestDist = Infinity;
       for (let j = 0; j < players.length; j++) {
         const peid = players[j];
         if (hasComponent(world, peid, Dead)) continue;
+        if (hasComponent(world, peid, Sleeper)) continue;
         const dx = Position.x[peid] - ax;
         const dy = Position.y[peid] - ay;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -158,10 +159,10 @@ export function createAnimalAISystem(gameState) {
         if (nearestDist < 3 && wasHitRecently) {
           Animal.aiState[eid] = AI_STATE.CHASE;
           Animal.targetEid[eid] = nearestPlayer;
-        } else if (nearestDist < 8) {
+        } else if (nearestDist < DEER_FLEE_RANGE && nearestPlayer >= 0) {
           Animal.aiState[eid] = AI_STATE.FLEE;
           Animal.targetEid[eid] = nearestPlayer;
-        } else if (curState === AI_STATE.FLEE && nearestDist > 15) {
+        } else if (curState === AI_STATE.FLEE && nearestDist > DEER_SAFE_RANGE) {
           Animal.aiState[eid] = AI_STATE.WANDER;
         } else if (curState === AI_STATE.IDLE && gameState.tick >= Animal.idleUntil[eid]) {
           Animal.aiState[eid] = AI_STATE.WANDER;
@@ -170,7 +171,8 @@ export function createAnimalAISystem(gameState) {
 
       // ── Execute behavior ──
       const newState = Animal.aiState[eid];
-      const speed = def.speed / SERVER_TPS;
+      // speed is in tiles/sec — MovementSystem multiplies by dt
+      const speed = def.speed;
 
       if (newState === AI_STATE.IDLE) {
         Velocity.vx[eid] = 0;
@@ -184,7 +186,7 @@ export function createAnimalAISystem(gameState) {
         const dyW = wty - ay;
         const distW = Math.sqrt(dxW * dxW + dyW * dyW);
 
-        if (distW < 1.5 || wtx === 0 && wty === 0) {
+        if (distW < 1.5 || (wtx === 0 && wty === 0)) {
           // Reached target or no target — pick new one or idle
           if (Math.random() < 0.3) {
             // Pause and idle for 2-5 seconds
@@ -206,13 +208,15 @@ export function createAnimalAISystem(gameState) {
             Animal.wanderTargetY[eid] = Math.max(2, Math.min(maxCoord - 2, Animal.wanderTargetY[eid]));
           }
         } else {
-          const rawVx = (dxW / distW) * speed * 0.5;
-          const rawVy = (dyW / distW) * speed * 0.5;
+          const wanderSpeed = speed * 0.3; // wander at 30% of max speed
+          const rawVx = (dxW / distW) * wanderSpeed;
+          const rawVy = (dyW / distW) * wanderSpeed;
 
           // Water avoidance: check if next position is water
           const adjusted = avoidWater(ax, ay, rawVx, rawVy, gameState);
           Velocity.vx[eid] = adjusted[0];
           Velocity.vy[eid] = adjusted[1];
+          Rotation.angle[eid] = Math.atan2(adjusted[1], adjusted[0]);
         }
 
       } else if (newState === AI_STATE.FLEE && nearestPlayer >= 0) {
@@ -226,6 +230,7 @@ export function createAnimalAISystem(gameState) {
           const adjusted = avoidWater(ax, ay, vx, vy, gameState);
           Velocity.vx[eid] = adjusted[0];
           Velocity.vy[eid] = adjusted[1];
+          Rotation.angle[eid] = Math.atan2(adjusted[1], adjusted[0]);
         }
 
       } else if (newState === AI_STATE.CHASE && Animal.targetEid[eid] >= 0) {
@@ -237,10 +242,12 @@ export function createAnimalAISystem(gameState) {
           if (cdist > 1.2) {
             Velocity.vx[eid] = (cdx / cdist) * speed;
             Velocity.vy[eid] = (cdy / cdist) * speed;
+            Rotation.angle[eid] = Math.atan2(cdy, cdx);
           } else {
             // Attack
             Velocity.vx[eid] = 0;
             Velocity.vy[eid] = 0;
+            Rotation.angle[eid] = Math.atan2(cdy, cdx);
             const nextAttack = attackCooldowns.get(eid) || 0;
             if (gameState.tick >= nextAttack) {
               if (hasComponent(world, target, Health) && !hasComponent(world, target, Dead)) {
@@ -291,7 +298,7 @@ export function createAnimalAISystem(gameState) {
         Velocity.vx[newEid] = 0;
         Velocity.vy[newEid] = 0;
         Animal.animalType[newEid] = spawn.animalType;
-        Animal.aiState[newEid] = AI_STATE.IDLE;
+        Animal.aiState[newEid] = AI_STATE.WANDER;
         Animal.aggroRange[newEid] = def.aggroRange;
         Animal.homeX[newEid] = Position.x[newEid];
         Animal.homeY[newEid] = Position.y[newEid];

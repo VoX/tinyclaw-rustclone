@@ -114,12 +114,17 @@ export function createCombatSystem(gameState) {
         addComponent(world, projEid, NetworkSync);
         addComponent(world, projEid, Sprite);
 
+        // Apply spread (reduced when ADS)
+        const isAds = client && client.ads;
+        const spreadAngle = isAds ? (def.adsSpread || 0.02) : (def.spread || 0.08);
+        const finalAngle = angle + (Math.random() - 0.5) * 2 * spreadAngle;
+
         const isArrow = def.ammoType === 40; // ITEM.WOODEN_ARROW = 40
         const projSpeed = isArrow ? 14 : 30; // arrows slower, bullets faster
-        Position.x[projEid] = px + Math.cos(angle) * 0.8;
-        Position.y[projEid] = py + Math.sin(angle) * 0.8;
-        Velocity.vx[projEid] = Math.cos(angle) * projSpeed;
-        Velocity.vy[projEid] = Math.sin(angle) * projSpeed;
+        Position.x[projEid] = px + Math.cos(finalAngle) * 0.8;
+        Position.y[projEid] = py + Math.sin(finalAngle) * 0.8;
+        Velocity.vx[projEid] = Math.cos(finalAngle) * projSpeed;
+        Velocity.vy[projEid] = Math.sin(finalAngle) * projSpeed;
         Projectile.damage[projEid] = def.damage;
         Projectile.speed[projEid] = projSpeed;
         Projectile.sourceEid[projEid] = eid;

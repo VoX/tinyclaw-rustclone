@@ -176,7 +176,7 @@ function clientLoop(timestamp) {
     const me = state.entities.get(state.myEid);
     const keys = input.getKeys();
     const sprinting = input.isSprinting();
-    const speed = 4.0 * (sprinting ? 2.0 : 1.0);
+    const speed = 10.0 * (sprinting ? 2.0 : 1.0);
 
     let dx = 0, dy = 0;
     if (keys & KEY.W) dy -= 1;
@@ -189,13 +189,9 @@ function clientLoop(timestamp) {
       dy *= 0.7071;
     }
 
-    // Predict movement
-    const predX = me.x + dx * speed * (dt / 1000);
-    const predY = me.y + dy * speed * (dt / 1000);
-
-    // Blend predicted with server position
-    me.x = me.x + (predX - me.x) * 0.5;
-    me.y = me.y + (predY - me.y) * 0.5;
+    // Predict movement — apply directly for responsive feel
+    me.x += dx * speed * (dt / 1000);
+    me.y += dy * speed * (dt / 1000);
 
     // Clamp
     const maxCoord = state.worldSize * state.tileSize;

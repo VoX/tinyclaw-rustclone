@@ -527,57 +527,110 @@ export function createRenderer(canvas, state) {
 
   // ── Player drawing ──
   function drawPlayer(ctx, sx, sy, e, isLocal) {
-    const radius = 10;
     const angle = e.a || 0;
     ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(angle);
+
+    const dead = e.dead;
 
     // Shadow
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, sx, sy + 5);
     ctx.fillStyle = 'rgba(0,0,0,0.2)';
     ctx.beginPath();
-    ctx.ellipse(sx, sy + 4, radius * 0.9, radius * 0.4, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, 10, 4, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(angle);
 
-    // Body (circle)
-    const bodyColor = e.dead ? '#555' : (isLocal ? '#3a8fd6' : '#d6553a');
-    ctx.fillStyle = bodyColor;
+    // Colors
+    const skinColor = dead ? '#777' : '#d4a574';
+    const shirtColor = dead ? '#555' : (isLocal ? '#3a8fd6' : '#d6553a');
+    const pantsColor = dead ? '#444' : (isLocal ? '#2a5f8f' : '#8f3a2a');
+    const outlineColor = dead ? '#333' : '#222';
+
+    // Legs (two small rectangles behind body)
+    ctx.fillStyle = pantsColor;
+    ctx.fillRect(-3, -7, 4, 8);
+    ctx.fillRect(1, -7, 4, 8);
+    ctx.strokeStyle = outlineColor;
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(-3, -7, 4, 8);
+    ctx.strokeRect(1, -7, 4, 8);
+
+    // Body (torso — rounded rectangle)
+    ctx.fillStyle = shirtColor;
     ctx.beginPath();
-    ctx.arc(sx, sy, radius, 0, Math.PI * 2);
+    ctx.roundRect(-7, -6, 14, 10, 2);
     ctx.fill();
-
-    // Body outline
-    ctx.strokeStyle = e.dead ? '#333' : (isLocal ? '#2a6fa6' : '#a63a2a');
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = outlineColor;
+    ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Inner highlight
-    if (!e.dead) {
-      const highlightColor = isLocal ? 'rgba(100,180,255,0.25)' : 'rgba(255,120,80,0.25)';
-      ctx.fillStyle = highlightColor;
+    // Shirt detail line
+    if (!dead) {
+      ctx.strokeStyle = isLocal ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.1)';
+      ctx.lineWidth = 0.5;
       ctx.beginPath();
-      ctx.arc(sx - 2, sy - 2, radius * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Direction indicator (head bump)
-    if (angle !== undefined) {
-      const headDist = radius * 0.7;
-      const headX = sx + Math.cos(angle) * headDist;
-      const headY = sy + Math.sin(angle) * headDist;
-      ctx.fillStyle = e.dead ? '#444' : (isLocal ? '#5ab0f0' : '#f07050');
-      ctx.beginPath();
-      ctx.arc(headX, headY, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = e.dead ? '#333' : (isLocal ? '#2a6fa6' : '#a63a2a');
-      ctx.lineWidth = 1;
+      ctx.moveTo(0, -5);
+      ctx.lineTo(0, 3);
       ctx.stroke();
     }
 
-    // Held weapon drawn extending from player
-    if (e.held && e.held !== ITEM.NONE && !e.dead) {
-      drawHeldWeapon(ctx, sx, sy, angle, e.held);
+    // Arms (two small circles on sides)
+    ctx.fillStyle = skinColor;
+    ctx.beginPath();
+    ctx.arc(-8, -1, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(8, -1, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = outlineColor;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.arc(-8, -1, 3, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(8, -1, 3, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Head (circle, slightly in front of body)
+    ctx.fillStyle = skinColor;
+    ctx.beginPath();
+    ctx.arc(0, -10, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = outlineColor;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Eyes (two dots facing forward)
+    if (!dead) {
+      ctx.fillStyle = '#222';
+      ctx.beginPath();
+      ctx.arc(-2, -12, 1, 0, Math.PI * 2);
+      ctx.arc(2, -12, 1, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // X eyes for dead
+      ctx.strokeStyle = '#222';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-3, -12); ctx.lineTo(-1, -10);
+      ctx.moveTo(-1, -12); ctx.lineTo(-3, -10);
+      ctx.moveTo(1, -12); ctx.lineTo(3, -10);
+      ctx.moveTo(1, -10); ctx.lineTo(3, -12);
+      ctx.stroke();
     }
 
     ctx.restore();
+
+    // Held weapon (drawn in world space, not rotated with body)
+    if (e.held && e.held !== ITEM.NONE && !dead) {
+      drawHeldWeapon(ctx, sx, sy, angle, e.held);
+    }
   }
 
   // ── Draw held weapon extending from player ──

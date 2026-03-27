@@ -19,6 +19,14 @@ trap cleanup EXIT
 
 echo "=== Starting game server ==="
 cd "$PROJECT_DIR"
+
+# Kill any existing server on port 8780
+for pid in $(pgrep -f "node server/index.js" 2>/dev/null); do
+  echo "Killing existing server process $pid"
+  kill "$pid" 2>/dev/null || true
+done
+sleep 1
+
 node server/index.js &
 SERVER_PID=$!
 

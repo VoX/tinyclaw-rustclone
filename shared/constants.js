@@ -12,7 +12,7 @@ export const DAY_PORTION = 2 / 3; // 20 min day
 export const NIGHT_PORTION = 1 / 3; // 10 min night
 
 // ── Player ──
-export const PLAYER_SPEED = 4.0; // tiles/sec
+export const PLAYER_SPEED = 10.0; // tiles/sec
 export const PLAYER_SPRINT_MULT = 2.0;
 export const PLAYER_MAX_HP = 100;
 export const PLAYER_MAX_HUNGER = 100;

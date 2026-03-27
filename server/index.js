@@ -214,11 +214,10 @@ wss.on('connection', (ws) => {
   Inventory.durability[eid][1] = 50;
   Hotbar.selectedSlot[eid] = 0;
 
+  const playerName = randomPlayerName();
   gameState.entityTypes.set(eid, ENTITY_TYPE.PLAYER);
   gameState.playerNames.set(eid, playerName);
   gameState.newEntities.add(eid);
-
-  const playerName = randomPlayerName();
   const client = {
     ws,
     playerEid: eid,

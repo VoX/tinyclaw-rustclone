@@ -33,7 +33,9 @@ export const MSG = {
   HAMMER_UPGRADE: 11,
   DRINK_WATER: 12,
   RELOAD: 13,
+  HAMMER_REPAIR: 14,
   CLIP_UPDATE: 65,
+  CRAFT_PROGRESS: 66,
 };
 
 // Input key bitmask

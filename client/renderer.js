@@ -279,6 +279,29 @@ export function createRenderer(canvas, state) {
             cctx.arc(px + r3 * DETAIL, py + r1 * DETAIL, 0.2 + r2 * 0.2, 0, Math.PI * 2);
             cctx.fill();
           }
+          // Tire track ruts (two parallel darker lines)
+          const trackSeed = seededRand(tx, ty, 25);
+          if (trackSeed > 0.15) {
+            cctx.strokeStyle = `rgba(70,60,40,${0.12 + r1 * 0.08})`;
+            cctx.lineWidth = 0.4;
+            // Left track
+            cctx.beginPath();
+            cctx.moveTo(px + DETAIL * 0.25, py);
+            cctx.lineTo(px + DETAIL * 0.25, py + DETAIL);
+            cctx.stroke();
+            // Right track
+            cctx.beginPath();
+            cctx.moveTo(px + DETAIL * 0.75, py);
+            cctx.lineTo(px + DETAIL * 0.75, py + DETAIL);
+            cctx.stroke();
+          }
+          // Loose stones
+          if (r3 > 0.75) {
+            cctx.fillStyle = `rgba(120,110,85,0.35)`;
+            cctx.beginPath();
+            cctx.arc(px + r1 * DETAIL, py + r2 * DETAIL, 0.5 + r3 * 0.3, 0, Math.PI * 2);
+            cctx.fill();
+          }
         } else if (biome === BIOME.BEACH) {
           // Sand ripple
           if (r1 > 0.6) {

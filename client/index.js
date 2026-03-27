@@ -1,7 +1,7 @@
 import { MSG, KEY, MOUSE_ACTION, INV_ACTION, ENTITY_TYPE } from '../shared/protocol.js';
 import { ITEM, ITEM_DEFS, RECIPES, CRAFT_TIER, BIOME, TILE_SIZE, WORLD_SIZE,
          INVENTORY_SLOTS, HOTBAR_SLOTS, STRUCT_TYPE, WATER_SPEED_MULT, ROAD_SPEED_MULT } from '../shared/constants.js';
-import { createRenderer } from './renderer.js';
+import { createRenderer } from './renderer/index.js';
 import { createInput } from './input.js';
 import { createUI } from './ui/index.js';
 import { updateFootsteps, playHitGather, playHitAttack, playDeath,

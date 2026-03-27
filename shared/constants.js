@@ -331,6 +331,11 @@ export const RECIPES = [
   { id: 41, result: ITEM.LEATHER_HEAD, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.LEATHER, 8], [ITEM.CLOTH, 3]] },
   { id: 42, result: ITEM.LEATHER_CHEST, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.LEATHER, 13], [ITEM.CLOTH, 5]] },
   { id: 43, result: ITEM.LEATHER_LEGS, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.LEATHER, 10], [ITEM.CLOTH, 3]] },
+  // Scrap recipes
+  { id: 44, result: ITEM.METAL_FRAGS, count: 25, tier: CRAFT_TIER.HAND, ing: [[ITEM.SCRAP, 10]] },
+  { id: 45, result: ITEM.METAL_PIPE, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.SCRAP, 20]] },
+  { id: 46, result: ITEM.SPRING, count: 1, tier: CRAFT_TIER.WORKBENCH_T1, ing: [[ITEM.SCRAP, 25]] },
+  { id: 47, result: ITEM.ROPE, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.SCRAP, 15], [ITEM.CLOTH, 5]] },
 ];
 
 // Inventory size

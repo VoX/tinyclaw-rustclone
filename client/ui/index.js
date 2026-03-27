@@ -346,7 +346,8 @@ export function createUI(state, send) {
     const held = state.inventory[state.selectedSlot]?.id;
     if (held === ITEM.BUILDING_PLAN || held === ITEM.SLEEPING_BAG ||
         held === ITEM.CAMPFIRE_ITEM || held === ITEM.FURNACE_ITEM ||
-        held === ITEM.TOOL_CUPBOARD_ITEM || held === ITEM.WORKBENCH_T1_ITEM) {
+        held === ITEM.TOOL_CUPBOARD_ITEM || held === ITEM.WORKBENCH_T1_ITEM ||
+        held === ITEM.WORKBENCH_T2_ITEM || held === ITEM.WORKBENCH_T3_ITEM) {
 
       const me = state.entities.get(state.myEid);
       if (!me) return;

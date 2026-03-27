@@ -1604,5 +1604,8 @@ export function createRenderer(canvas, state) {
     ctx.stroke();
   }
 
-  return { render };
+  return {
+    render,
+    resetEventIndex() { lastEventIdx = 0; },
+  };
 }

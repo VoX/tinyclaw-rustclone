@@ -6,7 +6,7 @@
 
 import { Bot } from './bot.js';
 import { Wanderer, Gatherer, Builder, Fighter, Survivor } from './behaviors.js';
-import { ITEM, ITEM_DEFS, RECIPES } from '../shared/constants.js';
+import { ITEM, ITEM_DEFS, RECIPES, RESOURCE_TYPE } from '../shared/constants.js';
 import { ENTITY_TYPE } from '../shared/protocol.js';
 
 const SERVER_URL = process.argv[2] || 'ws://localhost:8780';
@@ -39,7 +39,7 @@ class Playtester {
     this.phase = 'explore';
     this.phaseIndex = 0;
     this.phaseTicks = 0;
-    this.phaseMaxTicks = 100; // ~20 seconds per phase
+    this.phaseMaxTicks = 300; // ~60 seconds per phase
     this.behavior = null;
     this.lastHp = 100;
     this.lastHunger = 100;
@@ -91,19 +91,33 @@ class Playtester {
     // Execute current phase
     switch (this.phase) {
       case 'explore':
+        // Sprint toward map center to find resources (spawn is on beach edges)
+        {
+          const center = (this.bot.worldSize || 2000) * (this.bot.tileSize || 2) / 2;
+          const targetX = center + (Math.random() - 0.5) * 100;
+          const targetY = center + (Math.random() - 0.5) * 100;
+          this.bot.moveToward(targetX, targetY, true); // sprint
+          // Once we see resources nearby, move on
+          const nearbyResources = [...this.bot.entities.values()].filter(e => e.type === ENTITY_TYPE.RESOURCE_NODE);
+          if (nearbyResources.length > 3) {
+            log(`Found ${nearbyResources.length} resources nearby, moving to gather phase`);
+            this.nextPhase();
+          }
+        }
+        break;
       case 'explore_far':
         if (!this.behavior) this.behavior = new Wanderer(this.bot);
         this.behavior.tick();
         break;
 
       case 'gather_wood':
-        if (!this.behavior) this.behavior = new Gatherer(this.bot, 'TREE');
+        if (!this.behavior) this.behavior = new Gatherer(this.bot, RESOURCE_TYPE.TREE);
         this.behavior.tick();
         this.checkGatherProgress(ITEM.WOOD, 'wood');
         break;
 
       case 'gather_stone':
-        if (!this.behavior) this.behavior = new Gatherer(this.bot, 'STONE');
+        if (!this.behavior) this.behavior = new Gatherer(this.bot, RESOURCE_TYPE.STONE_NODE);
         this.behavior.tick();
         this.checkGatherProgress(ITEM.STONE, 'stone');
         break;

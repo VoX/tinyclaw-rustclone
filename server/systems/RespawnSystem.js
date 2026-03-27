@@ -81,7 +81,7 @@ function getRandomBeachSpawn(gameState) {
     case 0: x = margin + Math.random() * (maxCoord - 2 * margin); y = Math.random() * margin; break;
     case 1: x = margin + Math.random() * (maxCoord - 2 * margin); y = maxCoord - Math.random() * margin; break;
     case 2: x = Math.random() * margin; y = margin + Math.random() * (maxCoord - 2 * margin); break;
-    case 3: x = maxCoord - Math.random() * margin; y = margin + Math.random() * (maxCoord - 2 * margin); break;
+    default: x = maxCoord - Math.random() * margin; y = margin + Math.random() * (maxCoord - 2 * margin); break;
   }
   return { x, y };
 }

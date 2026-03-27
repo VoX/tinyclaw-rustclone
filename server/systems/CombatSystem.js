@@ -85,12 +85,11 @@ export function createCombatSystem(gameState) {
         const range = 1.5; // tiles
         const arc = Math.PI / 3; // 60 degree arc
 
-        // Find targets in range+arc
-        const allTargets = [...gameState.entityTypes.entries()];
-        for (const [targetEid, type] of allTargets) {
+        // Find targets in range+arc — query entities with Position+Health
+        const meleeTargets = query(world, [Position, Health]);
+        for (let k = 0; k < meleeTargets.length; k++) {
+          const targetEid = meleeTargets[k];
           if (targetEid === eid) continue;
-          if (!hasComponent(world, targetEid, Position)) continue;
-          if (!hasComponent(world, targetEid, Health)) continue;
           if (hasComponent(world, targetEid, Dead)) continue;
           // Don't melee resource nodes — gathering is handled by GatherSystem
           if (hasComponent(world, targetEid, ResourceNode)) continue;

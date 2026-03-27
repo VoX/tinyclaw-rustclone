@@ -7,8 +7,9 @@ import { MSG, ENTITY_TYPE } from '../../shared/protocol.js';
 import { INTEREST_RADIUS, TILE_SIZE, ITEM } from '../../shared/constants.js';
 
 export function createNetworkSyncSystem(gameState) {
-  // Previous state for delta detection
-  const prevState = new Map(); // eid -> { x, y, vx, vy, angle, hp, ... }
+  // Previous state for delta detection — per client to avoid one client's
+  // update masking changes for another client in the same tick
+  const clientPrevState = new Map(); // connId -> Map(eid -> state)
 
   return function NetworkSyncSystem(world) {
     const tick = gameState.tick;
@@ -20,6 +21,12 @@ export function createNetworkSyncSystem(gameState) {
 
       const playerEid = client.playerEid;
       if (!hasComponent(world, playerEid, Position)) continue;
+
+      // Get or create per-client prev state
+      if (!clientPrevState.has(connId)) {
+        clientPrevState.set(connId, new Map());
+      }
+      const prevState = clientPrevState.get(connId);
 
       const px = Position.x[playerEid];
       const py = Position.y[playerEid];
@@ -159,6 +166,13 @@ export function createNetworkSyncSystem(gameState) {
       for (const [connId, client] of gameState.clients) {
         if (!client.ws) continue;
         try { client.ws.send(eventMsg); } catch (e) {}
+      }
+    }
+
+    // Clean up prevState for disconnected clients
+    for (const connId of clientPrevState.keys()) {
+      if (!gameState.clients.has(connId)) {
+        clientPrevState.delete(connId);
       }
     }
 

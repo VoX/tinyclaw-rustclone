@@ -235,9 +235,11 @@ function clientLoop(timestamp) {
     }
   }
 
-  // Clear old events
-  if (state.events.length > 50) {
-    state.events = state.events.slice(-20);
+  // Prevent unbounded event accumulation — renderer processes via incrementing index
+  // so we let it grow and just cap if it gets very large (renderer will catch up)
+  if (state.events.length > 500) {
+    state.events.length = 0;
+    renderer.resetEventIndex();
   }
 
   // Render

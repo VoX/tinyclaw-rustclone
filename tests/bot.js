@@ -110,13 +110,19 @@ export class Bot {
         this.lightLevel = msg.light;
         if (msg.entities) {
           for (const ent of msg.entities) {
-            this.entities.set(ent.eid, ent);
+            const existing = this.entities.get(ent.eid);
+            if (existing) {
+              Object.assign(existing, ent);
+            } else {
+              this.entities.set(ent.eid, ent);
+            }
             if (ent.eid === this.eid) {
-              this.position.x = ent.x;
-              this.position.y = ent.y;
+              if (ent.x !== undefined) this.position.x = ent.x;
+              if (ent.y !== undefined) this.position.y = ent.y;
               if (ent.hp !== undefined) this.hp = ent.hp;
               if (ent.mhp !== undefined) this.maxHp = ent.mhp;
               if (ent.dead) this.isDead = true;
+              else if (ent.hp > 0) this.isDead = false;
             }
           }
         }
@@ -362,7 +368,7 @@ export class Bot {
   }
 
   // Move toward a position
-  moveToward(x, y) {
+  moveToward(x, y, sprint = false) {
     const dx = x - this.position.x;
     const dy = y - this.position.y;
     let keys = 0;
@@ -371,6 +377,7 @@ export class Bot {
     if (dy > 0.1) keys |= KEY.S;
     if (dx < -0.1) keys |= KEY.A;
     if (dx > 0.1) keys |= KEY.D;
+    if (sprint) keys |= KEY.SHIFT;
     const angle = Math.atan2(dy, dx);
     this.sendInput(keys, angle, MOUSE_ACTION.NONE);
   }

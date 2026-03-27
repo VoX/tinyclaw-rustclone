@@ -7,6 +7,7 @@ import { ENTITY_TYPE } from '../../shared/protocol.js';
 export function createAnimalAISystem(gameState) {
   const wanderChangeInterval = 5 * SERVER_TPS; // Change wander direction every 5s
   let wanderTick = 0;
+  const attackCooldowns = new Map(); // eid -> next attack tick
 
   return function AnimalAISystem(world) {
     wanderTick++;
@@ -143,7 +144,8 @@ export function createAnimalAISystem(gameState) {
             // Attack
             Velocity.vx[eid] = 0;
             Velocity.vy[eid] = 0;
-            if (gameState.tick % Math.ceil(SERVER_TPS) === 0) {
+            const nextAttack = attackCooldowns.get(eid) || 0;
+            if (gameState.tick >= nextAttack) {
               if (hasComponent(world, target, Health) && !hasComponent(world, target, Dead)) {
                 Health.current[target] -= def.damage;
                 if (hasComponent(world, target, Damageable)) {
@@ -156,6 +158,7 @@ export function createAnimalAISystem(gameState) {
                   y: Position.y[target],
                   damage: def.damage,
                 });
+                attackCooldowns.set(eid, gameState.tick + SERVER_TPS); // 1 second cooldown
               }
             }
           }

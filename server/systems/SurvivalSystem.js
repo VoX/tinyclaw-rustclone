@@ -78,6 +78,12 @@ export function createSurvivalSystem(gameState) {
       if (Hunger.current[eid] > 50 && Thirst.current[eid] > 50 && Health.current[eid] < Health.max[eid]) {
         Health.current[eid] = Math.min(Health.max[eid], Health.current[eid] + hpRegenRate);
       }
+
+      // Mark inventory dirty periodically so clients get survival stat updates
+      // (hunger/thirst/temp are sent via INVENTORY_UPDATE)
+      if (gameState.tick % (SERVER_TPS * 2) === 0) {
+        gameState.dirtyInventories.add(eid);
+      }
     }
     return world;
   };

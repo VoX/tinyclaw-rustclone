@@ -301,8 +301,8 @@ function gameLoop() {
   }
 }
 
-// Run at high frequency to stay close to 20 TPS
-setInterval(gameLoop, 1);
+// Run frequently enough to stay close to 20 TPS (50ms per tick)
+setInterval(gameLoop, 5);
 
 httpServer.listen(PORT, () => {
   console.log(`Rust Clone server running on port ${PORT}`);

@@ -75,7 +75,7 @@ export function createEntityRenderer(state) {
 
   // ── Player drawing ──
   function drawPlayer(ctx, sx, sy, e, isLocal) {
-    // NOTE: use e.a, e.e.dead, e.e.sleeping directly throughout — do NOT capture
+    // NOTE: use e.a, e.dead, e.sleeping directly throughout — do NOT capture
     // to const variables, esbuild minifier breaks closure references over them
 
     if (e.dead && !deathAnims.has(e.eid)) {
@@ -211,7 +211,7 @@ export function createEntityRenderer(state) {
     ctx.restore();
 
     // Held weapon
-    if (e.held && e.held !== ITEM.NONE && !e.e.dead) {
+    if (e.held && e.held !== ITEM.NONE && !e.dead) {
       drawHeldWeapon(ctx, sx, sy, e.a || 0, e.held);
     }
   }
@@ -325,7 +325,7 @@ export function createEntityRenderer(state) {
     ctx.restore();
 
     // Draw "Zzz" above e.sleeping players
-    if (e.e.sleeping && !e.e.dead) {
+    if (e.sleeping && !e.dead) {
       ctx.save();
       ctx.font = 'bold 10px Consolas, monospace';
       ctx.textAlign = 'center';

@@ -388,6 +388,8 @@ export function createRenderer(canvas, state) {
         drawToolCupboard(ctx, sx, sy, e);
       } else if (type === ENTITY_TYPE.SLEEPING_BAG) {
         drawSleepingBag(ctx, sx, sy, e);
+      } else if (type === ENTITY_TYPE.STORAGE_BOX) {
+        drawStorageBox(ctx, sx, sy, e);
       }
 
       // Health bar for damaged entities (not local player)
@@ -1602,6 +1604,27 @@ export function createRenderer(canvas, state) {
     ctx.moveTo(sx - 7, sy);
     ctx.lineTo(sx + 3, sy);
     ctx.stroke();
+  }
+
+  function drawStorageBox(ctx, sx, sy, e) {
+    // Wooden box
+    ctx.fillStyle = '#7a5a2a';
+    ctx.fillRect(sx - 10, sy - 7, 20, 14);
+    ctx.strokeStyle = '#4a3a1a';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(sx - 10, sy - 7, 20, 14);
+
+    // Lid line
+    ctx.strokeStyle = '#5a4a2a';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx - 9, sy - 2);
+    ctx.lineTo(sx + 9, sy - 2);
+    ctx.stroke();
+
+    // Metal latch
+    ctx.fillStyle = '#888';
+    ctx.fillRect(sx - 2, sy - 4, 4, 3);
   }
 
   return {

@@ -192,6 +192,10 @@ export function createUI(state, send) {
   const craftPanel = document.getElementById('craft-panel');
   const invGrid = document.getElementById('inv-grid');
   const hotbarEl = document.getElementById('hotbar');
+  const containerScreen = document.getElementById('container-screen');
+  const containerPanel = document.getElementById('container-panel');
+  const tcAuthScreen = document.getElementById('tc-auth-screen');
+  const tcAuthPanel = document.getElementById('tc-auth-panel');
 
   // HUD elements
   const hpBar = document.getElementById('hp-bar-fill');
@@ -303,6 +307,7 @@ export function createUI(state, send) {
   // Death screen
   document.getElementById('respawn-beach').addEventListener('click', () => {
     send({ type: MSG.RESPAWN, bagEid: null });
+    state.spawnBags = [];
   });
 
   // Build menu
@@ -347,7 +352,8 @@ export function createUI(state, send) {
     if (held === ITEM.BUILDING_PLAN || held === ITEM.SLEEPING_BAG ||
         held === ITEM.CAMPFIRE_ITEM || held === ITEM.FURNACE_ITEM ||
         held === ITEM.TOOL_CUPBOARD_ITEM || held === ITEM.WORKBENCH_T1_ITEM ||
-        held === ITEM.WORKBENCH_T2_ITEM || held === ITEM.WORKBENCH_T3_ITEM) {
+        held === ITEM.WORKBENCH_T2_ITEM || held === ITEM.WORKBENCH_T3_ITEM ||
+        held === ITEM.STORAGE_BOX) {
 
       const me = state.entities.get(state.myEid);
       if (!me) return;
@@ -533,7 +539,319 @@ export function createUI(state, send) {
     // Death screen
     if (deathScreen) {
       deathScreen.style.display = state.isDead ? 'flex' : 'none';
+      // Update spawn bag buttons
+      const bagContainer = document.getElementById('spawn-bags');
+      if (bagContainer && state.isDead) {
+        const bags = state.spawnBags || [];
+        const currentBtns = bagContainer.querySelectorAll('.bag-spawn-btn');
+        if (currentBtns.length !== bags.length) {
+          bagContainer.innerHTML = '';
+          for (const bag of bags) {
+            const btn = document.createElement('button');
+            btn.className = 'bag-spawn-btn';
+            btn.textContent = `Sleeping Bag (${bag.x}, ${bag.y})`;
+            btn.style.cssText = 'padding:10px 24px;font-size:13px;background:rgba(40,40,40,0.9);color:#ddd;border:2px solid #555;border-radius:6px;cursor:pointer;z-index:1;text-transform:uppercase;letter-spacing:1px;margin:4px;';
+            btn.addEventListener('click', () => {
+              send({ type: MSG.RESPAWN, bagEid: bag.eid });
+              state.spawnBags = [];
+            });
+            btn.addEventListener('mouseenter', () => { btn.style.borderColor = '#999'; btn.style.color = '#fff'; });
+            btn.addEventListener('mouseleave', () => { btn.style.borderColor = '#555'; btn.style.color = '#ddd'; });
+            bagContainer.appendChild(btn);
+          }
+        }
+      }
     }
+
+    // Container screen
+    if (containerScreen) {
+      if (state.containerOpen) {
+        containerScreen.style.display = 'flex';
+        renderContainer(state.containerOpen);
+      } else {
+        containerScreen.style.display = 'none';
+      }
+    }
+
+    // TC Auth screen
+    if (tcAuthScreen) {
+      if (state.tcAuthOpen) {
+        tcAuthScreen.style.display = 'flex';
+        renderTcAuth(state.tcAuthOpen);
+      } else {
+        tcAuthScreen.style.display = 'none';
+      }
+    }
+  }
+
+  // Close container/TC on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Escape') {
+      state.containerOpen = null;
+      state.tcAuthOpen = null;
+    }
+  });
+
+  let lastContainerRender = '';
+
+  function renderContainer(container) {
+    const key = JSON.stringify(container);
+    if (key === lastContainerRender) return;
+    lastContainerRender = key;
+
+    containerPanel.innerHTML = '';
+    const header = document.createElement('h3');
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'container-btn container-close';
+    closeBtn.textContent = 'X';
+    closeBtn.addEventListener('click', () => { state.containerOpen = null; });
+
+    if (container.type === 'campfire') {
+      header.textContent = 'Campfire';
+      containerPanel.appendChild(header);
+      containerPanel.appendChild(closeBtn);
+
+      const fuelInfo = document.createElement('div');
+      fuelInfo.className = 'container-info';
+      fuelInfo.textContent = `Fuel: ${container.fuel > 0 ? 'Burning' : 'No fuel'}`;
+      containerPanel.appendChild(fuelInfo);
+
+      // Cook slots
+      for (let i = 0; i < 2; i++) {
+        const slot = container.slots?.[i];
+        const slotDiv = document.createElement('div');
+        slotDiv.className = 'container-slot';
+        if (slot?.id) {
+          const def = ITEM_DEFS[slot.id];
+          slotDiv.textContent = def?.name || '?';
+          slotDiv.style.color = slot.id === ITEM.COOKED_MEAT ? '#c4913a' : '#cc4444';
+        } else {
+          slotDiv.textContent = 'Empty';
+        }
+        containerPanel.appendChild(slotDiv);
+      }
+
+      const btnRow = document.createElement('div');
+      btnRow.style.marginTop = '10px';
+
+      const addFuelBtn = document.createElement('button');
+      addFuelBtn.className = 'container-btn';
+      addFuelBtn.textContent = 'Add Wood (Fuel)';
+      addFuelBtn.addEventListener('click', () => {
+        send({ type: MSG.CONTAINER_ACTION, action: 'add_fuel' });
+      });
+      btnRow.appendChild(addFuelBtn);
+
+      const addFoodBtn = document.createElement('button');
+      addFoodBtn.className = 'container-btn';
+      addFoodBtn.textContent = 'Add Raw Meat';
+      addFoodBtn.addEventListener('click', () => {
+        send({ type: MSG.CONTAINER_ACTION, action: 'add_food' });
+      });
+      btnRow.appendChild(addFoodBtn);
+
+      const takeBtn = document.createElement('button');
+      takeBtn.className = 'container-btn';
+      takeBtn.textContent = 'Take Cooked';
+      takeBtn.addEventListener('click', () => {
+        send({ type: MSG.CONTAINER_ACTION, action: 'take' });
+      });
+      btnRow.appendChild(takeBtn);
+      containerPanel.appendChild(btnRow);
+
+    } else if (container.type === 'furnace') {
+      header.textContent = 'Furnace';
+      containerPanel.appendChild(header);
+      containerPanel.appendChild(closeBtn);
+
+      const fuelInfo = document.createElement('div');
+      fuelInfo.className = 'container-info';
+      fuelInfo.textContent = `Fuel: ${container.fuel > 0 ? 'Burning' : 'No fuel'}`;
+      containerPanel.appendChild(fuelInfo);
+
+      if (container.input?.id) {
+        const inputInfo = document.createElement('div');
+        inputInfo.className = 'container-info';
+        inputInfo.textContent = `Input: ${ITEM_DEFS[container.input.id]?.name || '?'} x${container.input.n}`;
+        containerPanel.appendChild(inputInfo);
+      }
+
+      if (container.output?.id && container.output.n > 0) {
+        const outputInfo = document.createElement('div');
+        outputInfo.className = 'container-info';
+        outputInfo.textContent = `Output: ${ITEM_DEFS[container.output.id]?.name || '?'} x${container.output.n}`;
+        containerPanel.appendChild(outputInfo);
+      }
+
+      if (container.progress > 0) {
+        const progressBar = document.createElement('div');
+        progressBar.className = 'container-progress';
+        const fill = document.createElement('div');
+        fill.className = 'container-progress-fill';
+        fill.style.width = `${Math.min(100, (container.progress / 60) * 100)}%`;
+        progressBar.appendChild(fill);
+        containerPanel.appendChild(progressBar);
+      }
+
+      const btnRow = document.createElement('div');
+      btnRow.style.marginTop = '10px';
+
+      const addFuelBtn = document.createElement('button');
+      addFuelBtn.className = 'container-btn';
+      addFuelBtn.textContent = 'Add Wood (Fuel)';
+      addFuelBtn.addEventListener('click', () => {
+        send({ type: MSG.CONTAINER_ACTION, action: 'add_fuel' });
+      });
+      btnRow.appendChild(addFuelBtn);
+
+      const addMetalBtn = document.createElement('button');
+      addMetalBtn.className = 'container-btn';
+      addMetalBtn.textContent = 'Add Metal Ore';
+      addMetalBtn.addEventListener('click', () => {
+        send({ type: MSG.CONTAINER_ACTION, action: 'add_ore', itemId: ITEM.METAL_ORE });
+      });
+      btnRow.appendChild(addMetalBtn);
+
+      const addSulfurBtn = document.createElement('button');
+      addSulfurBtn.className = 'container-btn';
+      addSulfurBtn.textContent = 'Add Sulfur Ore';
+      addSulfurBtn.addEventListener('click', () => {
+        send({ type: MSG.CONTAINER_ACTION, action: 'add_ore', itemId: ITEM.SULFUR_ORE });
+      });
+      btnRow.appendChild(addSulfurBtn);
+
+      const takeBtn = document.createElement('button');
+      takeBtn.className = 'container-btn';
+      takeBtn.textContent = 'Take Output';
+      takeBtn.addEventListener('click', () => {
+        send({ type: MSG.CONTAINER_ACTION, action: 'take_output' });
+      });
+      btnRow.appendChild(takeBtn);
+      containerPanel.appendChild(btnRow);
+
+    } else if (container.type === 'storage') {
+      header.textContent = 'Storage Box';
+      containerPanel.appendChild(header);
+      containerPanel.appendChild(closeBtn);
+
+      const slotsDiv = document.createElement('div');
+      slotsDiv.style.display = 'flex';
+      slotsDiv.style.flexWrap = 'wrap';
+      slotsDiv.style.gap = '3px';
+
+      for (let i = 0; i < (container.slots?.length || 12); i++) {
+        const slot = container.slots?.[i] || { id: 0, n: 0 };
+        const slotDiv = document.createElement('div');
+        slotDiv.className = 'container-slot';
+        if (slot.id && slot.n > 0) {
+          const def = ITEM_DEFS[slot.id];
+          slotDiv.textContent = `${def?.name?.substring(0, 6) || '?'}\n${slot.n}`;
+          slotDiv.style.lineHeight = '14px';
+          slotDiv.style.paddingTop = '10px';
+          slotDiv.style.fontSize = '8px';
+          slotDiv.addEventListener('click', () => {
+            send({ type: MSG.CONTAINER_ACTION, action: 'withdraw', fromSlot: i });
+          });
+        } else {
+          slotDiv.textContent = '';
+        }
+        slotsDiv.appendChild(slotDiv);
+      }
+      containerPanel.appendChild(slotsDiv);
+
+      const depositInfo = document.createElement('div');
+      depositInfo.className = 'container-info';
+      depositInfo.textContent = 'Click your inventory slot # to deposit (1-24):';
+      containerPanel.appendChild(depositInfo);
+
+      // Quick deposit buttons for first 6 inventory slots
+      const depRow = document.createElement('div');
+      depRow.style.marginTop = '6px';
+      for (let i = 0; i < INVENTORY_SLOTS; i++) {
+        const item = state.inventory[i];
+        if (!item?.id || item.id === 0) continue;
+        const btn = document.createElement('button');
+        btn.className = 'container-btn';
+        btn.textContent = `${ITEM_DEFS[item.id]?.name?.substring(0, 8) || '?'} x${item.n}`;
+        btn.style.fontSize = '9px';
+        const slotIdx = i;
+        btn.addEventListener('click', () => {
+          send({ type: MSG.CONTAINER_ACTION, action: 'deposit', fromSlot: slotIdx });
+        });
+        depRow.appendChild(btn);
+      }
+      containerPanel.appendChild(depRow);
+    }
+  }
+
+  let lastTcRender = '';
+
+  function renderTcAuth(tcAuth) {
+    const key = JSON.stringify(tcAuth);
+    if (key === lastTcRender) return;
+    lastTcRender = key;
+
+    tcAuthPanel.innerHTML = '';
+    const header = document.createElement('h3');
+    header.textContent = 'Tool Cupboard';
+    tcAuthPanel.appendChild(header);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'container-btn container-close';
+    closeBtn.textContent = 'X';
+    closeBtn.addEventListener('click', () => { state.tcAuthOpen = null; });
+    tcAuthPanel.appendChild(closeBtn);
+
+    const status = document.createElement('div');
+    status.className = 'tc-auth-status';
+    status.textContent = tcAuth.authorized ? 'You are AUTHORIZED' : 'You are NOT authorized';
+    status.style.color = tcAuth.authorized ? '#5cb85c' : '#cc4444';
+    tcAuthPanel.appendChild(status);
+
+    if (tcAuth.authList.length > 0) {
+      const listLabel = document.createElement('div');
+      listLabel.className = 'container-info';
+      listLabel.textContent = 'Authorized players:';
+      tcAuthPanel.appendChild(listLabel);
+
+      for (const entry of tcAuth.authList) {
+        const div = document.createElement('div');
+        div.className = 'tc-auth-entry';
+        div.textContent = entry.name;
+        tcAuthPanel.appendChild(div);
+      }
+    }
+
+    const btnRow = document.createElement('div');
+    btnRow.style.marginTop = '12px';
+
+    if (!tcAuth.authorized) {
+      const authBtn = document.createElement('button');
+      authBtn.className = 'container-btn';
+      authBtn.textContent = 'Authorize Self';
+      authBtn.addEventListener('click', () => {
+        send({ type: MSG.TC_AUTH_ACTION, tcEid: tcAuth.tcEid, action: 'authorize' });
+      });
+      btnRow.appendChild(authBtn);
+    } else {
+      const deauthBtn = document.createElement('button');
+      deauthBtn.className = 'container-btn';
+      deauthBtn.textContent = 'Deauthorize Self';
+      deauthBtn.addEventListener('click', () => {
+        send({ type: MSG.TC_AUTH_ACTION, tcEid: tcAuth.tcEid, action: 'deauthorize' });
+      });
+      btnRow.appendChild(deauthBtn);
+
+      const clearBtn = document.createElement('button');
+      clearBtn.className = 'container-btn';
+      clearBtn.textContent = 'Clear All';
+      clearBtn.addEventListener('click', () => {
+        send({ type: MSG.TC_AUTH_ACTION, tcEid: tcAuth.tcEid, action: 'clearall' });
+      });
+      btnRow.appendChild(clearBtn);
+    }
+
+    tcAuthPanel.appendChild(btnRow);
   }
 
   return { update };

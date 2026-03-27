@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 
 import { Position, Velocity, Rotation, Player, Health, Hunger, Thirst, Temperature,
          Inventory, Hotbar, Collider, Sprite, NetworkSync, ActiveTool, Damageable,
-         initInventory } from '../shared/components.js';
+         initInventory, StorageBox } from '../shared/components.js';
 import { SERVER_TPS, SERVER_TICK_MS, PLAYER_MAX_HP, PLAYER_MAX_HUNGER,
          PLAYER_MAX_THIRST, PLAYER_COLLIDER_RADIUS, ITEM, WORLD_SIZE, TILE_SIZE } from '../shared/constants.js';
 import { MSG, KEY, MOUSE_ACTION, INV_ACTION, ENTITY_TYPE } from '../shared/protocol.js';
@@ -32,6 +32,7 @@ import { createDayNightSystem } from './systems/DayNightSystem.js';
 import { createNetworkSyncSystem } from './systems/NetworkSyncSystem.js';
 import { createGatherSystem } from './systems/GatherSystem.js';
 import { createInventorySystem } from './systems/InventorySystem.js';
+import { createInteractSystem } from './systems/InteractSystem.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = 8780;
@@ -52,6 +53,8 @@ const gameState = {
   tcAuth: new Map(),         // tc eid -> Set of authorized player eids
   doorAuth: new Map(),       // door eid -> Set of authorized player eids
   campfirePositions: new Map(),
+  containerInv: new Map(),     // eid -> [{id, n}, ...] for storage boxes
+  animalSpawns: [],            // {x, y, animalType, respawnAt} for respawning
   biomeMap: null,
   getBiomeAt: null,
   nextConnId: 1,
@@ -77,6 +80,7 @@ const systems = [
   createFurnaceSystem(gameState),
   createCampfireSystem(gameState),
   createBuildSystem(gameState),
+  createInteractSystem(gameState),
   createDoorSystem(gameState),
   createInventorySystem(gameState),
   createRespawnSystem(gameState),
@@ -189,6 +193,8 @@ wss.on('connection', (ws) => {
     interactRequest: null,
     invRequest: null,
     respawnRequest: null,
+    containerAction: null,
+    tcAuthAction: null,
   };
   gameState.clients.set(connId, client);
 
@@ -273,6 +279,21 @@ function handleClientMessage(connId, msg) {
 
     case MSG.RESPAWN:
       client.respawnRequest = { bagEid: msg.bagEid || null };
+      break;
+
+    case MSG.CONTAINER_ACTION:
+      client.containerAction = {
+        action: msg.action,
+        fromSlot: msg.fromSlot,
+        itemId: msg.itemId,
+      };
+      break;
+
+    case MSG.TC_AUTH_ACTION:
+      client.tcAuthAction = {
+        tcEid: msg.tcEid,
+        action: msg.action,
+      };
       break;
 
     case MSG.PING:

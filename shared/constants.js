@@ -91,6 +91,8 @@ export const ITEM = {
   // Doors
   WOOD_DOOR: 82,
   METAL_DOOR: 83,
+  // Storage
+  STORAGE_BOX: 84,
 };
 
 // Item definitions: name, maxStack, category
@@ -160,6 +162,7 @@ export const ITEM_DEFS = {
   // Doors
   [ITEM.WOOD_DOOR]: { name: 'Wood Door', maxStack: 1, cat: 'building' },
   [ITEM.METAL_DOOR]: { name: 'Metal Door', maxStack: 1, cat: 'building' },
+  [ITEM.STORAGE_BOX]: { name: 'Storage Box', maxStack: 1, cat: 'deployable' },
 };
 
 // ── Resource Node Types ──
@@ -301,6 +304,8 @@ export const RECIPES = [
   // Workbench T3
   { id: 34, result: ITEM.ASSAULT_RIFLE, count: 1, tier: CRAFT_TIER.WORKBENCH_T3, ing: [[ITEM.METAL_FRAGS, 250], [ITEM.METAL_PIPE, 1], [ITEM.SPRING, 1], [ITEM.WOOD, 50]] },
   { id: 35, result: ITEM.C4, count: 1, tier: CRAFT_TIER.WORKBENCH_T3, ing: [[ITEM.GUNPOWDER, 30], [ITEM.CLOTH, 5], [ITEM.ROPE, 2], [ITEM.METAL_FRAGS, 100]] },
+  // Storage
+  { id: 40, result: ITEM.STORAGE_BOX, count: 1, tier: CRAFT_TIER.HAND, ing: [[ITEM.WOOD, 250], [ITEM.STONE, 50]] },
 ];
 
 // Inventory size

@@ -1,6 +1,6 @@
 import { query, addEntity, addComponent, hasComponent } from 'bitecs';
 import { Player, Position, Inventory, Structure, Collider, Sprite, NetworkSync,
-         ToolCupboard, Door, SleepingBag, Campfire, Furnace, Workbench,
+         ToolCupboard, Door, SleepingBag, Campfire, Furnace, Workbench, StorageBox,
          Health, Hotbar, Dead } from '../../shared/components.js';
 import { ITEM, STRUCT_TYPE, STRUCT_TIER, STRUCT_HP, TILE_SIZE, INVENTORY_SLOTS,
          ITEM_DEFS, SERVER_TPS } from '../../shared/constants.js';
@@ -70,6 +70,9 @@ export function createBuildSystem(gameState) {
       } else if (heldItem === ITEM.WORKBENCH_T1_ITEM || heldItem === ITEM.WORKBENCH_T2_ITEM || heldItem === ITEM.WORKBENCH_T3_ITEM) {
         cost = null;
         entityType = ENTITY_TYPE.WORKBENCH;
+      } else if (heldItem === ITEM.STORAGE_BOX) {
+        cost = null;
+        entityType = ENTITY_TYPE.STORAGE_BOX;
       } else {
         continue; // Not a valid build action
       }
@@ -167,6 +170,18 @@ export function createBuildSystem(gameState) {
         Workbench.tier[newEid] = tier;
         Collider.radius[newEid] = 0.6;
         Sprite.spriteId[newEid] = 220 + tier;
+      } else if (entityType === ENTITY_TYPE.STORAGE_BOX) {
+        addComponent(world, newEid, StorageBox);
+        addComponent(world, newEid, Health);
+        Health.current[newEid] = 200;
+        Health.max[newEid] = 200;
+        Collider.radius[newEid] = 0.5;
+        Sprite.spriteId[newEid] = 215;
+        // Initialize container inventory
+        if (!gameState.containerInv) gameState.containerInv = new Map();
+        const slots = [];
+        for (let i = 0; i < 12; i++) slots.push({ id: 0, n: 0 });
+        gameState.containerInv.set(newEid, slots);
       }
 
       gameState.entityTypes.set(newEid, entityType);

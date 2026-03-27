@@ -1,4 +1,4 @@
-import { query, hasComponent, removeComponent, addComponent } from 'bitecs';
+import { query, hasComponent, removeComponent, addComponent, removeEntity } from 'bitecs';
 import { Player, Dead, Position, Health, Hunger, Thirst, Temperature, Inventory,
          Hotbar, Velocity, SleepingBag, ActiveTool, initInventory } from '../../shared/components.js';
 import { PLAYER_MAX_HP, PLAYER_MAX_HUNGER, PLAYER_MAX_THIRST, ITEM, WORLD_SIZE, TILE_SIZE } from '../../shared/constants.js';
@@ -30,9 +30,10 @@ export function createRespawnSystem(gameState) {
         if (hasComponent(world, bagEid, SleepingBag) && SleepingBag.ownerPlayerId[bagEid] === eid) {
           spawnX = Position.x[bagEid];
           spawnY = Position.y[bagEid];
-          // Sleeping bag is one-time use (destroy it)
-          // Could be a bed that persists, but for simplicity destroy
-          SleepingBag.cooldown[bagEid] = 5 * 60 * 20; // 5 min cooldown
+          // Sleeping bag is one-time use — destroy it
+          gameState.removedEntities.add(bagEid);
+          gameState.entityTypes.delete(bagEid);
+          removeEntity(world, bagEid);
         } else {
           continue; // Invalid bag
         }

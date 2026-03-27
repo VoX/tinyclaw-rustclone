@@ -98,7 +98,7 @@ class Playtester {
           const targetY = center + (Math.random() - 0.5) * 100;
           this.bot.moveToward(targetX, targetY, true); // sprint
           // Once we see resources nearby, move on
-          const nearbyResources = [...this.bot.entities.values()].filter(e => e.type === ENTITY_TYPE.RESOURCE_NODE);
+          const nearbyResources = [...this.bot.entities.values()].filter(e => e.t === ENTITY_TYPE.RESOURCE_NODE);
           if (nearbyResources.length > 3) {
             log(`Found ${nearbyResources.length} resources nearby, moving to gather phase`);
             this.nextPhase();
@@ -114,12 +114,14 @@ class Playtester {
         if (!this.behavior) this.behavior = new Gatherer(this.bot, RESOURCE_TYPE.TREE);
         this.behavior.tick();
         this.checkGatherProgress(ITEM.WOOD, 'wood');
+        this.checkGatherProgress(ITEM.STONE, 'stone');
         break;
 
       case 'gather_stone':
         if (!this.behavior) this.behavior = new Gatherer(this.bot, RESOURCE_TYPE.STONE_NODE);
         this.behavior.tick();
         this.checkGatherProgress(ITEM.STONE, 'stone');
+        this.checkGatherProgress(ITEM.WOOD, 'wood');
         break;
 
       case 'craft_tools':
@@ -212,10 +214,12 @@ class Playtester {
 
   checkGatherProgress(itemId, name) {
     const count = this.bot.countItem(itemId);
-    const prevCount = this.lastInventory.find(s => s && s.id === itemId);
-    if (count > (prevCount?.n || 0)) {
-      this.totalResourcesGathered += count - (prevCount?.n || 0);
+    if (!this._lastResourceCounts) this._lastResourceCounts = {};
+    const prev = this._lastResourceCounts[itemId] || 0;
+    if (count > prev) {
+      this.totalResourcesGathered += count - prev;
     }
+    this._lastResourceCounts[itemId] = count;
   }
 
   checkAnomalies() {

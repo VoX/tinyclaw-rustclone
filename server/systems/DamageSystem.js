@@ -1,6 +1,6 @@
 import { query, hasComponent, addComponent, addEntity, removeEntity } from 'bitecs';
 import { Health, Dead, Player, Position, Inventory, WorldItem, Collider, Sprite, NetworkSync,
-         Animal, ResourceNode, initInventory } from '../../shared/components.js';
+         Animal, ResourceNode, SleepingBag, initInventory } from '../../shared/components.js';
 import { ITEM_DESPAWN_TICKS, SERVER_TPS, PLAYER_MAX_HP, RESPAWN_WAIT_TICKS } from '../../shared/constants.js';
 import { ENTITY_TYPE, MSG } from '../../shared/protocol.js';
 
@@ -61,11 +61,25 @@ export function createDamageSystem(gameState) {
 
         gameState.dirtyInventories.add(eid);
 
-        // Notify client of death
+        // Find available sleeping bags for this player
+        const bags = [];
+        const allBags = query(world, [SleepingBag, Position]);
+        for (let b = 0; b < allBags.length; b++) {
+          const bagEid = allBags[b];
+          if (SleepingBag.ownerPlayerId[bagEid] === eid && SleepingBag.cooldown[bagEid] <= 0) {
+            bags.push({
+              eid: bagEid,
+              x: Math.round(Position.x[bagEid]),
+              y: Math.round(Position.y[bagEid]),
+            });
+          }
+        }
+
+        // Notify client of death with spawn options
         const connId = Player.connectionId[eid];
         const client = gameState.clients.get(connId);
         if (client && client.ws) {
-          client.ws.send(JSON.stringify({ type: MSG.DEATH }));
+          client.ws.send(JSON.stringify({ type: MSG.DEATH, bags }));
         }
 
         // Broadcast death event

@@ -1,8 +1,10 @@
 import { query, hasComponent, addEntity, addComponent, removeEntity } from 'bitecs';
-import { Animal, Position, Velocity, Health, Player, Dead, Collider, Damageable,
+import { Animal, Position, Velocity, Health, Rotation, Player, Dead, Collider, Damageable,
          WorldItem, Sprite, NetworkSync } from '../../shared/components.js';
-import { AI_STATE, ANIMAL_DEFS, ANIMAL_TYPE, SERVER_TPS, ITEM_DESPAWN_TICKS } from '../../shared/constants.js';
+import { AI_STATE, ANIMAL_DEFS, ANIMAL_TYPE, SERVER_TPS, ITEM_DESPAWN_TICKS, TILE_SIZE } from '../../shared/constants.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
+
+const ANIMAL_RESPAWN_TICKS = 5 * 60 * SERVER_TPS; // 5 minutes
 
 export function createAnimalAISystem(gameState) {
   const wanderChangeInterval = 5 * SERVER_TPS; // Change wander direction every 5s
@@ -17,9 +19,11 @@ export function createAnimalAISystem(gameState) {
     for (let i = 0; i < animals.length; i++) {
       const eid = animals[i];
       if (Health.current[eid] <= 0) {
-        // Animal died - drop loot
+        // Animal died - drop loot and queue respawn
         const type = Animal.animalType[eid];
         const def = ANIMAL_DEFS[type];
+        const deathX = Position.x[eid];
+        const deathY = Position.y[eid];
         if (def) {
           for (const [itemId, count] of def.drops) {
             const dropEid = addEntity(world);
@@ -29,8 +33,8 @@ export function createAnimalAISystem(gameState) {
             addComponent(world, dropEid, Sprite);
             addComponent(world, dropEid, NetworkSync);
 
-            Position.x[dropEid] = Position.x[eid] + (Math.random() - 0.5) * 2;
-            Position.y[dropEid] = Position.y[eid] + (Math.random() - 0.5) * 2;
+            Position.x[dropEid] = deathX + (Math.random() - 0.5) * 2;
+            Position.y[dropEid] = deathY + (Math.random() - 0.5) * 2;
             WorldItem.itemId[dropEid] = itemId;
             WorldItem.quantity[dropEid] = count;
             WorldItem.despawnTimer[dropEid] = ITEM_DESPAWN_TICKS;
@@ -41,6 +45,15 @@ export function createAnimalAISystem(gameState) {
             gameState.newEntities.add(dropEid);
           }
         }
+
+        // Queue animal respawn
+        gameState.animalSpawns.push({
+          x: deathX,
+          y: deathY,
+          animalType: type,
+          respawnAt: gameState.tick + ANIMAL_RESPAWN_TICKS,
+        });
+
         // Remove animal
         gameState.removedEntities.add(eid);
         gameState.entityTypes.delete(eid);
@@ -168,6 +181,46 @@ export function createAnimalAISystem(gameState) {
         Velocity.vy[eid] = 0;
       }
     }
+
+    // Process animal respawns
+    for (let i = gameState.animalSpawns.length - 1; i >= 0; i--) {
+      const spawn = gameState.animalSpawns[i];
+      if (gameState.tick >= spawn.respawnAt) {
+        gameState.animalSpawns.splice(i, 1);
+        // Spawn new animal near the death location
+        const newEid = addEntity(world);
+        addComponent(world, newEid, Position);
+        addComponent(world, newEid, Velocity);
+        addComponent(world, newEid, Rotation);
+        addComponent(world, newEid, Animal);
+        addComponent(world, newEid, Health);
+        addComponent(world, newEid, Collider);
+        addComponent(world, newEid, Sprite);
+        addComponent(world, newEid, NetworkSync);
+        addComponent(world, newEid, Damageable);
+
+        const def = ANIMAL_DEFS[spawn.animalType];
+        if (!def) continue;
+        const offsetX = (Math.random() - 0.5) * 20;
+        const offsetY = (Math.random() - 0.5) * 20;
+        Position.x[newEid] = spawn.x + offsetX;
+        Position.y[newEid] = spawn.y + offsetY;
+        Velocity.vx[newEid] = 0;
+        Velocity.vy[newEid] = 0;
+        Animal.animalType[newEid] = spawn.animalType;
+        Animal.aiState[newEid] = AI_STATE.IDLE;
+        Animal.aggroRange[newEid] = def.aggroRange;
+        Health.current[newEid] = def.hp;
+        Health.max[newEid] = def.hp;
+        Collider.radius[newEid] = 0.5;
+        Sprite.spriteId[newEid] = 60 + spawn.animalType;
+        NetworkSync.lastTick[newEid] = gameState.tick;
+
+        gameState.entityTypes.set(newEid, ENTITY_TYPE.ANIMAL);
+        gameState.newEntities.add(newEid);
+      }
+    }
+
     return world;
   };
 }

@@ -40,6 +40,8 @@ export const Campfire = { fuelRemaining: [], cookSlot0: [], cookSlot1: [], cookP
 export const Workbench = { tier: [] };
 export const Furnace = { fuelRemaining: [], inputItem: [], inputCount: [], outputItem: [], outputCount: [], smeltProgress: [] };
 
+export const StorageBox = { slots: [] }; // slots stored as array of {itemId, count} on server via Map
+
 // For TC auth and door auth, we store per-entity data in Maps on the server (not in ECS)
 // This is because bitECS doesn't support dynamic-length arrays well
 
@@ -55,6 +57,6 @@ export const allComponents = [
   Player, Health, Hunger, Thirst, Temperature, Armor, Dead,
   Inventory, Hotbar, WorldItem, ActiveTool,
   Projectile, MeleeHitbox, Damageable,
-  Structure, Door, ToolCupboard, SleepingBag,
+  Structure, Door, ToolCupboard, SleepingBag, StorageBox,
   ResourceNode, Animal, Campfire, Workbench, Furnace,
 ];

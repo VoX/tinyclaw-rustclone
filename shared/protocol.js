@@ -19,6 +19,13 @@ export const MSG = {
   WORLD_INFO: 56,
   DEATH: 57,
   DESPAWN: 58,
+  CONTAINER_OPEN: 59,
+  CONTAINER_UPDATE: 60,
+  CONTAINER_ACTION: 8,
+  TC_AUTH_OPEN: 61,
+  TC_AUTH_UPDATE: 62,
+  TC_AUTH_ACTION: 9,
+  SPAWN_BAGS: 63,
 };
 
 // Input key bitmask
@@ -68,4 +75,5 @@ export const ENTITY_TYPE = {
   TOOL_CUPBOARD: 10,
   SLEEPING_BAG: 11,
   DOOR: 12,
+  STORAGE_BOX: 13,
 };

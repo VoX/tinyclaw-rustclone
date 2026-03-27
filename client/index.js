@@ -4,6 +4,10 @@ import { ITEM, ITEM_DEFS, RECIPES, CRAFT_TIER, BIOME, TILE_SIZE, WORLD_SIZE,
 import { createRenderer } from './renderer.js';
 import { createInput } from './input.js';
 import { createUI } from './ui/index.js';
+import { updateFootsteps, playHitGather, playHitAttack, playDeath,
+         playPickup, playCraftComplete, playInventoryOpen, playInventoryClose,
+         playGunshot, playBowShot, playDoorOpen, playPlaceStructure,
+         startAmbient } from './audio.js';
 
 // ── Game State ──
 const state = {
@@ -24,6 +28,9 @@ const state = {
   events: [],
   ping: 0,
   serverTick: 0,
+  containerOpen: null,     // { type, eid, data }
+  tcAuthOpen: null,        // { tcEid, authorized, authList }
+  workbenchTier: 0,        // highest tier workbench nearby (from interact)
 };
 
 // Initialize inventory slots
@@ -149,16 +156,68 @@ function handleServerMessage(msg) {
 
     case MSG.DEATH:
       state.isDead = true;
+      state.spawnBags = msg.bags || [];
+      playDeath();
       break;
 
     case MSG.EVENT:
       if (msg.events) {
         state.events.push(...msg.events);
+        // Trigger audio for events
+        for (const evt of msg.events) {
+          if (evt.type === 'hit') {
+            playHitGather();
+          } else if (evt.type === 'blood') {
+            playHitAttack();
+          }
+        }
       }
       break;
 
     case MSG.PONG:
       state.ping = Date.now() - msg.t;
+      break;
+
+    case MSG.CONTAINER_OPEN:
+      if (msg.containerType === 'workbench') {
+        state.workbenchTier = Math.max(state.workbenchTier, msg.tier || 1);
+        // Show a brief notification
+        state.events.push({ type: 'workbench', tier: msg.tier });
+      } else {
+        state.containerOpen = {
+          type: msg.containerType,
+          eid: msg.containerEid,
+          fuel: msg.fuel,
+          slots: msg.slots,
+          input: msg.input,
+          output: msg.output,
+          progress: msg.progress,
+          tier: msg.tier,
+        };
+      }
+      break;
+
+    case MSG.CONTAINER_UPDATE:
+      if (state.containerOpen && state.containerOpen.eid === msg.containerEid) {
+        state.containerOpen.slots = msg.slots;
+        state.containerOpen.fuel = msg.fuel;
+        state.containerOpen.input = msg.input;
+        state.containerOpen.output = msg.output;
+        state.containerOpen.progress = msg.progress;
+      }
+      break;
+
+    case MSG.TC_AUTH_OPEN:
+    case MSG.TC_AUTH_UPDATE:
+      state.tcAuthOpen = {
+        tcEid: msg.tcEid,
+        authorized: msg.authorized,
+        authList: msg.authList || [],
+      };
+      break;
+
+    case MSG.SPAWN_BAGS:
+      state.spawnBags = msg.bags || [];
       break;
   }
 }
@@ -208,6 +267,10 @@ function clientLoop(timestamp) {
     // Predict movement — apply directly for responsive feel
     me.x += dx * speed * (dt / 1000);
     me.y += dy * speed * (dt / 1000);
+
+    // Footstep sounds
+    const isMoving = dx !== 0 || dy !== 0;
+    updateFootsteps(isMoving, sprinting);
 
     // When idle, gently drift toward server position to correct accumulated error
     if (dx === 0 && dy === 0 && me._serverX !== undefined) {

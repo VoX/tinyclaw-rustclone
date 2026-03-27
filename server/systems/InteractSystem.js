@@ -1,9 +1,10 @@
 import { query, hasComponent } from 'bitecs';
 import { Player, Position, Inventory, Dead, ToolCupboard, Campfire, Furnace,
-         Workbench, Hotbar, NPC } from '../../shared/components.js';
+         Workbench, Hotbar, NPC, Recycler, ResearchTable } from '../../shared/components.js';
 import { StorageBox } from '../../shared/components.js';
 import { MSG, ENTITY_TYPE } from '../../shared/protocol.js';
-import { ITEM, ITEM_DEFS, INVENTORY_SLOTS, SERVER_TPS, NPC_TRADES } from '../../shared/constants.js';
+import { ITEM, ITEM_DEFS, INVENTORY_SLOTS, SERVER_TPS, NPC_TRADES,
+         RECYCLE_YIELDS, RECIPES, RESEARCH_SCRAP_COST, RESEARCHABLE_RECIPES } from '../../shared/constants.js';
 import { addToInventory } from '../../shared/inventory.js';
 
 const CONTAINER_SLOTS = 12;
@@ -96,6 +97,70 @@ export function createInteractSystem(gameState) {
               count: t.count,
               cost: t.cost,
             })),
+          }));
+        } catch (e) {}
+        continue;
+      }
+
+      // Recycler interaction — open recycler UI
+      if (hasComponent(world, targetEid, Recycler)) {
+        client.interactRequest = null;
+        // Send player's inventory items that can be recycled
+        const recyclable = [];
+        for (let s = 0; s < INVENTORY_SLOTS; s++) {
+          const itemId = Inventory.items[eid][s];
+          const count = Inventory.counts[eid][s];
+          if (itemId && count > 0 && RECYCLE_YIELDS[itemId]) {
+            recyclable.push({
+              slot: s,
+              itemId,
+              itemName: ITEM_DEFS[itemId]?.name || '?',
+              count,
+              yields: RECYCLE_YIELDS[itemId].map(([yId, yN]) => ({
+                itemId: yId, itemName: ITEM_DEFS[yId]?.name || '?', count: yN,
+              })),
+            });
+          }
+        }
+        try {
+          client.ws.send(JSON.stringify({
+            type: MSG.RECYCLE_OPEN,
+            recyclerEid: targetEid,
+            items: recyclable,
+          }));
+        } catch (e) {}
+        continue;
+      }
+
+      // Research table interaction — open research UI
+      if (hasComponent(world, targetEid, ResearchTable)) {
+        client.interactRequest = null;
+        // Find researchable items in player inventory
+        const learnedRecipes = gameState.learnedRecipes?.get(eid) || new Set();
+        const researchable = [];
+        for (let s = 0; s < INVENTORY_SLOTS; s++) {
+          const itemId = Inventory.items[eid][s];
+          if (!itemId) continue;
+          // Check if any recipe produces this item and is researchable
+          for (const recipe of RECIPES) {
+            if (recipe.result === itemId && RESEARCHABLE_RECIPES.includes(recipe.id) && !learnedRecipes.has(recipe.id)) {
+              researchable.push({
+                slot: s,
+                itemId,
+                itemName: ITEM_DEFS[itemId]?.name || '?',
+                recipeId: recipe.id,
+              });
+              break;
+            }
+          }
+        }
+        try {
+          client.ws.send(JSON.stringify({
+            type: MSG.RESEARCH_OPEN,
+            tableEid: targetEid,
+            items: researchable,
+            scrapCost: RESEARCH_SCRAP_COST,
+            learned: [...learnedRecipes],
           }));
         } catch (e) {}
         continue;
@@ -231,6 +296,118 @@ export function createInteractSystem(gameState) {
       // Give items
       addItemToInventory(eid, trade.itemId, trade.count);
       gameState.dirtyInventories.add(eid);
+    }
+
+    // Process recycle requests
+    for (const [connId, client] of gameState.clients) {
+      if (!client.recycleRequest) continue;
+      const { recyclerEid, slot } = client.recycleRequest;
+      client.recycleRequest = null;
+
+      const eid = client.playerEid;
+      if (!eid || hasComponent(world, eid, Dead)) continue;
+      if (!hasComponent(world, recyclerEid, Recycler)) continue;
+
+      // Distance check
+      const dx = Position.x[recyclerEid] - Position.x[eid];
+      const dy = Position.y[recyclerEid] - Position.y[eid];
+      if (dx * dx + dy * dy > 5 * 5) continue;
+
+      if (slot < 0 || slot >= INVENTORY_SLOTS) continue;
+      const itemId = Inventory.items[eid][slot];
+      const count = Inventory.counts[eid][slot];
+      if (!itemId || count <= 0) continue;
+
+      const yields = RECYCLE_YIELDS[itemId];
+      if (!yields) continue;
+
+      // Remove one of the item
+      Inventory.counts[eid][slot]--;
+      if (Inventory.counts[eid][slot] === 0) Inventory.items[eid][slot] = 0;
+
+      // Give back materials
+      const results = [];
+      for (const [yieldId, yieldCount] of yields) {
+        addItemToInventory(eid, yieldId, yieldCount);
+        results.push({ itemId: yieldId, itemName: ITEM_DEFS[yieldId]?.name || '?', count: yieldCount });
+      }
+      gameState.dirtyInventories.add(eid);
+
+      try {
+        client.ws.send(JSON.stringify({
+          type: MSG.RECYCLE_RESULT,
+          success: true,
+          recycledItem: ITEM_DEFS[itemId]?.name || '?',
+          results,
+        }));
+      } catch (e) {}
+    }
+
+    // Process research requests
+    for (const [connId, client] of gameState.clients) {
+      if (!client.researchRequest) continue;
+      const { tableEid, slot, recipeId } = client.researchRequest;
+      client.researchRequest = null;
+
+      const eid = client.playerEid;
+      if (!eid || hasComponent(world, eid, Dead)) continue;
+      if (!hasComponent(world, tableEid, ResearchTable)) continue;
+
+      // Distance check
+      const dx = Position.x[tableEid] - Position.x[eid];
+      const dy = Position.y[tableEid] - Position.y[eid];
+      if (dx * dx + dy * dy > 5 * 5) continue;
+
+      // Validate recipe
+      if (!RESEARCHABLE_RECIPES.includes(recipeId)) continue;
+      const recipe = RECIPES.find(r => r.id === recipeId);
+      if (!recipe) continue;
+
+      // Check player has the item in that slot
+      if (slot < 0 || slot >= INVENTORY_SLOTS) continue;
+      if (Inventory.items[eid][slot] !== recipe.result) continue;
+      if (Inventory.counts[eid][slot] <= 0) continue;
+
+      // Check player has enough scrap
+      let scrapCount = 0;
+      for (let s = 0; s < INVENTORY_SLOTS; s++) {
+        if (Inventory.items[eid][s] === ITEM.SCRAP) scrapCount += Inventory.counts[eid][s];
+      }
+      if (scrapCount < RESEARCH_SCRAP_COST) continue;
+
+      // Check not already learned
+      if (!gameState.learnedRecipes) gameState.learnedRecipes = new Map();
+      if (!gameState.learnedRecipes.has(eid)) gameState.learnedRecipes.set(eid, new Set());
+      const learned = gameState.learnedRecipes.get(eid);
+      if (learned.has(recipeId)) continue;
+
+      // Consume the item
+      Inventory.counts[eid][slot]--;
+      if (Inventory.counts[eid][slot] === 0) Inventory.items[eid][slot] = 0;
+
+      // Deduct scrap
+      let toDeduct = RESEARCH_SCRAP_COST;
+      for (let s = 0; s < INVENTORY_SLOTS && toDeduct > 0; s++) {
+        if (Inventory.items[eid][s] === ITEM.SCRAP) {
+          const take = Math.min(Inventory.counts[eid][s], toDeduct);
+          Inventory.counts[eid][s] -= take;
+          toDeduct -= take;
+          if (Inventory.counts[eid][s] === 0) Inventory.items[eid][s] = 0;
+        }
+      }
+
+      // Learn the recipe
+      learned.add(recipeId);
+      gameState.dirtyInventories.add(eid);
+
+      try {
+        client.ws.send(JSON.stringify({
+          type: MSG.RESEARCH_RESULT,
+          success: true,
+          recipeName: ITEM_DEFS[recipe.result]?.name || '?',
+          recipeId,
+        }));
+      } catch (e) {}
     }
 
     return world;

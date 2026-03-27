@@ -1,6 +1,6 @@
 import { query, hasComponent, addComponent, addEntity, removeEntity } from 'bitecs';
 import { Health, Dead, Player, Position, Inventory, WorldItem, Collider, Sprite, NetworkSync,
-         Animal, ResourceNode, SleepingBag, Damageable, initInventory, Armor, StorageBox, NPC } from '../../shared/components.js';
+         Animal, ResourceNode, SleepingBag, Damageable, initInventory, Armor, StorageBox, NPC, Recycler, ResearchTable } from '../../shared/components.js';
 import { ITEM_DESPAWN_TICKS, SERVER_TPS, PLAYER_MAX_HP, RESPAWN_WAIT_TICKS, ANIMAL_DEFS } from '../../shared/constants.js';
 import { ENTITY_TYPE, MSG } from '../../shared/protocol.js';
 
@@ -14,8 +14,10 @@ export function createDamageSystem(gameState) {
 
       // Skip animals — AnimalAISystem handles their death and loot drops
       if (hasComponent(world, eid, Animal)) continue;
-      // Skip NPCs — they are invulnerable
+      // Skip NPCs, recyclers, research tables — they are invulnerable
       if (hasComponent(world, eid, NPC)) { Health.current[eid] = Health.max[eid]; continue; }
+      if (hasComponent(world, eid, Recycler)) { Health.current[eid] = Health.max[eid]; continue; }
+      if (hasComponent(world, eid, ResearchTable)) { Health.current[eid] = Health.max[eid]; continue; }
       // Skip resource nodes — they use ResourceNode.remaining, not Health
       if (hasComponent(world, eid, ResourceNode)) {
         Health.current[eid] = 1; // Prevent re-processing; nodes don't die via HP

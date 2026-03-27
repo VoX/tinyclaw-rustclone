@@ -262,6 +262,12 @@ export function createRenderer(canvas, state) {
     // ── Ammo HUD for ranged weapons ──
     ui.drawAmmoHUD(ctx, w, h);
 
+    // ── Sleeping bag count ──
+    ui.drawBagCount(ctx, w, h);
+
+    // ── Auto-save indicator ──
+    ui.drawSaveIndicator(ctx, w, h);
+
     // ── Tutorial hint for new players ──
     ui.drawTutorialHint(ctx, w, h);
 

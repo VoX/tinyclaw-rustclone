@@ -408,6 +408,16 @@ function handleClientMessage(connId, msg) {
       client.npcTradeBuy = { npcEid: msg.npcEid, tradeIdx: msg.tradeIdx };
       break;
 
+    case MSG.RECYCLE:
+      if (!checkRateLimit(client)) break;
+      client.recycleRequest = { recyclerEid: msg.recyclerEid, slot: msg.slot };
+      break;
+
+    case MSG.RESEARCH:
+      if (!checkRateLimit(client)) break;
+      client.researchRequest = { tableEid: msg.tableEid, slot: msg.slot, recipeId: msg.recipeId };
+      break;
+
     case MSG.LEADERBOARD_REQ: {
       // Gather top 5 by kills, top 5 by resources
       const all = [...gameState.playerStats.values()];
@@ -472,6 +482,14 @@ setInterval(gameLoop, 5);
 // ── Auto-save every 60 seconds ──
 setInterval(() => {
   saveWorld(world, gameState);
+  // Notify clients of save
+  for (const [connId, client] of gameState.clients) {
+    if (client.ws) {
+      try {
+        client.ws.send(JSON.stringify({ type: MSG.SAVE_NOTIFY }));
+      } catch (e) {}
+    }
+  }
 }, 60 * 1000);
 
 // ── Save on shutdown ──

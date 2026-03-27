@@ -164,6 +164,28 @@ export function createTerrainRenderer(state) {
             cctx.lineTo(px + r3 * DETAIL, py + DETAIL);
             cctx.stroke();
           }
+          // Cliff edge visual: dark shadow line when mountain borders non-mountain
+          if (tx > 0 && ty > 0 && tx < ws - 1 && ty < ws - 1) {
+            const below = state.biomeMap[(ty + 1) * ws + tx];
+            const right = state.biomeMap[ty * ws + (tx + 1)];
+            if (below !== BIOME.MOUNTAIN && below !== BIOME.SNOW) {
+              // Bottom cliff edge — dark shadow
+              cctx.fillStyle = 'rgba(30,25,20,0.5)';
+              cctx.fillRect(px, py + DETAIL - 1, DETAIL, 1);
+              cctx.fillStyle = 'rgba(50,45,40,0.3)';
+              cctx.fillRect(px, py + DETAIL - 2, DETAIL, 1);
+            }
+            if (right !== BIOME.MOUNTAIN && right !== BIOME.SNOW) {
+              cctx.fillStyle = 'rgba(30,25,20,0.4)';
+              cctx.fillRect(px + DETAIL - 1, py, 1, DETAIL);
+            }
+            const above = state.biomeMap[(ty - 1) * ws + tx];
+            if (above !== BIOME.MOUNTAIN && above !== BIOME.SNOW) {
+              // Top cliff edge — light highlight
+              cctx.fillStyle = 'rgba(200,200,200,0.2)';
+              cctx.fillRect(px, py, DETAIL, 1);
+            }
+          }
         } else if (biome === BIOME.WATER) {
           // Water ripples / wave patterns
           if (r1 > 0.5) {

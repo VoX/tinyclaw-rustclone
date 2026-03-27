@@ -62,6 +62,10 @@ export function createEntityRenderer(state) {
       drawNPC(ctx, sx, sy, e);
     } else if (type === ENTITY_TYPE.LOOT_CRATE) {
       drawLootCrate(ctx, sx, sy, e);
+    } else if (type === ENTITY_TYPE.RECYCLER) {
+      drawRecycler(ctx, sx, sy, e);
+    } else if (type === ENTITY_TYPE.RESEARCH_TABLE) {
+      drawResearchTable(ctx, sx, sy, e);
     }
   }
 
@@ -1302,6 +1306,92 @@ export function createEntityRenderer(state) {
     ctx.beginPath();
     ctx.arc(sx, sy, 12, 0, Math.PI * 2);
     ctx.fill();
+
+    ctx.restore();
+  }
+
+  // ── Recycler ──
+  function drawRecycler(ctx, sx, sy, e) {
+    ctx.save();
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + 6, 10, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Machine body (grey metal box)
+    ctx.fillStyle = '#556';
+    ctx.fillRect(sx - 10, sy - 8, 20, 16);
+    ctx.strokeStyle = '#334';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx - 10, sy - 8, 20, 16);
+
+    // Conveyor belt (dark strip)
+    ctx.fillStyle = '#333';
+    ctx.fillRect(sx - 8, sy + 2, 16, 3);
+
+    // Gear icon
+    ctx.fillStyle = '#8a8';
+    ctx.beginPath();
+    ctx.arc(sx, sy - 2, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#6a6';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Label
+    ctx.font = '7px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#afc';
+    ctx.fillText('RECYCLE', sx, sy - 14);
+
+    ctx.restore();
+  }
+
+  // ── Research Table ──
+  function drawResearchTable(ctx, sx, sy, e) {
+    ctx.save();
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + 6, 10, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Table surface (dark wood)
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(sx - 10, sy - 5, 20, 10);
+    ctx.strokeStyle = '#3a2510';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx - 10, sy - 5, 20, 10);
+
+    // Table legs
+    ctx.fillStyle = '#4a3015';
+    ctx.fillRect(sx - 8, sy + 5, 3, 3);
+    ctx.fillRect(sx + 5, sy + 5, 3, 3);
+
+    // Blueprint paper
+    ctx.fillStyle = '#8ac';
+    ctx.fillRect(sx - 5, sy - 3, 10, 6);
+    ctx.strokeStyle = '#6a9';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(sx - 5, sy - 3, 10, 6);
+
+    // Magnifying glass
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(sx + 2, sy - 1, 2.5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(sx + 4, sy + 1);
+    ctx.lineTo(sx + 6, sy + 3);
+    ctx.stroke();
+
+    // Label
+    ctx.font = '7px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#8cf';
+    ctx.fillText('RESEARCH', sx, sy - 12);
 
     ctx.restore();
   }

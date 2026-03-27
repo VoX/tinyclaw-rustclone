@@ -1,9 +1,9 @@
-import { query, addEntity, addComponent, hasComponent } from 'bitecs';
+import { query, addEntity, addComponent, hasComponent, removeEntity } from 'bitecs';
 import { Player, Position, Inventory, Structure, Collider, Sprite, NetworkSync,
          ToolCupboard, Door, SleepingBag, Campfire, Furnace, Workbench, StorageBox,
          Health, Hotbar, Dead } from '../../shared/components.js';
 import { ITEM, STRUCT_TYPE, STRUCT_TIER, STRUCT_HP, TILE_SIZE, INVENTORY_SLOTS,
-         ITEM_DEFS, SERVER_TPS, UPGRADE_COSTS } from '../../shared/constants.js';
+         ITEM_DEFS, SERVER_TPS, UPGRADE_COSTS, MAX_SLEEPING_BAGS } from '../../shared/constants.js';
 import { ENTITY_TYPE } from '../../shared/protocol.js';
 
 export function createBuildSystem(gameState) {
@@ -147,6 +147,24 @@ export function createBuildSystem(gameState) {
         SleepingBag.cooldown[newEid] = 0;
         Collider.radius[newEid] = 0.4;
         Sprite.spriteId[newEid] = 210;
+        // Enforce sleeping bag limit: if player has more than MAX, destroy oldest
+        const allBags = query(world, [SleepingBag, Position]);
+        const playerBags = [];
+        for (let b = 0; b < allBags.length; b++) {
+          const bagEid = allBags[b];
+          if (SleepingBag.ownerPlayerId[bagEid] === eid) {
+            playerBags.push(bagEid);
+          }
+        }
+        // Also count beds (entity type BED uses SleepingBag component)
+        while (playerBags.length > MAX_SLEEPING_BAGS) {
+          // Remove oldest (lowest eid = placed first)
+          const oldest = playerBags.shift();
+          if (oldest === newEid) continue; // don't remove the one we just placed
+          gameState.removedEntities.add(oldest);
+          gameState.entityTypes.delete(oldest);
+          removeEntity(world, oldest);
+        }
         // Broadcast event
         gameState.events.push({
           type: 'sleeping_bag',

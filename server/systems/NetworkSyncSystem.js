@@ -6,6 +6,15 @@ import { Position, Velocity, Rotation, Health, Player, Sprite, ResourceNode,
 import { MSG, ENTITY_TYPE } from '../../shared/protocol.js';
 import { INTEREST_RADIUS, TILE_SIZE, ITEM } from '../../shared/constants.js';
 
+function countPlayerBags(world, playerEid) {
+  const allBags = query(world, [SleepingBag, Position]);
+  let count = 0;
+  for (let i = 0; i < allBags.length; i++) {
+    if (SleepingBag.ownerPlayerId[allBags[i]] === playerEid) count++;
+  }
+  return count;
+}
+
 export function createNetworkSyncSystem(gameState) {
   // Previous state for delta detection — per client to avoid one client's
   // update masking changes for another client in the same tick
@@ -123,6 +132,10 @@ export function createNetworkSyncSystem(gameState) {
           state.npcType = 1; // merchant
         } else if (entityType === ENTITY_TYPE.LOOT_CRATE) {
           // Just needs position and type
+        } else if (entityType === ENTITY_TYPE.RECYCLER) {
+          // Just needs position and type
+        } else if (entityType === ENTITY_TYPE.RESEARCH_TABLE) {
+          // Just needs position and type
         }
 
         // Check if changed from prev state
@@ -186,6 +199,7 @@ export function createNetworkSyncSystem(gameState) {
               chest: hasComponent(world, playerEid, Armor) ? Armor.chestSlot[playerEid] : 0,
               legs: hasComponent(world, playerEid, Armor) ? Armor.legsSlot[playerEid] : 0,
             },
+            bagCount: countPlayerBags(world, playerEid),
           }));
         } catch (e) {}
       }

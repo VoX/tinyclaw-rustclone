@@ -962,6 +962,35 @@ export function createUIOverlays(state) {
     ctx.restore();
   }
 
+  function drawBagCount(ctx, w, h) {
+    if (!state.bagCount && state.bagCount !== 0) return;
+    ctx.save();
+    ctx.font = '10px Consolas, monospace';
+    ctx.textAlign = 'right';
+    const x = w - 12;
+    const y = h - 40;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(x - 80, y - 10, 84, 16);
+    const color = state.bagCount >= state.maxBags ? '#e88' : '#aaa';
+    ctx.fillStyle = color;
+    ctx.fillText(`Bags: ${state.bagCount}/${state.maxBags}`, x, y + 2);
+    ctx.restore();
+  }
+
+  function drawSaveIndicator(ctx, w, h) {
+    if (!state.saveNotify) return;
+    const elapsed = Date.now() - state.saveNotify;
+    if (elapsed > 3000) { state.saveNotify = 0; return; }
+    const alpha = elapsed < 2000 ? 0.8 : 0.8 * (1 - (elapsed - 2000) / 1000);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = '11px Consolas, monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('💾 Saving...', 12, h - 12);
+    ctx.restore();
+  }
+
   function drawTutorialHint(ctx, w, h) {
     if (!state.tutorialExpiry || Date.now() > state.tutorialExpiry) return;
     const remaining = state.tutorialExpiry - Date.now();
@@ -1082,5 +1111,7 @@ export function createUIOverlays(state) {
     drawConnectionScreen,
     drawControlsOverlay,
     drawLeaderboard,
+    drawBagCount,
+    drawSaveIndicator,
   };
 }

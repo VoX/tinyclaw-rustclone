@@ -42,6 +42,13 @@ export const MSG = {
   WEATHER: 68,
   NPC_TRADE_OPEN: 69,
   NPC_TRADE_BUY: 17,
+  RECYCLE: 18,
+  RESEARCH: 19,
+  SAVE_NOTIFY: 70,
+  RECYCLE_OPEN: 71,
+  RECYCLE_RESULT: 72,
+  RESEARCH_OPEN: 73,
+  RESEARCH_RESULT: 74,
 };
 
 // Input key bitmask
@@ -99,4 +106,6 @@ export const ENTITY_TYPE = {
   BED: 16,
   NPC: 17,
   LOOT_CRATE: 18,
+  RECYCLER: 19,
+  RESEARCH_TABLE: 20,
 };

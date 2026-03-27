@@ -872,14 +872,20 @@ export function createUI(state, send) {
 
     // NPC Trade screen
     renderNPCTrade();
+    // Recycler screen
+    renderRecycler();
+    // Research table screen
+    renderResearchTable();
   }
 
-  // Close container/TC/NPC on Escape
+  // Close container/TC/NPC/recycler/research on Escape
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Escape') {
       state.containerOpen = null;
       state.tcAuthOpen = null;
       state.npcTradeOpen = null;
+      state.recyclerOpen = null;
+      state.researchOpen = null;
     }
   });
 
@@ -959,6 +965,166 @@ export function createUI(state, send) {
     }
 
     npcTradeEl.appendChild(panel);
+  }
+
+  // Recycler UI
+  let recyclerEl = null;
+  let lastRecyclerKey = '';
+  function renderRecycler() {
+    if (!state.recyclerOpen) {
+      if (recyclerEl) recyclerEl.style.display = 'none';
+      lastRecyclerKey = '';
+      return;
+    }
+    const key = JSON.stringify(state.recyclerOpen);
+    if (key === lastRecyclerKey) {
+      if (recyclerEl) recyclerEl.style.display = 'flex';
+      return;
+    }
+    lastRecyclerKey = key;
+
+    if (!recyclerEl) {
+      recyclerEl = document.createElement('div');
+      recyclerEl.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100;display:flex;justify-content:center;align-items:center;backdrop-filter:blur(2px);';
+      document.body.appendChild(recyclerEl);
+    }
+    recyclerEl.style.display = 'flex';
+    recyclerEl.innerHTML = '';
+
+    const panel = document.createElement('div');
+    panel.style.cssText = 'background:rgba(25,25,25,0.97);border:1px solid rgba(100,100,100,0.4);border-radius:6px;padding:16px;min-width:280px;max-width:400px;max-height:70vh;overflow-y:auto;';
+
+    const h = document.createElement('h3');
+    h.textContent = 'Recycler';
+    h.style.cssText = 'font-size:14px;margin-bottom:8px;color:#afc;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #333;padding-bottom:6px;';
+    panel.appendChild(h);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'X';
+    closeBtn.style.cssText = 'float:right;margin-top:-30px;padding:4px 10px;background:rgba(60,60,60,0.8);color:#eee;border:1px solid #555;border-radius:4px;cursor:pointer;font-size:11px;';
+    closeBtn.addEventListener('click', () => { state.recyclerOpen = null; });
+    panel.appendChild(closeBtn);
+
+    const desc = document.createElement('div');
+    desc.style.cssText = 'font-size:10px;color:#888;margin-bottom:10px;';
+    desc.textContent = 'Break down items for 50% materials back.';
+    panel.appendChild(desc);
+
+    if (state.recyclerOpen.items.length === 0) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'font-size:11px;color:#666;padding:12px;text-align:center;';
+      empty.textContent = 'No recyclable items in inventory.';
+      panel.appendChild(empty);
+    }
+
+    for (const item of state.recyclerOpen.items) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 8px;margin-bottom:4px;background:rgba(40,40,40,0.8);border:1px solid rgba(80,80,80,0.4);border-radius:4px;';
+
+      const left = document.createElement('div');
+      left.style.cssText = 'font-size:11px;color:#ccc;';
+      left.innerHTML = `<b>${item.itemName}</b> x${item.count}<br><span style="font-size:9px;color:#8a8">→ ${item.yields.map(y => `${y.count}x ${y.itemName}`).join(', ')}</span>`;
+      row.appendChild(left);
+
+      const btn = document.createElement('button');
+      btn.style.cssText = 'padding:4px 12px;font-size:10px;background:rgba(60,80,60,0.8);color:#eee;border:1px solid #585;border-radius:4px;cursor:pointer;';
+      btn.textContent = 'Recycle';
+      btn.addEventListener('click', () => {
+        send({ type: MSG.RECYCLE, recyclerEid: state.recyclerOpen.recyclerEid, slot: item.slot });
+      });
+      row.appendChild(btn);
+      panel.appendChild(row);
+    }
+
+    recyclerEl.appendChild(panel);
+  }
+
+  // Research Table UI
+  let researchEl = null;
+  let lastResearchKey = '';
+  function renderResearchTable() {
+    if (!state.researchOpen) {
+      if (researchEl) researchEl.style.display = 'none';
+      lastResearchKey = '';
+      return;
+    }
+    const key = JSON.stringify(state.researchOpen);
+    if (key === lastResearchKey) {
+      if (researchEl) researchEl.style.display = 'flex';
+      return;
+    }
+    lastResearchKey = key;
+
+    if (!researchEl) {
+      researchEl = document.createElement('div');
+      researchEl.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100;display:flex;justify-content:center;align-items:center;backdrop-filter:blur(2px);';
+      document.body.appendChild(researchEl);
+    }
+    researchEl.style.display = 'flex';
+    researchEl.innerHTML = '';
+
+    const panel = document.createElement('div');
+    panel.style.cssText = 'background:rgba(25,25,25,0.97);border:1px solid rgba(100,100,100,0.4);border-radius:6px;padding:16px;min-width:280px;max-width:400px;max-height:70vh;overflow-y:auto;';
+
+    const h = document.createElement('h3');
+    h.textContent = 'Research Table';
+    h.style.cssText = 'font-size:14px;margin-bottom:8px;color:#8cf;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #333;padding-bottom:6px;';
+    panel.appendChild(h);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'X';
+    closeBtn.style.cssText = 'float:right;margin-top:-30px;padding:4px 10px;background:rgba(60,60,60,0.8);color:#eee;border:1px solid #555;border-radius:4px;cursor:pointer;font-size:11px;';
+    closeBtn.addEventListener('click', () => { state.researchOpen = null; });
+    panel.appendChild(closeBtn);
+
+    // Count player scrap
+    let scrapCount = 0;
+    for (let i = 0; i < INVENTORY_SLOTS; i++) {
+      if (state.inventory[i]?.id === ITEM.SCRAP) scrapCount += state.inventory[i].n;
+    }
+
+    const info = document.createElement('div');
+    info.style.cssText = 'font-size:10px;color:#888;margin-bottom:6px;';
+    info.textContent = `Put an item + ${state.researchOpen.scrapCost} Scrap to learn its recipe permanently.`;
+    panel.appendChild(info);
+
+    const scrapInfo = document.createElement('div');
+    scrapInfo.style.cssText = 'font-size:11px;color:#e8c030;margin-bottom:10px;';
+    scrapInfo.textContent = `Your Scrap: ${scrapCount}`;
+    panel.appendChild(scrapInfo);
+
+    if (state.researchOpen.items.length === 0) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'font-size:11px;color:#666;padding:12px;text-align:center;';
+      empty.textContent = 'No researchable items in inventory.';
+      panel.appendChild(empty);
+    }
+
+    for (const item of state.researchOpen.items) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 8px;margin-bottom:4px;background:rgba(40,40,40,0.8);border:1px solid rgba(80,80,80,0.4);border-radius:4px;';
+
+      const left = document.createElement('span');
+      left.style.cssText = 'font-size:11px;color:#ccc;';
+      left.textContent = item.itemName;
+      row.appendChild(left);
+
+      const btn = document.createElement('button');
+      btn.style.cssText = 'padding:4px 12px;font-size:10px;background:rgba(60,60,80,0.8);color:#eee;border:1px solid #558;border-radius:4px;cursor:pointer;';
+      btn.textContent = `Research (${state.researchOpen.scrapCost} Scrap)`;
+      const canAfford = scrapCount >= state.researchOpen.scrapCost;
+      if (!canAfford) {
+        btn.style.opacity = '0.4';
+        btn.style.pointerEvents = 'none';
+      }
+      btn.addEventListener('click', () => {
+        send({ type: MSG.RESEARCH, tableEid: state.researchOpen.tableEid, slot: item.slot, recipeId: item.recipeId });
+      });
+      row.appendChild(btn);
+      panel.appendChild(row);
+    }
+
+    researchEl.appendChild(panel);
   }
 
   let lastContainerRender = '';

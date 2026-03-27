@@ -88,6 +88,15 @@ const state = {
   npcTradeOpen: null, // { npcEid, trades }
   // Radiation zones
   radiationZones: [],
+  // Recycler
+  recyclerOpen: null, // { recyclerEid, items }
+  // Research table
+  researchOpen: null, // { tableEid, items, scrapCost, learned }
+  // Save indicator
+  saveNotify: 0, // timestamp when save notification appeared
+  // Sleeping bag count
+  bagCount: 0,
+  maxBags: 3,
 };
 
 // Initialize inventory slots
@@ -231,6 +240,7 @@ function handleServerMessage(msg) {
       state.thirst = msg.thirst;
       state.temp = msg.temp;
       if (msg.armor) state.armor = msg.armor;
+      if (msg.bagCount !== undefined) state.bagCount = msg.bagCount;
       break;
 
     case MSG.DEATH:
@@ -357,6 +367,50 @@ function handleServerMessage(msg) {
         npcEid: msg.npcEid,
         trades: msg.trades || [],
       };
+      break;
+
+    case MSG.RECYCLE_OPEN:
+      state.recyclerOpen = {
+        recyclerEid: msg.recyclerEid,
+        items: msg.items || [],
+      };
+      break;
+
+    case MSG.RECYCLE_RESULT:
+      // Close recycler on result, show notification
+      state.recyclerOpen = null;
+      if (msg.success) {
+        const yieldText = msg.results.map(r => `${r.count}x ${r.itemName}`).join(', ');
+        state.notifications.push({
+          text: `Recycled ${msg.recycledItem} → ${yieldText}`,
+          time: Date.now(),
+          color: '#8d8',
+        });
+      }
+      break;
+
+    case MSG.RESEARCH_OPEN:
+      state.researchOpen = {
+        tableEid: msg.tableEid,
+        items: msg.items || [],
+        scrapCost: msg.scrapCost || 50,
+        learned: msg.learned || [],
+      };
+      break;
+
+    case MSG.RESEARCH_RESULT:
+      state.researchOpen = null;
+      if (msg.success) {
+        state.notifications.push({
+          text: `Learned: ${msg.recipeName}!`,
+          time: Date.now(),
+          color: '#8df',
+        });
+      }
+      break;
+
+    case MSG.SAVE_NOTIFY:
+      state.saveNotify = Date.now();
       break;
   }
 }

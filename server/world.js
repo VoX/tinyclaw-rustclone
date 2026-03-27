@@ -1,7 +1,7 @@
 import { createNoise2D } from 'simplex-noise';
 import { addEntity, addComponent } from 'bitecs';
 import { Position, Collider, Sprite, NetworkSync, ResourceNode, Health, Damageable,
-         Animal, Velocity, Rotation, Workbench, Structure, NPC, StorageBox } from '../shared/components.js';
+         Animal, Velocity, Rotation, Workbench, Structure, NPC, StorageBox, Recycler, ResearchTable } from '../shared/components.js';
 import { WORLD_SIZE, TILE_SIZE, BIOME, RESOURCE_TYPE, RESOURCE_NODE_DEFS,
          ANIMAL_TYPE, ANIMAL_DEFS, AI_STATE, ITEM, STRUCT_TYPE, STRUCT_TIER } from '../shared/constants.js';
 import { ENTITY_TYPE } from '../shared/protocol.js';
@@ -246,6 +246,60 @@ export function generateWorld(world, gameState, seed = 42) {
     spawnLargeMonument(world, gameState, biomeMap, mx, my, mType, seedRng);
   }
 
+  // ── Connect monuments with roads ──
+  // Connect large monuments to nearest road waypoint
+  const allMonumentPos = [...monumentPositions.map(([x, y]) => ({ x, y })), ...largeMonumentPositions];
+  for (let i = 0; i < allMonumentPos.length; i++) {
+    const m = allMonumentPos[i];
+    // Find nearest existing road tile
+    let nearestRoadDist = Infinity;
+    let nearestRoadX = m.x;
+    let nearestRoadY = m.y;
+    for (const key of roadTiles) {
+      const [rx, ry] = key.split(',').map(Number);
+      const d = (m.x - rx) ** 2 + (m.y - ry) ** 2;
+      if (d < nearestRoadDist) {
+        nearestRoadDist = d;
+        nearestRoadX = rx;
+        nearestRoadY = ry;
+      }
+    }
+    // Draw road from monument to nearest road if not too far
+    if (nearestRoadDist < 80 * 80) {
+      drawRoadLine(biomeMap, roadTiles, m.x, m.y, nearestRoadX, nearestRoadY, seedRng);
+    }
+    // Also connect adjacent monuments
+    for (let j = i + 1; j < allMonumentPos.length; j++) {
+      const m2 = allMonumentPos[j];
+      const d = (m.x - m2.x) ** 2 + (m.y - m2.y) ** 2;
+      if (d < 100 * 100) { // connect if within 100 tiles
+        drawRoadLine(biomeMap, roadTiles, m.x, m.y, m2.x, m2.y, seedRng);
+      }
+    }
+  }
+
+  // ── Forest clearings: open grassy areas within forests ──
+  const clearingCount = 5 + Math.floor(seedRng() * 5); // 5-9 clearings
+  for (let c = 0; c < clearingCount; c++) {
+    const margin = Math.floor(WORLD_SIZE * 0.1);
+    const cx = margin + Math.floor(seedRng() * (WORLD_SIZE - 2 * margin));
+    const cy = margin + Math.floor(seedRng() * (WORLD_SIZE - 2 * margin));
+    const biome = biomeMap[cy * WORLD_SIZE + cx];
+    if (biome !== BIOME.FOREST) continue;
+    const radius = 3 + Math.floor(seedRng() * 5); // 3-7 tile radius
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (dx * dx + dy * dy > radius * radius) continue;
+        const tx = cx + dx;
+        const ty = cy + dy;
+        if (tx < 0 || tx >= WORLD_SIZE || ty < 0 || ty >= WORLD_SIZE) continue;
+        if (biomeMap[ty * WORLD_SIZE + tx] === BIOME.FOREST) {
+          biomeMap[ty * WORLD_SIZE + tx] = BIOME.GRASSLAND;
+        }
+      }
+    }
+  }
+
   // ── Spawn radiation zones (1-2) ──
   gameState.radiationZones = [];
   let radAttempts = 0;
@@ -345,6 +399,10 @@ function spawnMonument(world, gameState, biomeMap, tileX, tileY, rng) {
   Sprite.spriteId[wbEid] = 221;
   NetworkSync.lastTick[wbEid] = 0;
   gameState.entityTypes.set(wbEid, ENTITY_TYPE.WORKBENCH);
+
+  // Place recycler and research table near workbench
+  spawnRecycler(world, gameState, tileX - 2, tileY);
+  spawnResearchTable(world, gameState, tileX + 2, tileY);
 
   // Place a few barrels around the workbench
   const barrelOffsets = [[-2, -2], [2, -2], [-2, 2], [2, 2]];
@@ -603,6 +661,8 @@ function spawnLargeMonument(world, gameState, biomeMap, tileX, tileY, type, rng)
     spawnLootCrate(world, gameState, tileX, tileY, rng);
     // NPC merchant
     spawnNPCMerchant(world, gameState, tileX + 2, tileY);
+    // Recycler
+    spawnRecycler(world, gameState, tileX - 2, tileY - 2);
   } else if (type === 'mining_outpost') {
     // Dense ore nodes around outpost
     for (let i = 0; i < 6; i++) {
@@ -635,6 +695,8 @@ function spawnLargeMonument(world, gameState, biomeMap, tileX, tileY, type, rng)
     gameState.entityTypes.set(wbEid, ENTITY_TYPE.WORKBENCH);
     // NPC merchant
     spawnNPCMerchant(world, gameState, tileX - 2, tileY);
+    // Research table
+    spawnResearchTable(world, gameState, tileX + 2, tileY);
   } else if (type === 'lighthouse') {
     // Tall structure walls (tighter)
     const wallPositions = [[-2, -2], [2, -2], [-2, 2], [2, 2], [0, -2], [0, 2]];
@@ -672,6 +734,50 @@ function spawnMonumentWall(world, gameState, wx, wy) {
   Sprite.spriteId[wallEid] = 202;
   NetworkSync.lastTick[wallEid] = 0;
   gameState.entityTypes.set(wallEid, ENTITY_TYPE.STRUCTURE);
+}
+
+// Spawn recycler at a world position (tile coords)
+function spawnRecycler(world, gameState, tileX, tileY) {
+  const eid = addEntity(world);
+  addComponent(world, eid, Position);
+  addComponent(world, eid, Collider);
+  addComponent(world, eid, Sprite);
+  addComponent(world, eid, NetworkSync);
+  addComponent(world, eid, Health);
+  addComponent(world, eid, Recycler);
+
+  Position.x[eid] = tileX * TILE_SIZE;
+  Position.y[eid] = tileY * TILE_SIZE;
+  Health.current[eid] = 9999;
+  Health.max[eid] = 9999;
+  Collider.radius[eid] = 0.6;
+  Collider.isStatic[eid] = 1;
+  Sprite.spriteId[eid] = 255; // recycler sprite
+  NetworkSync.lastTick[eid] = 0;
+
+  gameState.entityTypes.set(eid, ENTITY_TYPE.RECYCLER);
+}
+
+// Spawn research table at a world position (tile coords)
+function spawnResearchTable(world, gameState, tileX, tileY) {
+  const eid = addEntity(world);
+  addComponent(world, eid, Position);
+  addComponent(world, eid, Collider);
+  addComponent(world, eid, Sprite);
+  addComponent(world, eid, NetworkSync);
+  addComponent(world, eid, Health);
+  addComponent(world, eid, ResearchTable);
+
+  Position.x[eid] = tileX * TILE_SIZE;
+  Position.y[eid] = tileY * TILE_SIZE;
+  Health.current[eid] = 9999;
+  Health.max[eid] = 9999;
+  Collider.radius[eid] = 0.6;
+  Collider.isStatic[eid] = 1;
+  Sprite.spriteId[eid] = 256; // research table sprite
+  NetworkSync.lastTick[eid] = 0;
+
+  gameState.entityTypes.set(eid, ENTITY_TYPE.RESEARCH_TABLE);
 }
 
 // Export biome map as compressed data for client

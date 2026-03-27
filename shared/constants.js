@@ -417,6 +417,30 @@ export const NPC_TRADES = [
 // ── Radiation ──
 export const RADIATION_DAMAGE_RATE = 5.0 / SERVER_TPS; // 5 HP/sec without hazmat
 
+// ── Recycler ──
+// Maps item ID to what you get back at 50% (floor)
+export const RECYCLE_YIELDS = {};
+// Build yields from recipes: each recipe's ingredients at 50%
+for (const recipe of RECIPES) {
+  if (RECYCLE_YIELDS[recipe.result]) continue; // first recipe wins
+  const yields = [];
+  for (const [itemId, count] of recipe.ing) {
+    const half = Math.floor(count * 0.5);
+    if (half > 0) yields.push([itemId, half]);
+  }
+  if (yields.length > 0) RECYCLE_YIELDS[recipe.result] = yields;
+}
+
+// ── Research ──
+export const RESEARCH_SCRAP_COST = 50; // scrap cost to research an item
+// Recipes that require research before they can be crafted (tier >= T1)
+export const RESEARCHABLE_RECIPES = RECIPES
+  .filter(r => r.tier >= CRAFT_TIER.WORKBENCH_T1)
+  .map(r => r.id);
+
+// ── Sleeping bag limit ──
+export const MAX_SLEEPING_BAGS = 3;
+
 // Water speed multiplier
 export const WATER_SPEED_MULT = 0.5;
 

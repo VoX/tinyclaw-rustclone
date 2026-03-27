@@ -289,7 +289,7 @@ export function createUIOverlays(state) {
 
     // Campfire warmth radius (visible subtle glow)
     for (const e of sortedEntities) {
-      if (e.t !== 7) continue; // ENTITY_TYPE.CAMPFIRE
+      if (e.t !== ENTITY_TYPE.CAMPFIRE) continue;
       if (!e.lit) continue;
       const ex = e.renderX || e.x;
       const ey = e.renderY || e.y;
@@ -961,7 +961,7 @@ export function createUIOverlays(state) {
     // Check for overlap with existing entities
     if (valid) {
       for (const e of sortedEntities) {
-        if (e.t === 5 || e.t === 12) { // STRUCTURE or DOOR
+        if (e.t === ENTITY_TYPE.STRUCTURE || e.t === ENTITY_TYPE.DOOR) {
           const ex = e.renderX || e.x;
           const ey = e.renderY || e.y;
           const odx = ex - snappedX;

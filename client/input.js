@@ -29,6 +29,7 @@ export function createInput(state, send) {
       if (e.code === 'Escape') {
         state.chatOpen = false;
         state.chatInput = '';
+        keys = 0; sprinting = false; // Reset stuck keys
         if (chatInputEl) chatInputEl.style.display = 'none';
         e.preventDefault();
         return;
@@ -39,6 +40,7 @@ export function createInput(state, send) {
         }
         state.chatOpen = false;
         state.chatInput = '';
+        keys = 0; sprinting = false; // Reset stuck keys
         if (chatInputEl) {
           chatInputEl.value = '';
           chatInputEl.style.display = 'none';
@@ -190,6 +192,13 @@ export function createInput(state, send) {
   });
 
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // Reset all keys when window loses focus to prevent stuck keys
+  window.addEventListener('blur', () => {
+    keys = 0;
+    sprinting = false;
+    mouseAction = MOUSE_ACTION.NONE;
+  });
 
   // Mouse wheel for hotbar
   canvas.addEventListener('wheel', (e) => {

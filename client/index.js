@@ -152,6 +152,30 @@ function connect() {
   ws.onclose = () => {
     state.connected = false;
     state.worldReady = false;
+    // Reset session state on disconnect to avoid stale data on reconnect
+    state.myEid = null;
+    state.myConnId = null;
+    state.entities.clear();
+    state.isDead = false;
+    state.deathInfo = null;
+    state.containerOpen = null;
+    state.tcAuthOpen = null;
+    state.npcTradeOpen = null;
+    state.recyclerOpen = null;
+    state.researchOpen = null;
+    state.chatBubbles.clear();
+    state.events.length = 0;
+    state.clipAmmo = 0;
+    state.clipMax = 0;
+    state.craftProgress = 0;
+    state.craftRecipeId = 0;
+    state.heliActive = null;
+    state.heliCratePos = null;
+    state.teamMembers = [];
+    state.ads = false;
+    state.adsZoom = 1.0;
+    state.stamina = 100;
+    state.staminaLocked = false;
     console.log('Disconnected. Reconnecting in 2s...');
     setTimeout(connect, 2000);
   };
@@ -507,10 +531,14 @@ function clientLoop(timestamp) {
     state.damageFlashAlpha = Math.max(0, state.damageFlashAlpha - dt * 0.003);
   }
 
-  // Clean expired chat bubbles
+  // Clean expired chat bubbles and old notifications
   const now = Date.now();
   for (const [eid, bubble] of state.chatBubbles) {
     if (now > bubble.expiry) state.chatBubbles.delete(eid);
+  }
+  // Remove notifications older than 10 seconds
+  while (state.notifications.length > 0 && now - state.notifications[0].time > 10000) {
+    state.notifications.shift();
   }
 
   // Client-authoritative movement — client computes position, server validates
@@ -661,10 +689,13 @@ setInterval(() => {
     x: me ? me.x : undefined,
     y: me ? me.y : undefined,
   });
-
-  // Ping
-  send({ type: MSG.PING, t: Date.now() });
 }, 50); // 20 TPS
+
+// Ping once per second (not every tick)
+setInterval(() => {
+  if (!state.connected || !state.myEid) return;
+  send({ type: MSG.PING, t: Date.now() });
+}, 1000);
 
 // ── Start ──
 connect();

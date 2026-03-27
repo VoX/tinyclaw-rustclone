@@ -142,19 +142,18 @@ function handleServerMessage(msg) {
             existing.prevX = existing.x;
             existing.prevY = existing.y;
             if (e.eid === state.myEid && e.x !== undefined && e.y !== undefined) {
-              // Store server position separately for correction
+              // Store server position for idle correction
               existing._serverX = e.x;
               existing._serverY = e.y;
-              // Only snap if server disagrees significantly (collision, teleport, respawn)
+              // Never directly overwrite position — let client prediction handle it
+              // Only force-snap on respawn (position changes massively, e.g. > 50 units)
               const dx = e.x - existing.x;
               const dy = e.y - existing.y;
               const dist = Math.sqrt(dx * dx + dy * dy);
-              if (dist > 5) {
-                // Big desync — trust server (collision or respawn)
+              if (dist > 50) {
                 existing.x = e.x;
                 existing.y = e.y;
               }
-              // Otherwise ignore server position — trust client prediction
               delete e.x;
               delete e.y;
             }
@@ -392,12 +391,20 @@ function clientLoop(timestamp) {
       }
     }
 
-    // When idle, gently drift toward server position to correct accumulated error
+    // When idle, snap to server position to correct accumulated error
     if (dx === 0 && dy === 0 && me._serverX !== undefined) {
       const corrX = me._serverX - me.x;
       const corrY = me._serverY - me.y;
-      me.x += corrX * 0.1;
-      me.y += corrY * 0.1;
+      const corrDist = Math.sqrt(corrX * corrX + corrY * corrY);
+      if (corrDist > 0.5) {
+        // Smooth but fast correction
+        me.x += corrX * 0.3;
+        me.y += corrY * 0.3;
+      } else {
+        // Close enough — snap
+        me.x = me._serverX;
+        me.y = me._serverY;
+      }
     }
 
     // Clamp

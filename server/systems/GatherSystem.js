@@ -48,14 +48,14 @@ export function createGatherSystem(gameState) {
         const dx = Position.x[nodeEid] - px;
         const dy = Position.y[nodeEid] - py;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 2.0) continue;
+        if (dist > 3.5) continue;
 
         // Check arc
         const targetAngle = Math.atan2(dy, dx);
         let angleDiff = targetAngle - angle;
         while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
         while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-        if (Math.abs(angleDiff) > Math.PI / 2) continue;
+        if (Math.abs(angleDiff) > Math.PI * 0.75) continue; // 135 degrees
 
         if (dist < bestDist) {
           bestDist = dist;

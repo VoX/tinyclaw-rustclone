@@ -1,21 +1,22 @@
 import { ENTITY_TYPE } from '../shared/protocol.js';
-import { BIOME, TILE_SIZE, ITEM, ITEM_DEFS, RESOURCE_TYPE, ANIMAL_TYPE } from '../shared/constants.js';
+import { BIOME, TILE_SIZE, ITEM, ITEM_DEFS, RESOURCE_TYPE, ANIMAL_TYPE, STRUCT_TYPE, STRUCT_TIER } from '../shared/constants.js';
 
+// ── Biome base colors ──
 const BIOME_COLORS = {
-  [BIOME.BEACH]: '#e8d68e',
+  [BIOME.BEACH]:     '#e8d68e',
   [BIOME.GRASSLAND]: '#5a8f3c',
-  [BIOME.FOREST]: '#2d5a1e',
-  [BIOME.DESERT]: '#c4a35a',
-  [BIOME.SNOW]: '#dde8f0',
-  [BIOME.MOUNTAIN]: '#7a7a7a',
+  [BIOME.FOREST]:    '#2d5a1e',
+  [BIOME.DESERT]:    '#c4a35a',
+  [BIOME.SNOW]:      '#dde8f0',
+  [BIOME.MOUNTAIN]:  '#7a7a7a',
 };
 
 const RESOURCE_COLORS = {
-  [RESOURCE_TYPE.TREE]: '#1a4d0a',
-  [RESOURCE_TYPE.STONE_NODE]: '#808080',
-  [RESOURCE_TYPE.METAL_NODE]: '#b87333',
+  [RESOURCE_TYPE.TREE]:        '#1a4d0a',
+  [RESOURCE_TYPE.STONE_NODE]:  '#808080',
+  [RESOURCE_TYPE.METAL_NODE]:  '#b87333',
   [RESOURCE_TYPE.SULFUR_NODE]: '#d4c84a',
-  [RESOURCE_TYPE.HEMP]: '#4a8a2a',
+  [RESOURCE_TYPE.HEMP]:        '#4a8a2a',
 };
 
 const ANIMAL_COLORS = {
@@ -25,9 +26,100 @@ const ANIMAL_COLORS = {
   [ANIMAL_TYPE.BEAR]: '#4a3020',
 };
 
+// ── Seeded random for deterministic terrain detail ──
+function seededRand(x, y, seed) {
+  let h = (x * 374761393 + y * 668265263 + seed * 1274126177) | 0;
+  h = ((h ^ (h >> 13)) * 1103515245) | 0;
+  return ((h & 0x7fffffff) / 0x7fffffff);
+}
+
+// ── Particle System ──
+class ParticleSystem {
+  constructor() {
+    this.particles = [];
+  }
+
+  emit(x, y, color, count, speed, life) {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const spd = speed * (0.5 + Math.random() * 0.5);
+      this.particles.push({
+        x, y,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd,
+        life,
+        maxLife: life,
+        color,
+        size: 1.5 + Math.random() * 2,
+      });
+    }
+  }
+
+  // Directional burst (for hits, muzzle flash)
+  emitDirectional(x, y, angle, color, count, speed, spread, life) {
+    for (let i = 0; i < count; i++) {
+      const a = angle + (Math.random() - 0.5) * spread;
+      const spd = speed * (0.5 + Math.random() * 0.5);
+      this.particles.push({
+        x, y,
+        vx: Math.cos(a) * spd,
+        vy: Math.sin(a) * spd,
+        life,
+        maxLife: life,
+        color,
+        size: 1.5 + Math.random() * 2,
+      });
+    }
+  }
+
+  update(dt) {
+    const dtSec = dt / 1000;
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx * dtSec;
+      p.y += p.vy * dtSec;
+      p.vx *= 0.95;
+      p.vy *= 0.95;
+      p.life -= dt;
+      if (p.life <= 0) {
+        this.particles[i] = this.particles[this.particles.length - 1];
+        this.particles.pop();
+      }
+    }
+  }
+
+  draw(ctx, camX, camY, w, h, viewScale) {
+    for (const p of this.particles) {
+      const sx = (p.x - camX) * viewScale / TILE_SIZE + w / 2;
+      const sy = (p.y - camY) * viewScale / TILE_SIZE + h / 2;
+      if (sx < -10 || sx > w + 10 || sy < -10 || sy > h + 10) continue;
+      const alpha = Math.max(0, p.life / p.maxLife);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(sx, sy, p.size * alpha, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
 export function createRenderer(canvas, state) {
   const ctx = canvas.getContext('2d');
-  let viewScale = 24; // pixels per tile
+  let viewScale = 24;
+
+  // Camera smoothing
+  let camX = 0, camY = 0;
+  const CAM_SMOOTH = 0.08;
+
+  // Particle system
+  const particles = new ParticleSystem();
+
+  // Track processed events for effects
+  let lastEventIdx = 0;
+
+  // Time accumulator for animations
+  let animTime = 0;
 
   function resize() {
     canvas.width = window.innerWidth;
@@ -36,10 +128,8 @@ export function createRenderer(canvas, state) {
   window.addEventListener('resize', resize);
   resize();
 
-  // Pre-render biome chunks for performance
-  let biomeCanvas = null;
-  let biomeCtx = null;
-  const CHUNK_SIZE = 64; // tiles per chunk
+  // ── Pre-render biome chunks with texture detail ──
+  const CHUNK_SIZE = 64;
   let biomeChunks = new Map();
 
   function renderBiomeChunk(chunkX, chunkY) {
@@ -47,9 +137,11 @@ export function createRenderer(canvas, state) {
     if (biomeChunks.has(key)) return biomeChunks.get(key);
     if (!state.biomeMap) return null;
 
+    // Render at 4x resolution for detail
+    const DETAIL = 4;
     const chunkCanvas = document.createElement('canvas');
-    chunkCanvas.width = CHUNK_SIZE;
-    chunkCanvas.height = CHUNK_SIZE;
+    chunkCanvas.width = CHUNK_SIZE * DETAIL;
+    chunkCanvas.height = CHUNK_SIZE * DETAIL;
     const cctx = chunkCanvas.getContext('2d');
 
     const startX = chunkX * CHUNK_SIZE;
@@ -62,13 +154,114 @@ export function createRenderer(canvas, state) {
         const ty = startY + y;
         if (tx >= ws || ty >= ws) continue;
         const biome = state.biomeMap[ty * ws + tx];
-        cctx.fillStyle = BIOME_COLORS[biome] || '#333';
-        cctx.fillRect(x, y, 1, 1);
+        const baseColor = BIOME_COLORS[biome] || '#333';
+
+        // Base tile
+        cctx.fillStyle = baseColor;
+        cctx.fillRect(x * DETAIL, y * DETAIL, DETAIL, DETAIL);
+
+        // Tile variation: slight brightness shift per tile
+        const variation = seededRand(tx, ty, 42);
+        const darken = (variation - 0.5) * 0.08;
+        if (darken > 0) {
+          cctx.fillStyle = `rgba(255,255,255,${darken})`;
+        } else {
+          cctx.fillStyle = `rgba(0,0,0,${-darken})`;
+        }
+        cctx.fillRect(x * DETAIL, y * DETAIL, DETAIL, DETAIL);
+
+        // Biome-specific texture details
+        const r1 = seededRand(tx, ty, 7);
+        const r2 = seededRand(tx, ty, 13);
+        const r3 = seededRand(tx, ty, 19);
+        const px = x * DETAIL;
+        const py = y * DETAIL;
+
+        if (biome === BIOME.GRASSLAND) {
+          // Grass blades
+          cctx.strokeStyle = `rgba(80,160,50,${0.3 + r1 * 0.3})`;
+          cctx.lineWidth = 0.5;
+          const bladeCount = 2 + Math.floor(r2 * 3);
+          for (let b = 0; b < bladeCount; b++) {
+            const bx = px + seededRand(tx, ty, 30 + b) * DETAIL;
+            const by = py + seededRand(tx, ty, 60 + b) * DETAIL;
+            cctx.beginPath();
+            cctx.moveTo(bx, by);
+            cctx.lineTo(bx + (seededRand(tx, ty, 90 + b) - 0.5) * 2, by - 1.5 - r3);
+            cctx.stroke();
+          }
+        } else if (biome === BIOME.DESERT) {
+          // Sand dots/speckles
+          if (r1 > 0.6) {
+            cctx.fillStyle = `rgba(180,150,80,${0.3 + r2 * 0.2})`;
+            cctx.beginPath();
+            cctx.arc(px + r2 * DETAIL, py + r3 * DETAIL, 0.4 + r1 * 0.4, 0, Math.PI * 2);
+            cctx.fill();
+          }
+          if (r2 > 0.7) {
+            cctx.fillStyle = `rgba(210,180,110,0.3)`;
+            cctx.beginPath();
+            cctx.arc(px + r3 * DETAIL, py + r1 * DETAIL, 0.3, 0, Math.PI * 2);
+            cctx.fill();
+          }
+        } else if (biome === BIOME.SNOW) {
+          // Snow crystals / sparkle
+          if (r1 > 0.7) {
+            cctx.fillStyle = `rgba(255,255,255,${0.4 + r2 * 0.3})`;
+            const sx2 = px + r2 * DETAIL;
+            const sy2 = py + r3 * DETAIL;
+            cctx.beginPath();
+            cctx.arc(sx2, sy2, 0.5, 0, Math.PI * 2);
+            cctx.fill();
+            // Small cross sparkle
+            cctx.strokeStyle = `rgba(200,220,255,0.2)`;
+            cctx.lineWidth = 0.3;
+            cctx.beginPath();
+            cctx.moveTo(sx2 - 1, sy2);
+            cctx.lineTo(sx2 + 1, sy2);
+            cctx.moveTo(sx2, sy2 - 1);
+            cctx.lineTo(sx2, sy2 + 1);
+            cctx.stroke();
+          }
+        } else if (biome === BIOME.FOREST) {
+          // Dense undergrowth / leaf litter
+          if (r1 > 0.4) {
+            cctx.fillStyle = `rgba(30,70,20,${0.2 + r2 * 0.2})`;
+            cctx.beginPath();
+            cctx.arc(px + r2 * DETAIL, py + r3 * DETAIL, 0.6 + r1 * 0.5, 0, Math.PI * 2);
+            cctx.fill();
+          }
+          if (r3 > 0.6) {
+            cctx.fillStyle = `rgba(50,100,30,0.15)`;
+            cctx.beginPath();
+            cctx.arc(px + r1 * DETAIL, py + r2 * DETAIL, 0.4, 0, Math.PI * 2);
+            cctx.fill();
+          }
+        } else if (biome === BIOME.MOUNTAIN) {
+          // Rocky cracks
+          if (r1 > 0.7) {
+            cctx.strokeStyle = `rgba(60,60,60,0.3)`;
+            cctx.lineWidth = 0.3;
+            cctx.beginPath();
+            cctx.moveTo(px + r2 * DETAIL, py);
+            cctx.lineTo(px + r3 * DETAIL, py + DETAIL);
+            cctx.stroke();
+          }
+        } else if (biome === BIOME.BEACH) {
+          // Sand ripple
+          if (r1 > 0.6) {
+            cctx.strokeStyle = `rgba(200,190,130,0.2)`;
+            cctx.lineWidth = 0.3;
+            cctx.beginPath();
+            cctx.moveTo(px, py + r2 * DETAIL);
+            cctx.lineTo(px + DETAIL, py + r2 * DETAIL + (r3 - 0.5));
+            cctx.stroke();
+          }
+        }
       }
     }
 
     biomeChunks.set(key, chunkCanvas);
-    // Limit cache size
     if (biomeChunks.size > 100) {
       const first = biomeChunks.keys().next().value;
       biomeChunks.delete(first);
@@ -76,21 +269,57 @@ export function createRenderer(canvas, state) {
     return chunkCanvas;
   }
 
+  // ── Process events for particle effects ──
+  function processEvents(camX, camY, w, h) {
+    while (lastEventIdx < state.events.length) {
+      const evt = state.events[lastEventIdx++];
+      if (!evt) continue;
+
+      if (evt.type === 'hit') {
+        // Gather/attack hit particles
+        const colors = {
+          wood: '#c4913a',
+          stone: '#aaa',
+          metal: '#d4a050',
+          sulfur: '#e8d44a',
+          flesh: '#c03030',
+        };
+        const color = colors[evt.material] || '#aaa';
+        particles.emit(evt.x, evt.y, color, 6, 30, 400);
+      } else if (evt.type === 'muzzle') {
+        particles.emitDirectional(evt.x, evt.y, evt.angle, '#ffdd44', 4, 60, 0.5, 200);
+        particles.emitDirectional(evt.x, evt.y, evt.angle, '#ff8800', 2, 40, 0.3, 150);
+      } else if (evt.type === 'blood') {
+        particles.emit(evt.x, evt.y, '#a02020', 5, 25, 500);
+        particles.emit(evt.x, evt.y, '#cc3030', 3, 15, 350);
+      }
+    }
+  }
+
+  // ── Main render ──
   function render(dt) {
     const w = canvas.width;
     const h = canvas.height;
+    animTime += dt;
 
-    // Get camera position (centered on player)
-    let camX = 0, camY = 0;
+    // Camera target
+    let targetX = 0, targetY = 0;
     const me = state.myEid ? state.entities.get(state.myEid) : null;
     if (me) {
-      camX = me.x;
-      camY = me.y;
+      targetX = me.x;
+      targetY = me.y;
     }
+
+    // Smooth camera
+    camX += (targetX - camX) * CAM_SMOOTH;
+    camY += (targetY - camY) * CAM_SMOOTH;
 
     ctx.clearRect(0, 0, w, h);
 
-    // Apply day/night lighting
+    // Process events for effects
+    processEvents(camX, camY, w, h);
+    particles.update(dt);
+
     const light = state.lightLevel;
 
     // ── Draw terrain ──
@@ -99,13 +328,13 @@ export function createRenderer(canvas, state) {
     const startTileX = Math.floor(camX / TILE_SIZE - tilesX / 2);
     const startTileY = Math.floor(camY / TILE_SIZE - tilesY / 2);
 
-    // Draw biome chunks
     if (state.biomeMap) {
       const startChunkX = Math.floor(startTileX / CHUNK_SIZE);
       const startChunkY = Math.floor(startTileY / CHUNK_SIZE);
       const endChunkX = Math.ceil((startTileX + tilesX) / CHUNK_SIZE);
       const endChunkY = Math.ceil((startTileY + tilesY) / CHUNK_SIZE);
 
+      ctx.imageSmoothingEnabled = false;
       for (let cy = startChunkY; cy <= endChunkY; cy++) {
         for (let cx = startChunkX; cx <= endChunkX; cx++) {
           const chunk = renderBiomeChunk(cx, cy);
@@ -118,13 +347,13 @@ export function createRenderer(canvas, state) {
           ctx.drawImage(chunk, screenX, screenY, size, size);
         }
       }
+      ctx.imageSmoothingEnabled = true;
     } else {
       ctx.fillStyle = '#333';
       ctx.fillRect(0, 0, w, h);
     }
 
     // ── Draw entities ──
-    // Sort by y for depth
     const sortedEntities = [...state.entities.values()].sort((a, b) => (a.y || 0) - (b.y || 0));
 
     for (const e of sortedEntities) {
@@ -133,8 +362,7 @@ export function createRenderer(canvas, state) {
       const sx = (ex - camX) * viewScale / TILE_SIZE + w / 2;
       const sy = (ey - camY) * viewScale / TILE_SIZE + h / 2;
 
-      // Skip if off screen
-      if (sx < -50 || sx > w + 50 || sy < -50 || sy > h + 50) continue;
+      if (sx < -60 || sx > w + 60 || sy < -60 || sy > h + 60) continue;
 
       const type = e.t;
 
@@ -151,202 +379,1199 @@ export function createRenderer(canvas, state) {
       } else if (type === ENTITY_TYPE.ANIMAL) {
         drawAnimal(ctx, sx, sy, e);
       } else if (type === ENTITY_TYPE.CAMPFIRE) {
-        drawDeployable(ctx, sx, sy, '#e85a1c', 'CF');
+        drawCampfire(ctx, sx, sy, e);
       } else if (type === ENTITY_TYPE.FURNACE) {
-        drawDeployable(ctx, sx, sy, '#666', 'FN');
+        drawFurnace(ctx, sx, sy, e);
       } else if (type === ENTITY_TYPE.WORKBENCH) {
-        drawDeployable(ctx, sx, sy, '#8b6914', 'WB');
+        drawWorkbench(ctx, sx, sy, e);
       } else if (type === ENTITY_TYPE.TOOL_CUPBOARD) {
-        drawDeployable(ctx, sx, sy, '#5a3a1a', 'TC');
+        drawToolCupboard(ctx, sx, sy, e);
       } else if (type === ENTITY_TYPE.SLEEPING_BAG) {
-        drawDeployable(ctx, sx, sy, '#c44', 'SB');
+        drawSleepingBag(ctx, sx, sy, e);
       }
 
-      // Health bar for entities with HP (not the local player - that's in UI)
+      // Health bar for damaged entities (not local player)
       if (e.hp !== undefined && e.mhp && e.eid !== state.myEid && e.hp < e.mhp) {
         const barW = 30;
         const barH = 4;
         const pct = e.hp / e.mhp;
-        ctx.fillStyle = '#300';
-        ctx.fillRect(sx - barW / 2, sy - 22, barW, barH);
-        ctx.fillStyle = pct > 0.5 ? '#0a0' : pct > 0.25 ? '#aa0' : '#a00';
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(sx - barW / 2 - 1, sy - 23, barW + 2, barH + 2);
+        const barColor = pct > 0.5 ? '#2d8c2d' : pct > 0.25 ? '#c8a820' : '#c83030';
+        ctx.fillStyle = barColor;
         ctx.fillRect(sx - barW / 2, sy - 22, barW * pct, barH);
       }
     }
 
-    // ── Night overlay ──
+    // ── Draw particles ──
+    particles.draw(ctx, camX, camY, w, h, viewScale);
+
+    // ── Night overlay + lighting ──
     if (light < 1.0) {
-      ctx.fillStyle = `rgba(0, 0, 20, ${1 - light})`;
+      // Determine color tint based on time of day
+      const darkness = 1 - light;
+      // Night = blue tint, sunset/sunrise = orange tint
+      let r = 0, g = 0, b = 20;
+      if (light > 0.5 && light < 0.8) {
+        // Sunset/sunrise: orange tint
+        r = 40;
+        g = 15;
+        b = 0;
+      }
+
+      // Create darkness layer
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${darkness * 0.85})`;
       ctx.fillRect(0, 0, w, h);
 
-      // Torch/campfire light circles
+      // Light sources punch through darkness
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+
+      // Player torch light
       if (me) {
         const heldItem = state.inventory[state.selectedSlot]?.id;
         if (heldItem === ITEM.TORCH) {
-          const gradient = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, 150);
-          gradient.addColorStop(0, 'rgba(255, 200, 100, 0.3)');
+          const gradient = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, 160);
+          gradient.addColorStop(0, `rgba(0,0,0,${darkness * 0.7})`);
+          gradient.addColorStop(0.6, `rgba(0,0,0,${darkness * 0.3})`);
+          gradient.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, w, h);
+        }
+      }
+
+      // Campfire lights
+      for (const e of sortedEntities) {
+        if (e.t === ENTITY_TYPE.CAMPFIRE) {
+          const ex2 = e.renderX || e.x;
+          const ey2 = e.renderY || e.y;
+          const sx2 = (ex2 - camX) * viewScale / TILE_SIZE + w / 2;
+          const sy2 = (ey2 - camY) * viewScale / TILE_SIZE + h / 2;
+          const flicker = 120 + Math.sin(animTime * 0.008) * 15;
+          const gradient = ctx.createRadialGradient(sx2, sy2, 0, sx2, sy2, flicker);
+          gradient.addColorStop(0, `rgba(0,0,0,${darkness * 0.6})`);
+          gradient.addColorStop(0.5, `rgba(0,0,0,${darkness * 0.2})`);
+          gradient.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = gradient;
+          ctx.fillRect(sx2 - flicker, sy2 - flicker, flicker * 2, flicker * 2);
+        }
+      }
+
+      ctx.restore();
+
+      // Warm light overlay for torch
+      if (me) {
+        const heldItem = state.inventory[state.selectedSlot]?.id;
+        if (heldItem === ITEM.TORCH) {
+          const flicker = 0.12 + Math.sin(animTime * 0.01) * 0.03;
+          const gradient = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, 160);
+          gradient.addColorStop(0, `rgba(255, 200, 100, ${flicker})`);
           gradient.addColorStop(1, 'rgba(255, 200, 100, 0)');
           ctx.fillStyle = gradient;
           ctx.fillRect(0, 0, w, h);
         }
       }
+
+      // Campfire warm glow overlay
+      for (const e of sortedEntities) {
+        if (e.t === ENTITY_TYPE.CAMPFIRE) {
+          const ex2 = e.renderX || e.x;
+          const ey2 = e.renderY || e.y;
+          const sx2 = (ex2 - camX) * viewScale / TILE_SIZE + w / 2;
+          const sy2 = (ey2 - camY) * viewScale / TILE_SIZE + h / 2;
+          const flicker = 0.08 + Math.sin(animTime * 0.007 + ex2) * 0.03;
+          const rad = 110 + Math.sin(animTime * 0.008) * 10;
+          const gradient = ctx.createRadialGradient(sx2, sy2, 0, sx2, sy2, rad);
+          gradient.addColorStop(0, `rgba(255, 160, 60, ${flicker})`);
+          gradient.addColorStop(1, 'rgba(255, 160, 60, 0)');
+          ctx.fillStyle = gradient;
+          ctx.fillRect(sx2 - rad, sy2 - rad, rad * 2, rad * 2);
+        }
+      }
     }
+
+    // ── Day/night color tint (daytime warmth) ──
+    if (light >= 0.8 && light < 1.0) {
+      // Golden hour warm tint
+      const intensity = (1.0 - light) * 0.15;
+      ctx.fillStyle = `rgba(255, 180, 60, ${intensity})`;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    // ── Fog of war: darken edges ──
+    const edgeSize = 80;
+    const edgeGradientL = ctx.createLinearGradient(0, 0, edgeSize, 0);
+    edgeGradientL.addColorStop(0, 'rgba(0,0,0,0.4)');
+    edgeGradientL.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = edgeGradientL;
+    ctx.fillRect(0, 0, edgeSize, h);
+
+    const edgeGradientR = ctx.createLinearGradient(w - edgeSize, 0, w, 0);
+    edgeGradientR.addColorStop(0, 'rgba(0,0,0,0)');
+    edgeGradientR.addColorStop(1, 'rgba(0,0,0,0.4)');
+    ctx.fillStyle = edgeGradientR;
+    ctx.fillRect(w - edgeSize, 0, edgeSize, h);
+
+    const edgeGradientT = ctx.createLinearGradient(0, 0, 0, edgeSize);
+    edgeGradientT.addColorStop(0, 'rgba(0,0,0,0.4)');
+    edgeGradientT.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = edgeGradientT;
+    ctx.fillRect(0, 0, w, edgeSize);
+
+    const edgeGradientB = ctx.createLinearGradient(0, h - edgeSize, 0, h);
+    edgeGradientB.addColorStop(0, 'rgba(0,0,0,0)');
+    edgeGradientB.addColorStop(1, 'rgba(0,0,0,0.4)');
+    ctx.fillStyle = edgeGradientB;
+    ctx.fillRect(0, h - edgeSize, w, edgeSize);
   }
 
+  // ── Player drawing ──
   function drawPlayer(ctx, sx, sy, e, isLocal) {
     const radius = 10;
+    const angle = e.a || 0;
     ctx.save();
 
-    // Body
-    ctx.fillStyle = isLocal ? '#3a8fd6' : '#d6553a';
-    if (e.dead) ctx.fillStyle = '#555';
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + 4, radius * 0.9, radius * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body (circle)
+    const bodyColor = e.dead ? '#555' : (isLocal ? '#3a8fd6' : '#d6553a');
+    ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(sx, sy, radius, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#222';
+
+    // Body outline
+    ctx.strokeStyle = e.dead ? '#333' : (isLocal ? '#2a6fa6' : '#a63a2a');
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // Direction indicator
-    if (e.a !== undefined) {
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
+    // Inner highlight
+    if (!e.dead) {
+      const highlightColor = isLocal ? 'rgba(100,180,255,0.25)' : 'rgba(255,120,80,0.25)';
+      ctx.fillStyle = highlightColor;
       ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(sx + Math.cos(e.a) * radius * 1.5, sy + Math.sin(e.a) * radius * 1.5);
+      ctx.arc(sx - 2, sy - 2, radius * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Direction indicator (head bump)
+    if (angle !== undefined) {
+      const headDist = radius * 0.7;
+      const headX = sx + Math.cos(angle) * headDist;
+      const headY = sy + Math.sin(angle) * headDist;
+      ctx.fillStyle = e.dead ? '#444' : (isLocal ? '#5ab0f0' : '#f07050');
+      ctx.beginPath();
+      ctx.arc(headX, headY, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = e.dead ? '#333' : (isLocal ? '#2a6fa6' : '#a63a2a');
+      ctx.lineWidth = 1;
       ctx.stroke();
     }
 
-    // Held item indicator
-    if (e.held && e.held !== ITEM.NONE) {
-      const def = ITEM_DEFS[e.held];
-      if (def) {
-        ctx.fillStyle = '#fff';
-        ctx.font = '8px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(def.name.substring(0, 6), sx, sy + radius + 12);
+    // Held weapon drawn extending from player
+    if (e.held && e.held !== ITEM.NONE && !e.dead) {
+      drawHeldWeapon(ctx, sx, sy, angle, e.held);
+    }
+
+    ctx.restore();
+  }
+
+  // ── Draw held weapon extending from player ──
+  function drawHeldWeapon(ctx, sx, sy, angle, itemId) {
+    const def = ITEM_DEFS[itemId];
+    if (!def) return;
+    const cat = def.cat;
+    const dist = 13;
+    const tipX = sx + Math.cos(angle) * dist;
+    const tipY = sy + Math.sin(angle) * dist;
+
+    ctx.save();
+    ctx.translate(tipX, tipY);
+    ctx.rotate(angle);
+
+    if (itemId === ITEM.ROCK) {
+      ctx.fillStyle = '#888';
+      ctx.beginPath();
+      ctx.arc(0, 0, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#555';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    } else if (itemId === ITEM.TORCH) {
+      // Stick
+      ctx.strokeStyle = '#6a4a2a';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(-2, 0);
+      ctx.lineTo(8, 0);
+      ctx.stroke();
+      // Flame
+      const flicker = Math.sin(animTime * 0.015) * 1.5;
+      ctx.fillStyle = '#ff8800';
+      ctx.beginPath();
+      ctx.arc(9, -1 + flicker, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffcc00';
+      ctx.beginPath();
+      ctx.arc(9, -1 + flicker, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (cat === 'tool') {
+      // Hatchet / Pickaxe / Hammer
+      ctx.strokeStyle = '#6a4a2a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-4, 0);
+      ctx.lineTo(8, 0);
+      ctx.stroke();
+      // Head
+      const headColor = (itemId === ITEM.METAL_HATCHET || itemId === ITEM.METAL_PICKAXE) ? '#888' : '#777';
+      ctx.fillStyle = headColor;
+      if (itemId === ITEM.STONE_HATCHET || itemId === ITEM.METAL_HATCHET) {
+        ctx.fillRect(6, -4, 4, 8);
+      } else if (itemId === ITEM.STONE_PICKAXE || itemId === ITEM.METAL_PICKAXE) {
+        ctx.beginPath();
+        ctx.moveTo(6, -1);
+        ctx.lineTo(12, -3);
+        ctx.lineTo(12, 3);
+        ctx.lineTo(6, 1);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.fillRect(6, -3, 5, 6);
+      }
+    } else if (cat === 'melee') {
+      // Spear / Sword / Knife
+      const len = itemId === ITEM.WOODEN_SPEAR ? 14 : (itemId === ITEM.SALVAGED_SWORD ? 12 : 8);
+      ctx.strokeStyle = itemId === ITEM.WOODEN_SPEAR ? '#8a6a3a' : '#aaa';
+      ctx.lineWidth = itemId === ITEM.WOODEN_SPEAR ? 2 : 2.5;
+      ctx.beginPath();
+      ctx.moveTo(-2, 0);
+      ctx.lineTo(len, 0);
+      ctx.stroke();
+      // Tip
+      ctx.fillStyle = itemId === ITEM.WOODEN_SPEAR ? '#6a4a2a' : '#ccc';
+      ctx.beginPath();
+      ctx.moveTo(len, 0);
+      ctx.lineTo(len + 3, -1.5);
+      ctx.lineTo(len + 3, 1.5);
+      ctx.closePath();
+      ctx.fill();
+    } else if (cat === 'ranged') {
+      // Bow / Crossbow / Guns
+      if (itemId === ITEM.HUNTING_BOW) {
+        ctx.strokeStyle = '#7a5a2a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, -0.8, 0.8);
+        ctx.stroke();
+        ctx.strokeStyle = '#aaa';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(0, -6);
+        ctx.lineTo(3, 0);
+        ctx.lineTo(0, 6);
+        ctx.stroke();
+      } else if (itemId === ITEM.CROSSBOW) {
+        ctx.fillStyle = '#6a4a2a';
+        ctx.fillRect(-3, -1.5, 12, 3);
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(2, -6);
+        ctx.lineTo(2, 6);
+        ctx.stroke();
+      } else {
+        // Generic gun shape
+        ctx.fillStyle = '#555';
+        ctx.fillRect(-3, -2, 14, 4);
+        ctx.fillStyle = '#444';
+        ctx.fillRect(0, 1, 4, 4); // grip
+        // Barrel
+        ctx.fillStyle = '#666';
+        ctx.fillRect(10, -1, 4, 2);
       }
     }
 
     ctx.restore();
   }
 
+  // ── Resource Nodes ──
   function drawResourceNode(ctx, sx, sy, e) {
     const rt = e.rt;
-    const color = RESOURCE_COLORS[rt] || '#888';
     const depleted = e.rem <= 0;
+    // Use entity eid for deterministic variation
+    const eid = e.eid || 0;
+    const sizeVar = 0.8 + seededRand(eid, 0, 5) * 0.4;
 
     ctx.save();
-    ctx.globalAlpha = depleted ? 0.3 : 1.0;
+    ctx.globalAlpha = depleted ? 0.25 : 1.0;
 
     if (rt === RESOURCE_TYPE.TREE) {
-      // Tree: circle canopy
-      ctx.fillStyle = '#3a2010';
-      ctx.fillRect(sx - 2, sy - 2, 4, 10);
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(sx, sy - 6, 8, 0, Math.PI * 2);
-      ctx.fill();
+      drawTree(ctx, sx, sy, eid, sizeVar);
     } else if (rt === RESOURCE_TYPE.HEMP) {
-      // Hemp: small green
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(sx, sy, 4, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      // Rock/ore: polygon
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.moveTo(sx - 7, sy + 4);
-      ctx.lineTo(sx - 4, sy - 6);
-      ctx.lineTo(sx + 5, sy - 5);
-      ctx.lineTo(sx + 7, sy + 3);
-      ctx.lineTo(sx + 2, sy + 6);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = '#222';
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      drawHemp(ctx, sx, sy, eid);
+    } else if (rt === RESOURCE_TYPE.STONE_NODE) {
+      drawStoneNode(ctx, sx, sy, eid, sizeVar);
+    } else if (rt === RESOURCE_TYPE.METAL_NODE) {
+      drawMetalNode(ctx, sx, sy, eid, sizeVar);
+    } else if (rt === RESOURCE_TYPE.SULFUR_NODE) {
+      drawSulfurNode(ctx, sx, sy, eid, sizeVar);
     }
 
     ctx.restore();
   }
 
-  function drawWorldItem(ctx, sx, sy, e) {
-    ctx.fillStyle = '#ffd700';
+  function drawTree(ctx, sx, sy, eid, sizeVar) {
+    const canopyRadius = 10 * sizeVar;
+    const trunkW = 3 * sizeVar;
+    const trunkH = 8 * sizeVar;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
     ctx.beginPath();
-    ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+    ctx.ellipse(sx + 3, sy + 4, canopyRadius * 0.8, canopyRadius * 0.3, 0.2, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#aa8800';
+
+    // Trunk
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(sx - trunkW / 2, sy - 2, trunkW, trunkH);
+    ctx.strokeStyle = '#3a2a10';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(sx - trunkW / 2, sy - 2, trunkW, trunkH);
+
+    // Canopy (layered circles for depth)
+    const r1 = seededRand(eid, 0, 3);
+    const r2 = seededRand(eid, 0, 7);
+
+    ctx.fillStyle = '#1a5a0a';
+    ctx.beginPath();
+    ctx.arc(sx + 2, sy - 4, canopyRadius * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#227712';
+    ctx.beginPath();
+    ctx.arc(sx - 1, sy - 6, canopyRadius * 0.9, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#2a8a1a';
+    ctx.beginPath();
+    ctx.arc(sx + r1 * 2 - 1, sy - 5 - r2 * 2, canopyRadius * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Canopy highlight
+    ctx.fillStyle = 'rgba(80,180,40,0.2)';
+    ctx.beginPath();
+    ctx.arc(sx - 2, sy - 8, canopyRadius * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Canopy outline
+    ctx.strokeStyle = 'rgba(10,40,5,0.3)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.arc(sx, sy - 5, canopyRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function drawHemp(ctx, sx, sy, eid) {
+    // Small green plant
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + 2, 5, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const leaves = 3 + Math.floor(seededRand(eid, 0, 1) * 3);
+    for (let i = 0; i < leaves; i++) {
+      const angle = (i / leaves) * Math.PI * 2 + seededRand(eid, i, 2) * 0.5;
+      const len = 3 + seededRand(eid, i, 3) * 3;
+      ctx.strokeStyle = `rgb(${60 + Math.floor(seededRand(eid, i, 4) * 30)}, ${130 + Math.floor(seededRand(eid, i, 5) * 40)}, 40)`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + Math.cos(angle) * len, sy + Math.sin(angle) * len - 2);
+      ctx.stroke();
+    }
+    // Center
+    ctx.fillStyle = '#5a9a3a';
+    ctx.beginPath();
+    ctx.arc(sx, sy - 1, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawStoneNode(ctx, sx, sy, eid, sizeVar) {
+    const s = 8 * sizeVar;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + s * 0.5, s * 0.8, s * 0.25, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Irregular rock shape
+    ctx.fillStyle = '#808080';
+    ctx.beginPath();
+    const pts = 7;
+    for (let i = 0; i < pts; i++) {
+      const angle = (i / pts) * Math.PI * 2;
+      const r = s * (0.7 + seededRand(eid, i, 10) * 0.3);
+      const px = sx + Math.cos(angle) * r;
+      const py = sy + Math.sin(angle) * r * 0.7;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Shading: dark bottom
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath();
+    for (let i = 0; i < pts; i++) {
+      const angle = (i / pts) * Math.PI * 2;
+      const r = s * (0.7 + seededRand(eid, i, 10) * 0.3);
+      const px = sx + Math.cos(angle) * r;
+      const py = sy + Math.sin(angle) * r * 0.7;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.beginPath();
+    ctx.arc(sx - s * 0.2, sy - s * 0.2, s * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Outline
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < pts; i++) {
+      const angle = (i / pts) * Math.PI * 2;
+      const r = s * (0.7 + seededRand(eid, i, 10) * 0.3);
+      const px = sx + Math.cos(angle) * r;
+      const py = sy + Math.sin(angle) * r * 0.7;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    // Crack detail
+    ctx.strokeStyle = 'rgba(60,60,60,0.4)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(sx - s * 0.3, sy - s * 0.1);
+    ctx.lineTo(sx + s * 0.1, sy + s * 0.2);
+    ctx.stroke();
+  }
+
+  function drawMetalNode(ctx, sx, sy, eid, sizeVar) {
+    const s = 7 * sizeVar;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + s * 0.5, s * 0.7, s * 0.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Crystalline shape
+    ctx.fillStyle = '#8a6840';
+    ctx.beginPath();
+    ctx.moveTo(sx - s, sy + s * 0.4);
+    ctx.lineTo(sx - s * 0.5, sy - s * 0.8);
+    ctx.lineTo(sx + s * 0.3, sy - s);
+    ctx.lineTo(sx + s, sy - s * 0.3);
+    ctx.lineTo(sx + s * 0.7, sy + s * 0.5);
+    ctx.lineTo(sx - s * 0.3, sy + s * 0.6);
+    ctx.closePath();
+    ctx.fill();
+
+    // Metallic shine facets
+    ctx.fillStyle = '#c49050';
+    ctx.beginPath();
+    ctx.moveTo(sx - s * 0.3, sy - s * 0.5);
+    ctx.lineTo(sx + s * 0.2, sy - s * 0.8);
+    ctx.lineTo(sx + s * 0.6, sy - s * 0.2);
+    ctx.lineTo(sx, sy);
+    ctx.closePath();
+    ctx.fill();
+
+    // Bright highlight
+    ctx.fillStyle = 'rgba(220,180,120,0.35)';
+    ctx.beginPath();
+    ctx.moveTo(sx, sy - s * 0.6);
+    ctx.lineTo(sx + s * 0.3, sy - s * 0.3);
+    ctx.lineTo(sx + s * 0.1, sy);
+    ctx.closePath();
+    ctx.fill();
+
+    // Outline
+    ctx.strokeStyle = '#5a4020';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx - s, sy + s * 0.4);
+    ctx.lineTo(sx - s * 0.5, sy - s * 0.8);
+    ctx.lineTo(sx + s * 0.3, sy - s);
+    ctx.lineTo(sx + s, sy - s * 0.3);
+    ctx.lineTo(sx + s * 0.7, sy + s * 0.5);
+    ctx.lineTo(sx - s * 0.3, sy + s * 0.6);
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  function drawSulfurNode(ctx, sx, sy, eid, sizeVar) {
+    const s = 7 * sizeVar;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + s * 0.5, s * 0.7, s * 0.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Crystalline spiky shape
+    ctx.fillStyle = '#b8a830';
+    ctx.beginPath();
+    ctx.moveTo(sx - s * 0.8, sy + s * 0.3);
+    ctx.lineTo(sx - s * 0.6, sy - s * 0.5);
+    ctx.lineTo(sx - s * 0.1, sy - s * 1.1);
+    ctx.lineTo(sx + s * 0.4, sy - s * 0.6);
+    ctx.lineTo(sx + s * 0.9, sy - s * 0.2);
+    ctx.lineTo(sx + s * 0.6, sy + s * 0.4);
+    ctx.closePath();
+    ctx.fill();
+
+    // Bright crystal facet
+    ctx.fillStyle = '#e0d050';
+    ctx.beginPath();
+    ctx.moveTo(sx - s * 0.1, sy - s * 0.8);
+    ctx.lineTo(sx + s * 0.3, sy - s * 0.5);
+    ctx.lineTo(sx + s * 0.1, sy - s * 0.1);
+    ctx.lineTo(sx - s * 0.3, sy - s * 0.3);
+    ctx.closePath();
+    ctx.fill();
+
+    // Glow highlight
+    ctx.fillStyle = 'rgba(255,240,100,0.2)';
+    ctx.beginPath();
+    ctx.arc(sx, sy - s * 0.4, s * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Outline
+    ctx.strokeStyle = '#8a7a20';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx - s * 0.8, sy + s * 0.3);
+    ctx.lineTo(sx - s * 0.6, sy - s * 0.5);
+    ctx.lineTo(sx - s * 0.1, sy - s * 1.1);
+    ctx.lineTo(sx + s * 0.4, sy - s * 0.6);
+    ctx.lineTo(sx + s * 0.9, sy - s * 0.2);
+    ctx.lineTo(sx + s * 0.6, sy + s * 0.4);
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  // ── Animals ──
+  function drawAnimal(ctx, sx, sy, e) {
+    const at = e.at;
+    const color = ANIMAL_COLORS[at] || '#888';
+    const facing = e.a || 0;
+
+    ctx.save();
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    const shadowSize = at === ANIMAL_TYPE.BEAR ? 14 : at === ANIMAL_TYPE.WOLF ? 10 : 8;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + shadowSize * 0.4, shadowSize * 0.8, shadowSize * 0.25, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.translate(sx, sy);
+    ctx.rotate(facing);
+
+    if (at === ANIMAL_TYPE.DEER) {
+      drawDeer(ctx, color);
+    } else if (at === ANIMAL_TYPE.BOAR) {
+      drawBoar(ctx, color);
+    } else if (at === ANIMAL_TYPE.WOLF) {
+      drawWolf(ctx, color);
+    } else if (at === ANIMAL_TYPE.BEAR) {
+      drawBear(ctx, color);
+    }
+
+    ctx.restore();
+  }
+
+  function drawDeer(ctx, color) {
+    // Body
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 8, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#7a5a30';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Head
+    ctx.fillStyle = '#c09060';
+    ctx.beginPath();
+    ctx.ellipse(7, 0, 3.5, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Antlers
+    ctx.strokeStyle = '#8a6a40';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(8, -2);
+    ctx.lineTo(10, -5);
+    ctx.lineTo(12, -4);
+    ctx.moveTo(10, -5);
+    ctx.lineTo(10, -7);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(8, 2);
+    ctx.lineTo(10, 5);
+    ctx.lineTo(12, 4);
+    ctx.moveTo(10, 5);
+    ctx.lineTo(10, 7);
+    ctx.stroke();
+
+    // Eye
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    ctx.arc(9, -1, 0.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // White tail spot
+    ctx.fillStyle = '#e8d8c0';
+    ctx.beginPath();
+    ctx.arc(-7, 0, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawBoar(ctx, color) {
+    // Body (rounder, stockier)
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 7, 5.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#4a3020';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Head
+    ctx.fillStyle = '#7a5a40';
+    ctx.beginPath();
+    ctx.ellipse(6, 0, 3.5, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Snout
+    ctx.fillStyle = '#9a7a60';
+    ctx.beginPath();
+    ctx.ellipse(9, 0, 2, 1.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Tusks
+    ctx.strokeStyle = '#ddd';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(9, -1.5);
+    ctx.lineTo(11, -3);
+    ctx.moveTo(9, 1.5);
+    ctx.lineTo(11, 3);
+    ctx.stroke();
+
+    // Eye
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    ctx.arc(7, -1.5, 0.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawWolf(ctx, color) {
+    // Body (sleek)
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 9, 4.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#404040';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Head (pointed)
+    ctx.fillStyle = '#707070';
+    ctx.beginPath();
+    ctx.moveTo(7, -3);
+    ctx.lineTo(12, 0);
+    ctx.lineTo(7, 3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Ears
+    ctx.fillStyle = '#555';
+    ctx.beginPath();
+    ctx.moveTo(7, -3);
+    ctx.lineTo(8, -6);
+    ctx.lineTo(9, -3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(7, 3);
+    ctx.lineTo(8, 6);
+    ctx.lineTo(9, 3);
+    ctx.closePath();
+    ctx.fill();
+
+    // Eye (menacing)
+    ctx.fillStyle = '#ff4444';
+    ctx.beginPath();
+    ctx.arc(9, -1, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    ctx.arc(9, -1, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Tail
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-8, 0);
+    ctx.quadraticCurveTo(-11, -3, -10, -5);
+    ctx.stroke();
+  }
+
+  function drawBear(ctx, color) {
+    // Body (large, round)
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 13, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#2a1810';
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Item name
+    // Head
+    ctx.fillStyle = '#5a3828';
+    ctx.beginPath();
+    ctx.arc(11, 0, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Ears
+    ctx.fillStyle = '#3a2818';
+    ctx.beginPath();
+    ctx.arc(10, -5, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(10, 5, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Snout
+    ctx.fillStyle = '#7a5a40';
+    ctx.beginPath();
+    ctx.ellipse(14, 0, 2.5, 1.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc(12, -2, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(12, 2, 1, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Claws at front (subtle)
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 0.5;
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath();
+      ctx.moveTo(16, i * 2);
+      ctx.lineTo(17.5, i * 2);
+      ctx.stroke();
+    }
+  }
+
+  // ── World Items ──
+  function drawWorldItem(ctx, sx, sy, e) {
+    const pulse = 0.7 + Math.sin(animTime * 0.005 + (e.eid || 0)) * 0.3;
+
+    // Subtle glow
+    ctx.fillStyle = `rgba(255, 215, 0, ${0.1 * pulse})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Item dot with color based on category
     const def = ITEM_DEFS[e.itemId];
+    let color = '#ffd700';
+    if (def) {
+      if (def.cat === 'resource') color = '#88cc44';
+      else if (def.cat === 'tool') color = '#aaa';
+      else if (def.cat === 'melee') color = '#cc8844';
+      else if (def.cat === 'ranged') color = '#8888cc';
+      else if (def.cat === 'ammo') color = '#ccaa44';
+      else if (def.cat === 'food') color = '#cc6644';
+      else if (def.cat === 'medical') color = '#44cc66';
+    }
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Inner highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath();
+    ctx.arc(sx - 1, sy - 1, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Label
     if (def) {
       ctx.fillStyle = '#fff';
       ctx.font = '7px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(`${def.name} x${e.qty}`, sx, sy + 10);
+      ctx.shadowColor = '#000';
+      ctx.shadowBlur = 2;
+      ctx.fillText(`${def.name} x${e.qty}`, sx, sy + 11);
+      ctx.shadowBlur = 0;
     }
   }
 
+  // ── Projectiles ──
   function drawProjectile(ctx, sx, sy, e) {
-    ctx.fillStyle = '#ff0';
+    const angle = e.a || 0;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(angle);
+
+    // Trail
+    ctx.fillStyle = 'rgba(255,255,100,0.3)';
     ctx.beginPath();
-    ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+    ctx.moveTo(-8, -1);
+    ctx.lineTo(0, 0);
+    ctx.lineTo(-8, 1);
+    ctx.closePath();
     ctx.fill();
+
+    // Projectile body
+    ctx.fillStyle = '#ffee44';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 3, 1.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
   }
 
+  // ── Structures ──
   function drawStructure(ctx, sx, sy, e) {
     const size = viewScale * 0.9;
     const tier = e.tier || 0;
-    const colors = ['#8b7355', '#9e8c6c', '#888', '#aaa'];
-    ctx.fillStyle = colors[tier] || '#8b7355';
-    ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
-    ctx.strokeStyle = '#444';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(sx - size / 2, sy - size / 2, size, size);
+    const st = e.st;
 
-    // Type label
-    const labels = { 1: 'F', 2: 'W', 3: 'D', 4: 'Dr', 5: 'C', 6: 'St', 7: 'Wn' };
-    ctx.fillStyle = '#222';
-    ctx.font = '8px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(labels[e.st] || '?', sx, sy + 3);
+    const tierColors = {
+      0: { fill: '#7a6845', stroke: '#5a4a30', detail: '#6a5835' },  // twig
+      1: { fill: '#8b6914', stroke: '#6a5010', detail: '#7a5a12' },  // wood
+      2: { fill: '#808080', stroke: '#555', detail: '#707070' },       // stone
+      3: { fill: '#6a6a70', stroke: '#444', detail: '#5a5a60' },       // metal
+    };
+    const tc = tierColors[tier] || tierColors[0];
+
+    ctx.save();
+
+    if (st === STRUCT_TYPE.FOUNDATION) {
+      // Filled rectangle with cross-hatch
+      ctx.fillStyle = tc.fill;
+      ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
+      // Cross pattern
+      ctx.strokeStyle = tc.detail;
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(sx - size / 2, sy);
+      ctx.lineTo(sx + size / 2, sy);
+      ctx.moveTo(sx, sy - size / 2);
+      ctx.lineTo(sx, sy + size / 2);
+      ctx.stroke();
+      ctx.strokeStyle = tc.stroke;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(sx - size / 2, sy - size / 2, size, size);
+    } else if (st === STRUCT_TYPE.WALL) {
+      // Thick wall line
+      ctx.fillStyle = tc.fill;
+      const wallThick = size * 0.2;
+      ctx.fillRect(sx - size / 2, sy - wallThick / 2, size, wallThick);
+      // Texture
+      if (tier === 1) {
+        // Wood grain
+        ctx.strokeStyle = '#5a3a0a';
+        ctx.lineWidth = 0.3;
+        for (let i = 0; i < 3; i++) {
+          const yOff = -wallThick / 2 + wallThick * (i + 0.5) / 3;
+          ctx.beginPath();
+          ctx.moveTo(sx - size / 2 + 2, sy + yOff);
+          ctx.lineTo(sx + size / 2 - 2, sy + yOff);
+          ctx.stroke();
+        }
+      } else if (tier === 2) {
+        // Stone block lines
+        ctx.strokeStyle = '#666';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(sx - size * 0.15, sy - wallThick / 2);
+        ctx.lineTo(sx - size * 0.15, sy + wallThick / 2);
+        ctx.moveTo(sx + size * 0.15, sy - wallThick / 2);
+        ctx.lineTo(sx + size * 0.15, sy + wallThick / 2);
+        ctx.stroke();
+      } else if (tier === 3) {
+        // Metal rivets
+        ctx.fillStyle = '#888';
+        const rivetY = sy;
+        for (let rx = -2; rx <= 2; rx++) {
+          ctx.beginPath();
+          ctx.arc(sx + rx * size * 0.18, rivetY, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.strokeStyle = tc.stroke;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx - size / 2, sy - wallThick / 2, size, wallThick);
+    } else if (st === STRUCT_TYPE.DOORWAY) {
+      // Wall with gap
+      const wallThick = size * 0.2;
+      const gapSize = size * 0.35;
+      ctx.fillStyle = tc.fill;
+      ctx.fillRect(sx - size / 2, sy - wallThick / 2, (size - gapSize) / 2, wallThick);
+      ctx.fillRect(sx + gapSize / 2, sy - wallThick / 2, (size - gapSize) / 2, wallThick);
+      ctx.strokeStyle = tc.stroke;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx - size / 2, sy - wallThick / 2, (size - gapSize) / 2, wallThick);
+      ctx.strokeRect(sx + gapSize / 2, sy - wallThick / 2, (size - gapSize) / 2, wallThick);
+    } else if (st === STRUCT_TYPE.DOOR) {
+      // Door (looks openable)
+      const wallThick = size * 0.15;
+      const doorColor = tier === 3 ? '#5a5a60' : '#7a5a14';
+      ctx.fillStyle = doorColor;
+      ctx.fillRect(sx - size * 0.15, sy - wallThick / 2, size * 0.3, wallThick);
+      // Handle
+      ctx.fillStyle = '#aa8800';
+      ctx.beginPath();
+      ctx.arc(sx + size * 0.1, sy, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      // Open state indicator
+      if (e.open) {
+        ctx.strokeStyle = 'rgba(100,255,100,0.4)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(sx - size * 0.15, sy - wallThick / 2, size * 0.3, wallThick);
+      }
+    } else if (st === STRUCT_TYPE.CEILING) {
+      // Semi-transparent floor above
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = tc.fill;
+      ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
+      ctx.strokeStyle = tc.stroke;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx - size / 2, sy - size / 2, size, size);
+      // X pattern
+      ctx.strokeStyle = tc.detail;
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(sx - size / 2, sy - size / 2);
+      ctx.lineTo(sx + size / 2, sy + size / 2);
+      ctx.moveTo(sx + size / 2, sy - size / 2);
+      ctx.lineTo(sx - size / 2, sy + size / 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else if (st === STRUCT_TYPE.STAIRS) {
+      // Stair steps
+      ctx.fillStyle = tc.fill;
+      const steps = 4;
+      for (let i = 0; i < steps; i++) {
+        const stepW = size * 0.8;
+        const stepH = size / steps;
+        const alpha = 0.5 + (i / steps) * 0.5;
+        ctx.globalAlpha = alpha;
+        ctx.fillRect(sx - stepW / 2, sy - size / 2 + i * stepH, stepW, stepH - 1);
+      }
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = tc.stroke;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx - size * 0.4, sy - size / 2, size * 0.8, size);
+    } else {
+      // Fallback
+      ctx.fillStyle = tc.fill;
+      ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
+      ctx.strokeStyle = tc.stroke;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx - size / 2, sy - size / 2, size, size);
+    }
+
+    ctx.restore();
   }
 
-  function drawAnimal(ctx, sx, sy, e) {
-    const at = e.at;
-    const color = ANIMAL_COLORS[at] || '#888';
-    const size = at === ANIMAL_TYPE.BEAR ? 12 : at === ANIMAL_TYPE.WOLF ? 8 : 7;
-
-    ctx.fillStyle = color;
+  // ── Deployables ──
+  function drawCampfire(ctx, sx, sy, e) {
+    // Stone ring
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.ellipse(sx, sy, size, size * 0.7, 0, 0, Math.PI * 2);
+    ctx.arc(sx, sy, 8, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Inner dark area
+    ctx.fillStyle = '#2a2a2a';
+    ctx.beginPath();
+    ctx.arc(sx, sy, 6, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#222';
+
+    // Logs
+    ctx.strokeStyle = '#5a3a1a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(sx - 4, sy - 2);
+    ctx.lineTo(sx + 4, sy + 2);
+    ctx.moveTo(sx - 4, sy + 2);
+    ctx.lineTo(sx + 4, sy - 2);
+    ctx.stroke();
+
+    // Flame (animated)
+    const t = animTime * 0.01;
+    const flicker1 = Math.sin(t) * 1.5;
+    const flicker2 = Math.cos(t * 1.3) * 1;
+
+    // Outer flame
+    ctx.fillStyle = '#ff6600';
+    ctx.beginPath();
+    ctx.moveTo(sx - 3, sy + 1);
+    ctx.quadraticCurveTo(sx + flicker1, sy - 6, sx + 1, sy + 1);
+    ctx.fill();
+
+    // Inner flame
+    ctx.fillStyle = '#ffcc00';
+    ctx.beginPath();
+    ctx.moveTo(sx - 1.5, sy);
+    ctx.quadraticCurveTo(sx + flicker2, sy - 4, sx + 0.5, sy);
+    ctx.fill();
+
+    // Glow
+    const glowAlpha = 0.06 + Math.sin(t * 0.8) * 0.02;
+    const gradient = ctx.createRadialGradient(sx, sy, 0, sx, sy, 50);
+    gradient.addColorStop(0, `rgba(255, 150, 50, ${glowAlpha})`);
+    gradient.addColorStop(1, 'rgba(255, 150, 50, 0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(sx - 50, sy - 50, 100, 100);
+  }
+
+  function drawFurnace(ctx, sx, sy, e) {
+    // Body
+    ctx.fillStyle = '#555';
+    ctx.beginPath();
+    ctx.moveTo(sx - 8, sy + 6);
+    ctx.lineTo(sx - 6, sy - 8);
+    ctx.lineTo(sx + 6, sy - 8);
+    ctx.lineTo(sx + 8, sy + 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#333';
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Eyes
-    ctx.fillStyle = '#fff';
+    // Opening
+    ctx.fillStyle = '#2a0a0a';
+    ctx.fillRect(sx - 3, sy - 2, 6, 5);
+
+    // Glow from opening
+    ctx.fillStyle = 'rgba(255, 80, 20, 0.4)';
+    ctx.fillRect(sx - 2, sy - 1, 4, 3);
+
+    // Top smoke hint
+    ctx.fillStyle = 'rgba(100,100,100,0.2)';
+    const smokeY = sy - 10 - Math.sin(animTime * 0.003) * 2;
     ctx.beginPath();
-    ctx.arc(sx - 2, sy - 2, 1.5, 0, Math.PI * 2);
-    ctx.arc(sx + 2, sy - 2, 1.5, 0, Math.PI * 2);
+    ctx.arc(sx, smokeY, 2, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  function drawDeployable(ctx, sx, sy, color, label) {
-    ctx.fillStyle = color;
-    ctx.fillRect(sx - 8, sy - 8, 16, 16);
-    ctx.strokeStyle = '#222';
+  function drawWorkbench(ctx, sx, sy, e) {
+    // Table top
+    ctx.fillStyle = '#7a5a1a';
+    ctx.fillRect(sx - 9, sy - 5, 18, 10);
+    ctx.strokeStyle = '#5a4010';
     ctx.lineWidth = 1;
-    ctx.strokeRect(sx - 8, sy - 8, 16, 16);
-    ctx.fillStyle = '#fff';
-    ctx.font = '7px monospace';
+    ctx.strokeRect(sx - 9, sy - 5, 18, 10);
+
+    // Legs
+    ctx.fillStyle = '#5a3a0a';
+    ctx.fillRect(sx - 8, sy + 4, 2, 4);
+    ctx.fillRect(sx + 6, sy + 4, 2, 4);
+
+    // Surface detail (tools)
+    ctx.fillStyle = '#888';
+    ctx.fillRect(sx - 4, sy - 3, 3, 1.5);
+    ctx.fillStyle = '#6a4a0a';
+    ctx.fillRect(sx + 1, sy - 2, 4, 1);
+
+    // Label
+    ctx.fillStyle = '#ddd';
+    ctx.font = '6px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(label, sx, sy + 3);
+    ctx.fillText('WB', sx, sy + 2);
+  }
+
+  function drawToolCupboard(ctx, sx, sy, e) {
+    // Cabinet shape
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(sx - 6, sy - 8, 12, 16);
+    ctx.strokeStyle = '#3a2a0a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx - 6, sy - 8, 12, 16);
+
+    // Door panels
+    ctx.strokeStyle = '#4a2a0a';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(sx - 5, sy - 7, 4.5, 14);
+    ctx.strokeRect(sx + 0.5, sy - 7, 4.5, 14);
+
+    // Handles
+    ctx.fillStyle = '#888';
+    ctx.beginPath();
+    ctx.arc(sx - 1.5, sy, 0.8, 0, Math.PI * 2);
+    ctx.arc(sx + 1.5, sy, 0.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawSleepingBag(ctx, sx, sy, e) {
+    // Bag shape
+    ctx.fillStyle = '#aa3333';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, 9, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#882222';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Pillow area
+    ctx.fillStyle = '#cc5555';
+    ctx.beginPath();
+    ctx.ellipse(sx + 5, sy, 3, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Zipper line
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(sx - 7, sy);
+    ctx.lineTo(sx + 3, sy);
+    ctx.stroke();
   }
 
   return { render };

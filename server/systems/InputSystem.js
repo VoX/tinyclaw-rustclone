@@ -5,8 +5,8 @@ import { PLAYER_SPEED, PLAYER_SPRINT_MULT, WATER_SPEED_MULT, ROAD_SPEED_MULT, BI
 import { circleVsOBB } from '../../shared/collision.js';
 
 export function createInputSystem(gameState) {
-  // Max distance a player can move per tick (sprint speed + tolerance)
-  const maxSpeedPerTick = (PLAYER_SPEED * PLAYER_SPRINT_MULT) / SERVER_TPS;
+  // Max distance a player can move per tick (sprint speed * road boost + tolerance)
+  const maxSpeedPerTick = (PLAYER_SPEED * PLAYER_SPRINT_MULT * ROAD_SPEED_MULT) / SERVER_TPS;
   const maxDistPerTick = maxSpeedPerTick * 1.5; // 50% tolerance for timing
 
   return function InputSystem(world) {

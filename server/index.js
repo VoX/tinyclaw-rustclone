@@ -456,20 +456,28 @@ function handleClientMessage(connId, msg) {
 
     case MSG.CRAFT:
       if (!checkRateLimit(client)) break;
+      if (typeof msg.recipeId !== 'number' || !Number.isInteger(msg.recipeId)) break;
       client.craftRequest = msg.recipeId;
       break;
 
-    case MSG.BUILD:
+    case MSG.BUILD: {
       if (!checkRateLimit(client)) break;
+      if (typeof msg.pieceType !== 'number' || !Number.isInteger(msg.pieceType)) break;
+      if (typeof msg.x !== 'number' || !isFinite(msg.x)) break;
+      if (typeof msg.y !== 'number' || !isFinite(msg.y)) break;
+      const maxCoordBuild = WORLD_SIZE * TILE_SIZE;
+      if (msg.x < 0 || msg.x > maxCoordBuild || msg.y < 0 || msg.y > maxCoordBuild) break;
       client.buildRequest = {
         pieceType: msg.pieceType,
         x: msg.x,
         y: msg.y,
       };
       break;
+    }
 
     case MSG.INTERACT:
       if (!checkRateLimit(client)) break;
+      if (typeof msg.targetEid !== 'number' || !Number.isInteger(msg.targetEid)) break;
       client.interactRequest = { targetEid: msg.targetEid };
       break;
 
@@ -482,6 +490,7 @@ function handleClientMessage(connId, msg) {
       break;
 
     case MSG.RESPAWN:
+      if (msg.bagEid != null && (typeof msg.bagEid !== 'number' || !Number.isInteger(msg.bagEid))) break;
       client.respawnRequest = { bagEid: msg.bagEid || null };
       break;
 
@@ -494,6 +503,8 @@ function handleClientMessage(connId, msg) {
       break;
 
     case MSG.TC_AUTH_ACTION:
+      if (typeof msg.tcEid !== 'number' || !Number.isInteger(msg.tcEid)) break;
+      if (typeof msg.action !== 'string') break;
       client.tcAuthAction = {
         tcEid: msg.tcEid,
         action: msg.action,
@@ -507,6 +518,7 @@ function handleClientMessage(connId, msg) {
       break;
 
     case MSG.HAMMER_UPGRADE:
+      if (typeof msg.targetEid !== 'number' || !Number.isInteger(msg.targetEid)) break;
       client.hammerUpgradeRequest = { targetEid: msg.targetEid };
       break;
 
@@ -525,6 +537,7 @@ function handleClientMessage(connId, msg) {
       break;
 
     case MSG.HAMMER_REPAIR:
+      if (typeof msg.targetEid !== 'number' || !Number.isInteger(msg.targetEid)) break;
       client.hammerRepairRequest = { targetEid: msg.targetEid };
       break;
 
@@ -534,16 +547,23 @@ function handleClientMessage(connId, msg) {
 
     case MSG.NPC_TRADE_BUY:
       if (!checkRateLimit(client)) break;
+      if (typeof msg.npcEid !== 'number' || !Number.isInteger(msg.npcEid)) break;
+      if (typeof msg.tradeIdx !== 'number' || !Number.isInteger(msg.tradeIdx)) break;
       client.npcTradeBuy = { npcEid: msg.npcEid, tradeIdx: msg.tradeIdx };
       break;
 
     case MSG.RECYCLE:
       if (!checkRateLimit(client)) break;
+      if (typeof msg.recyclerEid !== 'number' || !Number.isInteger(msg.recyclerEid)) break;
+      if (typeof msg.slot !== 'number' || !Number.isInteger(msg.slot)) break;
       client.recycleRequest = { recyclerEid: msg.recyclerEid, slot: msg.slot };
       break;
 
     case MSG.RESEARCH:
       if (!checkRateLimit(client)) break;
+      if (typeof msg.tableEid !== 'number' || !Number.isInteger(msg.tableEid)) break;
+      if (typeof msg.slot !== 'number' || !Number.isInteger(msg.slot)) break;
+      if (typeof msg.recipeId !== 'number' || !Number.isInteger(msg.recipeId)) break;
       client.researchRequest = { tableEid: msg.tableEid, slot: msg.slot, recipeId: msg.recipeId };
       break;
 
@@ -592,10 +612,8 @@ function gameLoop() {
       const prevXMap = gameState._shPrevX;
       const prevYMap = gameState._shPrevY;
       const allPositioned = query(world, [Position]);
-      const positionedSet = new Set();
       for (let i = 0; i < allPositioned.length; i++) {
         const eid = allPositioned[i];
-        positionedSet.add(eid);
         const x = Position.x[eid];
         const y = Position.y[eid];
         const px = prevXMap.get(eid);

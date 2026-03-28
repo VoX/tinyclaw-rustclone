@@ -119,11 +119,52 @@ const state = {
   // Death camera
   deathZoom: 1.0, // smoothly interpolates on death/respawn
   deathDesaturation: 0, // 0-1 greyscale amount
+  // Spatial grid for client-side static colliders
+  staticColliderGrid: new Map(), // cellKey -> Set<eid>
+  staticColliderCellSize: 8,
 };
 
 // Initialize inventory slots
 for (let i = 0; i < 24; i++) {
   state.inventory.push({ id: 0, n: 0 });
+}
+
+// ── Static collider spatial grid helpers ──
+function staticGridKey(cx, cy) { return cx + ',' + cy; }
+
+function staticGridInsert(eid, e) {
+  const cs = state.staticColliderCellSize;
+  const cx = Math.floor((e.x || 0) / cs);
+  const cy = Math.floor((e.y || 0) / cs);
+  const key = staticGridKey(cx, cy);
+  let cell = state.staticColliderGrid.get(key);
+  if (!cell) { cell = new Set(); state.staticColliderGrid.set(key, cell); }
+  cell.add(eid);
+}
+
+function staticGridRemove(eid, e) {
+  const cs = state.staticColliderCellSize;
+  const cx = Math.floor((e.x || 0) / cs);
+  const cy = Math.floor((e.y || 0) / cs);
+  const key = staticGridKey(cx, cy);
+  const cell = state.staticColliderGrid.get(key);
+  if (cell) { cell.delete(eid); if (cell.size === 0) state.staticColliderGrid.delete(key); }
+}
+
+function staticGridQuery(x, y, radius) {
+  const cs = state.staticColliderCellSize;
+  const minCX = Math.floor((x - radius) / cs);
+  const maxCX = Math.floor((x + radius) / cs);
+  const minCY = Math.floor((y - radius) / cs);
+  const maxCY = Math.floor((y + radius) / cs);
+  const results = [];
+  for (let cx = minCX; cx <= maxCX; cx++) {
+    for (let cy = minCY; cy <= maxCY; cy++) {
+      const cell = state.staticColliderGrid.get(staticGridKey(cx, cy));
+      if (cell) for (const eid of cell) results.push(eid);
+    }
+  }
+  return results;
 }
 
 // ── Player Identity ──
@@ -168,6 +209,7 @@ function connect() {
     state.myEid = null;
     state.myConnId = null;
     state.entities.clear();
+    state.staticColliderGrid.clear();
     state.isDead = false;
     state.deathInfo = null;
     state.containerOpen = null;
@@ -263,6 +305,9 @@ function handleServerMessage(msg) {
             e.prevX = e.x;
             e.prevY = e.y;
             state.entities.set(e.eid, e);
+            if (e.isStatic && (e.colliderRadius > 0 || e.boxHW > 0)) {
+              staticGridInsert(e.eid, e);
+            }
           }
         }
       }
@@ -270,8 +315,13 @@ function handleServerMessage(msg) {
       if (msg.removed) {
         for (const eid of msg.removed) {
           const ent = state.entities.get(eid);
-          if (ent && ent.t === ENTITY_TYPE.HELICOPTER) {
-            state.heliActive = null;
+          if (ent) {
+            if (ent.t === ENTITY_TYPE.HELICOPTER) {
+              state.heliActive = null;
+            }
+            if (ent.isStatic && (ent.colliderRadius > 0 || ent.boxHW > 0)) {
+              staticGridRemove(eid, ent);
+            }
           }
           state.entities.delete(eid);
         }
@@ -654,11 +704,14 @@ function clientLoop(timestamp) {
     me.x = Math.max(0, Math.min(maxCoord, me.x));
     me.y = Math.max(0, Math.min(maxCoord, me.y));
 
-    // Client-side collision against static entities (resources, structures, etc.)
+    // Client-side collision against nearby static entities (spatial grid lookup)
     const playerRadius = 0.4;
-    for (const [eeid, e] of state.entities) {
+    const nearbyEids = staticGridQuery(me.x, me.y, playerRadius + 3);
+    for (let ni = 0; ni < nearbyEids.length; ni++) {
+      const eeid = nearbyEids[ni];
       if (eeid === state.myEid) continue;
-      if (!e.isStatic) continue;
+      const e = state.entities.get(eeid);
+      if (!e) continue;
 
       // OBB collision for walls
       if (e.boxHW && e.boxHW > 0) {
